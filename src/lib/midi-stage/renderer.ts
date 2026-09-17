@@ -1,6 +1,6 @@
 import type { Callout, ChartNote, Flash, Grade, Instrument, Particle, Player, Song } from "./types";
 import { Judge, clamp, currentHarmony, keyLabel, KEYS } from "./engine";
-import type { Feel } from "./feel";
+import type { Feel, GoboMotion, GoboPattern, HeadCue } from "./feel";
 
 const GRADE_COLOR: Record<Grade, string> = {
   perfect: "#8fd4c4",
@@ -60,6 +60,62 @@ function hexA(hex: string, a: number) {
 function noise(n: number) {
   const x = Math.sin(n * 127.1 + 311.7) * 43758.5453;
   return x - Math.floor(x);
+}
+
+const MOVING_HEADS = [
+  { i: 1, tint: "#c4a882", park: 0.21, spread: 0.12 },
+  { i: 2, tint: "#d4b08a", park: 0.35, spread: 0.09 },
+  { i: 4, tint: "#8fd4c4", park: 0.5, spread: 0.14 },
+  { i: 6, tint: "#8aa4c4", park: 0.65, spread: 0.09 },
+  { i: 7, tint: "#c4a882", park: 0.79, spread: 0.12 },
+] as const;
+
+function aimHead(
+  cue: HeadCue,
+  reduced: boolean,
+  t: number,
+  w: number,
+  h: number,
+  c: (typeof MOVING_HEADS)[number],
+) {
+  const originX = w * ((c.i + 0.5) / 9);
+  const parkX = c.park * w;
+  const parkY = h * 0.845;
+  const minX = w * 0.1;
+  const maxX = w * 0.9;
+  const minY = h * 0.78;
+  const maxY = h * 0.9;
+  let aimX = parkX;
+  let landY = parkY;
+  if (!reduced && cue !== "park") {
+    if (cue === "fan") {
+      const k = 0.5 + 0.5 * Math.sin(t * 0.38);
+      const open = 0.55 + 1.05 * k;
+      aimX = w * 0.5 + (c.park - 0.5) * w * open;
+      landY = parkY + Math.sin(t * 0.38) * 6;
+    } else if (cue === "circle") {
+      const ang = t * 0.52 + (c.i / 9) * Math.PI * 2;
+      aimX = w * (0.5 + Math.cos(ang) * 0.34);
+      landY = parkY + Math.sin(ang) * h * 0.032;
+    } else if (cue === "cross") {
+      const k = 0.5 + 0.5 * Math.sin(t * 0.48);
+      const from = c.park;
+      const to = 1 - c.park;
+      aimX = w * (from + (to - from) * k);
+      landY = parkY - Math.abs(Math.sin(t * 0.48)) * 10;
+    } else if (cue === "chase") {
+      const u = t * 0.42 + c.i * 0.22;
+      aimX = w * (0.16 + 0.68 * (0.5 + 0.5 * Math.sin(u)));
+      landY = parkY + Math.sin(u * 2) * 8;
+    }
+  } else if (!reduced) {
+    aimX = parkX + Math.sin(t * 0.16 + c.i) * w * 0.008;
+  }
+  return {
+    originX,
+    aimX: Math.min(maxX, Math.max(minX, aimX)),
+    landY: Math.min(maxY, Math.max(minY, landY)),
+  };
 }
 
 export class StageRenderer {
@@ -359,16 +415,9 @@ export class StageRenderer {
     const e = state.energy;
     const t = state.now;
     const beat = (state.song.bpm / 60) * Math.PI;
-    const cans = [
-      { i: 1, tint: "#c4a882", aim: 0.21, spread: 0.12 },
-      { i: 2, tint: "#d4b08a", aim: 0.35, spread: 0.09 },
-      { i: 4, tint: "#8fd4c4", aim: 0.5, spread: 0.14 },
-      { i: 6, tint: "#8aa4c4", aim: 0.65, spread: 0.09 },
-      { i: 7, tint: "#c4a882", aim: 0.79, spread: 0.12 },
-    ];
-    const landY = h * 0.845;
-    const cone = (ox: number, ax: number, half: number, alpha: number, tint: string) => {
-      const grd = ctx.createLinearGradient(ox, 28, ax, landY);
+    const cue = state.feel.heads ?? "fan";
+    const cone = (ox: number, ax: number, ly: number, half: number, alpha: number, tint: string) => {
+      const grd = ctx.createLinearGradient(ox, 28, ax, ly);
       grd.addColorStop(0, hexA(tint, alpha * 0.85));
       grd.addColorStop(0.38, hexA(tint, alpha * 0.28));
       grd.addColorStop(1, hexA(tint, 0));
@@ -376,38 +425,62 @@ export class StageRenderer {
       ctx.beginPath();
       ctx.moveTo(ox - 3, 28);
       ctx.lineTo(ox + 3, 28);
-      ctx.lineTo(ax + half, landY);
-      ctx.lineTo(ax - half, landY);
+      ctx.lineTo(ax + half, ly);
+      ctx.lineTo(ax - half, ly);
       ctx.closePath();
       ctx.fill();
     };
 
     ctx.save();
     ctx.globalCompositeOperation = "screen";
-    for (const c of cans) {
-      const originX = w * ((c.i + 0.5) / 9);
-      const sway = state.reduced ? 0 : Math.sin(t * 0.16 + c.i) * w * 0.008;
-      const aimX = c.aim * w + sway;
+    for (const c of MOVING_HEADS) {
+      const { originX, aimX, landY } = aimHead(cue, state.reduced, t, w, h, c);
       const pulse = 0.72 + 0.28 * Math.abs(Math.sin(t * beat + c.i * 0.65));
       const a = (0.12 + e * 0.1 + state.bloom * 0.16) * lights * pulse;
       const half = w * c.spread * (0.9 + state.bloom * 0.1);
-      cone(originX, aimX, half * 1.32, a * 0.28, c.tint);
-      cone(originX, aimX, half, a * 0.55, c.tint);
-      cone(originX, aimX, half * 0.32, a * 0.7, c.tint);
+      cone(originX, aimX, landY, half * 1.32, a * 0.28, c.tint);
+      cone(originX, aimX, landY, half, a * 0.55, c.tint);
+      cone(originX, aimX, landY, half * 0.32, a * 0.7, c.tint);
 
-      const pool = ctx.createRadialGradient(aimX, landY, 2, aimX, landY, half * 0.9);
-      pool.addColorStop(0, hexA(c.tint, a * 0.48));
-      pool.addColorStop(0.45, hexA(c.tint, a * 0.16));
-      pool.addColorStop(1, hexA(c.tint, 0));
-      ctx.fillStyle = pool;
-      ctx.beginPath();
-      ctx.ellipse(aimX, landY, half * 0.8, 12 + state.bloom * 8, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = hexA(c.tint, a * 0.35);
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.ellipse(aimX, landY, half * 0.42, 6, 0, 0, Math.PI * 2);
-      ctx.stroke();
+      const gobo = state.feel.gobo ?? "breakup";
+      const motion = state.feel.goboMotion ?? "drift";
+      const phase = t + c.i * 0.37;
+      this.paintGobo(ctx, gobo, motion, aimX, landY, half * 0.82, 13 + state.bloom * 7, c.tint, a, phase, beat, state.reduced, 1);
+      if (gobo !== "open") {
+        this.paintGobo(
+          ctx,
+          gobo,
+          motion,
+          originX + (aimX - originX) * 0.55,
+          28 + (landY - 28) * 0.55,
+          half * 0.34,
+          6,
+          c.tint,
+          a * 0.45,
+          phase,
+          beat,
+          state.reduced,
+          -1,
+        );
+        this.paintGobo(
+          ctx,
+          gobo,
+          motion,
+          originX + (aimX - originX) * 0.78,
+          28 + (landY - 28) * 0.78,
+          half * 0.55,
+          9,
+          c.tint,
+          a * 0.55,
+          phase,
+          beat,
+          state.reduced,
+          1,
+        );
+      }
+      if (c.i === 4 && gobo !== "open") {
+        this.paintGobo(ctx, gobo, motion, w * 0.5, h * 0.175, w * 0.15, h * 0.07, c.tint, a * 0.32, t * 0.45, beat, state.reduced, 1);
+      }
 
       if (!state.reduced) {
         for (let d = 0; d < 6; d++) {
@@ -421,6 +494,119 @@ export class StageRenderer {
         ctx.globalAlpha = 1;
       }
     }
+    ctx.restore();
+  }
+
+  private paintGobo(
+    ctx: CanvasRenderingContext2D,
+    pattern: GoboPattern,
+    motion: GoboMotion,
+    cx: number,
+    cy: number,
+    rx: number,
+    ry: number,
+    tint: string,
+    alpha: number,
+    t: number,
+    beat: number,
+    reduced: boolean,
+    dir: number,
+  ) {
+    if (alpha < 0.02 || rx < 3 || ry < 2) return;
+    const live = !reduced && motion !== "still";
+    let a = alpha;
+    ctx.save();
+    ctx.translate(cx, cy);
+    if (live && motion === "pulse") {
+      const k = 0.5 + 0.5 * Math.abs(Math.sin(t * beat));
+      const s = 0.84 + 0.2 * k;
+      ctx.scale(s, s);
+      a *= 0.68 + 0.32 * k;
+    }
+    ctx.beginPath();
+    ctx.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2);
+    ctx.clip();
+    if (live && motion !== "pulse") {
+      if (motion === "drift") {
+        ctx.rotate(t * 0.05 * dir);
+        ctx.translate(Math.sin(t * 0.31) * rx * 0.07, Math.cos(t * 0.23) * ry * 0.05);
+      } else if (motion === "spin") {
+        ctx.rotate(t * 0.62 * dir);
+      } else if (motion === "sweep") {
+        ctx.rotate(t * 0.14 * dir);
+        ctx.translate(Math.sin(t * 0.85) * rx * 0.32, Math.sin(t * 0.52 + 1.1) * ry * 0.2);
+      }
+    }
+
+    if (pattern === "open") {
+      const ox = live && motion === "sweep" ? Math.sin(t * 0.7) * rx * 0.18 : 0;
+      const oy = live && motion === "spin" ? Math.cos(t * 0.5) * ry * 0.12 : 0;
+      const g = ctx.createRadialGradient(ox, oy, 1, 0, 0, rx);
+      g.addColorStop(0, hexA(tint, a * 0.62));
+      g.addColorStop(0.5, hexA(tint, a * 0.22));
+      g.addColorStop(1, hexA(tint, 0));
+      ctx.fillStyle = g;
+      ctx.fillRect(-rx, -ry, rx * 2, ry * 2);
+      ctx.restore();
+      return;
+    }
+
+    ctx.fillStyle = hexA(tint, a * 0.16);
+    ctx.fillRect(-rx, -ry, rx * 2, ry * 2);
+    ctx.fillStyle = hexA(tint, a * 0.72);
+
+    if (pattern === "breakup") {
+      for (let i = 0; i < 18; i++) {
+        const wobble = live && motion === "drift" ? Math.sin(t * 1.1 + i) * rx * 0.04 : 0;
+        const px = (noise(i * 3.17 + 1.4) - 0.5) * rx * 1.85 + wobble;
+        const py = (noise(i * 5.91 + 2.2) - 0.5) * ry * 1.85;
+        const s = 0.1 + noise(i * 2.4) * 0.24;
+        ctx.beginPath();
+        ctx.ellipse(px, py, rx * s, ry * s * 0.7, i * 0.7, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    } else if (pattern === "window") {
+      const cols = 3;
+      const rows = 2;
+      const m = Math.min(rx, ry) * 0.1;
+      const pw = (rx * 2 - m * (cols + 1)) / cols;
+      const ph = (ry * 2 - m * (rows + 1)) / rows;
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          const x = -rx + m + c * (pw + m);
+          const y = -ry + m + r * (ph + m);
+          ctx.beginPath();
+          ctx.roundRect(x, y, pw, ph, Math.min(3, m));
+          ctx.fill();
+        }
+      }
+    } else if (pattern === "blinds") {
+      const slats = 8;
+      const gap = (ry * 2) / slats;
+      const open = live && motion === "pulse" ? 0.28 + 0.4 * Math.abs(Math.sin(t * beat)) : 0.52;
+      const tilt = live && motion === "sweep" ? Math.sin(t * 0.9) * 0.18 : -0.08;
+      ctx.rotate(tilt);
+      for (let i = 0; i < slats; i++) {
+        if (i % 2) continue;
+        ctx.fillRect(-rx, -ry + i * gap + gap * 0.12, rx * 2, gap * open);
+      }
+    } else if (pattern === "dots") {
+      const twinkle = live && motion === "pulse";
+      for (let y = -2; y <= 2; y++) {
+        for (let x = -2; x <= 2; x++) {
+          const ox = x * rx * 0.36;
+          const oy = y * ry * 0.36;
+          if ((ox * ox) / (rx * rx) + (oy * oy) / (ry * ry) > 0.92) continue;
+          const k = twinkle ? 0.65 + 0.35 * Math.abs(Math.sin(t * beat + x + y)) : 1;
+          ctx.globalAlpha = k;
+          ctx.beginPath();
+          ctx.arc(ox, oy, Math.min(rx, ry) * 0.1, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+      ctx.globalAlpha = 1;
+    }
+
     ctx.restore();
   }
 
@@ -445,7 +631,7 @@ export class StageRenderer {
   }
 
   private paintTruss(state: DrawState) {
-    const { ctx, w } = this;
+    const { ctx, w, h } = this;
     const lights = state.feel.lights;
     const metal = ctx.createLinearGradient(0, 12, 0, 24);
     metal.addColorStop(0, "rgba(239,232,220,0.22)");
@@ -456,37 +642,65 @@ export class StageRenderer {
     ctx.fillStyle = "rgba(8,6,10,0.7)";
     ctx.fillRect(0, 20, w, 1.5);
 
-    const cans = 9;
     const beat = (state.song.bpm / 60) * Math.PI;
-    for (let i = 0; i < cans; i++) {
-      const x = w * ((i + 0.5) / cans);
+    const cue = state.feel.heads ?? "fan";
+    const movers = new Map<number, (typeof MOVING_HEADS)[number]>(MOVING_HEADS.map((c) => [c.i, c]));
+    for (let i = 0; i < 9; i++) {
+      const x = w * ((i + 0.5) / 9);
       const lit = 0.28 + 0.72 * Math.abs(Math.sin(state.now * beat + i * 0.55));
-      const tint = i % 3 === 1 ? "#8fd4c4" : i % 3 === 2 ? "#8aa4c4" : "#c4a882";
+      const mover = movers.get(i);
+      const tint = mover?.tint ?? (i % 3 === 1 ? "#8fd4c4" : i % 3 === 2 ? "#8aa4c4" : "#c4a882");
+      const glow = (0.22 + lit * 0.55) * (0.32 + state.energy * 0.4 + state.bloom * 0.45) * lights;
       ctx.fillStyle = "rgba(36,32,38,0.96)";
       ctx.fillRect(x - 5, 10, 10, 8);
-      ctx.fillStyle = "rgba(12,10,14,0.96)";
-      ctx.beginPath();
-      ctx.roundRect(x - 8, 18, 16, 15, 2);
-      ctx.fill();
-      ctx.fillStyle = "rgba(239,232,220,0.12)";
-      ctx.fillRect(x - 7, 20, 14, 1);
-      const glow = (0.22 + lit * 0.55) * (0.32 + state.energy * 0.4 + state.bloom * 0.45) * lights;
-      ctx.fillStyle = hexA(tint, glow);
-      ctx.beginPath();
-      ctx.ellipse(x, 34, 7, 3.8, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = hexA("#efe8dc", glow * 0.45);
-      ctx.beginPath();
-      ctx.ellipse(x, 33.2, 3.2, 1.6, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = "rgba(239,232,220,0.2)";
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(x - 9, 22);
-      ctx.lineTo(x - 12, 15);
-      ctx.moveTo(x + 9, 22);
-      ctx.lineTo(x + 12, 15);
-      ctx.stroke();
+      if (mover) {
+        const { aimX, landY } = aimHead(cue, state.reduced, state.now, w, h, mover);
+        const ang = Math.atan2(landY - 22, aimX - x);
+        ctx.save();
+        ctx.translate(x, 22);
+        ctx.rotate(ang - Math.PI / 2);
+        ctx.fillStyle = "rgba(28,24,30,0.96)";
+        ctx.fillRect(-10, -3, 4, 11);
+        ctx.fillRect(6, -3, 4, 11);
+        ctx.fillStyle = "rgba(12,10,14,0.96)";
+        ctx.beginPath();
+        ctx.roundRect(-5.5, 2, 11, 18, 2);
+        ctx.fill();
+        ctx.fillStyle = "rgba(239,232,220,0.12)";
+        ctx.fillRect(-4.5, 5, 9, 1);
+        ctx.fillStyle = hexA(tint, glow);
+        ctx.beginPath();
+        ctx.ellipse(0, 20.5, 5.6, 3.2, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = hexA("#efe8dc", glow * 0.5);
+        ctx.beginPath();
+        ctx.ellipse(0, 19.6, 2.4, 1.3, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      } else {
+        ctx.fillStyle = "rgba(12,10,14,0.96)";
+        ctx.beginPath();
+        ctx.roundRect(x - 8, 18, 16, 15, 2);
+        ctx.fill();
+        ctx.fillStyle = "rgba(239,232,220,0.12)";
+        ctx.fillRect(x - 7, 20, 14, 1);
+        ctx.fillStyle = hexA(tint, glow * 0.7);
+        ctx.beginPath();
+        ctx.ellipse(x, 34, 7, 3.8, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = hexA("#efe8dc", glow * 0.35);
+        ctx.beginPath();
+        ctx.ellipse(x, 33.2, 3.2, 1.6, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = "rgba(239,232,220,0.2)";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(x - 9, 22);
+        ctx.lineTo(x - 12, 15);
+        ctx.moveTo(x + 9, 22);
+        ctx.lineTo(x + 12, 15);
+        ctx.stroke();
+      }
     }
   }
 

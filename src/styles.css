@@ -466,3 +466,48 @@
   }
 }
 
+.gobo-swatch {
+  display: block;
+  width: 100%;
+  height: 18px;
+  border-radius: 4px;
+  background: #120e12;
+  box-shadow: inset 0 0 0 1px rgba(239, 232, 220, 0.12);
+  overflow: hidden;
+}
+.gobo-swatch.open {
+  background:
+    radial-gradient(ellipse at 50% 60%, color-mix(in oklab, var(--color-tungsten) 70%, transparent), transparent 72%),
+    #120e12;
+}
+.gobo-swatch.breakup {
+  background:
+    radial-gradient(circle at 28% 40%, color-mix(in oklab, var(--color-tungsten) 80%, transparent) 0 22%, transparent 23%),
+    radial-gradient(circle at 62% 28%, color-mix(in oklab, var(--color-accent) 70%, transparent) 0 14%, transparent 15%),
+    radial-gradient(circle at 70% 68%, color-mix(in oklab, var(--color-tungsten) 65%, transparent) 0 16%, transparent 17%),
+    radial-gradient(circle at 40% 78%, color-mix(in oklab, var(--color-accent) 55%, transparent) 0 12%, transparent 13%),
+    #120e12;
+}
+.gobo-swatch.window {
+  background:
+    linear-gradient(to right, transparent 0 31%, #120e12 31% 36%, transparent 36% 64%, #120e12 64% 69%, transparent 69%),
+    linear-gradient(to bottom, transparent 0 42%, #120e12 42% 52%, transparent 52%),
+    color-mix(in oklab, var(--color-tungsten) 55%, #120e12);
+}
+.gobo-swatch.blinds {
+  background: repeating-linear-gradient(
+    180deg,
+    color-mix(in oklab, var(--color-tungsten) 70%, transparent) 0 3px,
+    #120e12 3px 6px
+  );
+}
+.gobo-swatch.dots {
+  background:
+    radial-gradient(circle at 22% 40%, var(--color-tungsten) 0 2px, transparent 2.5px),
+    radial-gradient(circle at 50% 40%, var(--color-accent) 0 2px, transparent 2.5px),
+    radial-gradient(circle at 78% 40%, var(--color-tungsten) 0 2px, transparent 2.5px),
+    radial-gradient(circle at 36% 72%, var(--color-accent) 0 2px, transparent 2.5px),
+    radial-gradient(circle at 64% 72%, var(--color-tungsten) 0 2px, transparent 2.5px),
+    #120e12;
+}
+

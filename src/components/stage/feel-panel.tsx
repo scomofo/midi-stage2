@@ -3,6 +3,12 @@ import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import {
   FEEL_COPY,
+  GOBO_COPY,
+  GOBO_MOTION_COPY,
+  GOBO_MOTIONS,
+  GOBO_PATTERNS,
+  HEAD_COPY,
+  HEAD_CUES,
   matchFeelPreset,
   type Feel,
   type FeelPreset,
@@ -192,6 +198,81 @@ export function FeelPanel({
             <SliderRow label="LIGHTS" value={feel.lights} onChange={(lights) => patch({ lights })} />
             <SliderRow label="CROWD" value={feel.crowd} onChange={(crowd) => patch({ crowd })} />
             <SliderRow label="TRAILS" value={feel.trails} onChange={(trails) => patch({ trails })} />
+          </div>
+          <div className="flex flex-col gap-2">
+            <div className="text-[10px] font-semibold tracking-[0.16em] text-muted">HEADS</div>
+            <div className="grid grid-cols-5 gap-1.5">
+              {HEAD_CUES.map((name) => {
+                const active = feel.heads === name;
+                return (
+                  <button
+                    key={name}
+                    type="button"
+                    aria-pressed={active}
+                    aria-label={`${HEAD_COPY[name].label}. ${HEAD_COPY[name].line}`}
+                    onClick={() => patch({ heads: name })}
+                    className={cn(
+                      "flex min-h-11 flex-col items-center justify-center rounded-lg px-1 py-2 shadow-[0_0_0_1px_rgba(239,232,220,0.1)]",
+                      active ? "bg-elevated shadow-[0_0_0_1px_rgba(143,212,196,0.45)]" : "bg-surface hover:bg-elevated",
+                    )}
+                  >
+                    <span className="text-[9px] font-medium tracking-[0.08em]">{HEAD_COPY[name].label}</span>
+                  </button>
+                );
+              })}
+            </div>
+            <p className="text-[11px] leading-snug text-subtle">
+              {reduced ? "Heads hold park. Your system asked for less." : HEAD_COPY[feel.heads].line}
+            </p>
+          </div>
+          <div className="flex flex-col gap-2">
+            <div className="text-[10px] font-semibold tracking-[0.16em] text-muted">GOBOS</div>
+            <div className="grid grid-cols-5 gap-1.5">
+              {GOBO_PATTERNS.map((name) => {
+                const active = feel.gobo === name;
+                return (
+                  <button
+                    key={name}
+                    type="button"
+                    aria-pressed={active}
+                    aria-label={`${GOBO_COPY[name].label} gobo. ${GOBO_COPY[name].line}`}
+                    onClick={() => patch({ gobo: name })}
+                    className={cn(
+                      "flex min-h-11 flex-col items-center gap-1.5 rounded-lg px-1 py-2 shadow-[0_0_0_1px_rgba(239,232,220,0.1)]",
+                      active ? "bg-elevated shadow-[0_0_0_1px_rgba(143,212,196,0.45)]" : "bg-surface hover:bg-elevated",
+                    )}
+                  >
+                    <span className={cn("gobo-swatch", name)} aria-hidden="true" />
+                    <span className="text-[9px] font-medium tracking-[0.08em] text-muted">{GOBO_COPY[name].label}</span>
+                  </button>
+                );
+              })}
+            </div>
+            <p className="text-[11px] leading-snug text-subtle">{GOBO_COPY[feel.gobo].line}</p>
+            <div className="text-[10px] font-semibold tracking-[0.16em] text-muted">WHEEL</div>
+            <div className="grid grid-cols-5 gap-1.5">
+              {GOBO_MOTIONS.map((name) => {
+                const active = feel.goboMotion === name;
+                return (
+                  <button
+                    key={name}
+                    type="button"
+                    aria-pressed={active}
+                    aria-label={`${GOBO_MOTION_COPY[name].label}. ${GOBO_MOTION_COPY[name].line}`}
+                    onClick={() => patch({ goboMotion: name })}
+                    className={cn(
+                      "flex min-h-11 flex-col items-center justify-center rounded-lg px-1 py-2 shadow-[0_0_0_1px_rgba(239,232,220,0.1)]",
+                      active ? "bg-elevated shadow-[0_0_0_1px_rgba(143,212,196,0.45)]" : "bg-surface hover:bg-elevated",
+                    )}
+                  >
+                    <span className="text-[9px] font-medium tracking-[0.08em]">{GOBO_MOTION_COPY[name].label}</span>
+                  </button>
+                );
+              })}
+            </div>
+            <p className="text-[11px] leading-snug text-subtle">
+              {reduced ? "Motion is held. Your system asked for less." : GOBO_MOTION_COPY[feel.goboMotion].line}
+            </p>
           </div>
         </Section>
 
