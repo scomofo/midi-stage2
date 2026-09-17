@@ -1,0 +1,36 @@
+{
+  "url": "http://127.0.0.1:8080/",
+  "viewports": {
+    "desktop": {
+      "width": 1280,
+      "height": 800,
+      "status": 200,
+      "title": "MIDI Stage",
+      "hasCanvas": true,
+      "bodyTextLen": 1454,
+      "bodyTextHash": "c07b62d8dd8877d3ca8480c242d45c237475875f7d07edf0f1c2ade03107e107",
+      "bodyTextPrefix": "MIDI / STAGE REAL INSTRUMENTS. REAL PLAY. LOCAL SET The room Con",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/app-builder-preview.png"
+    },
+    "mobile": {
+      "width": 390,
+      "height": 844,
+      "status": 200,
+      "title": "MIDI Stage",
+      "hasCanvas": true,
+      "bodyTextLen": 1429,
+      "bodyTextHash": "ec066823dfa6906b474351e1462cfed2f8ded371dbfcf7d9a782cfefa3ec986b",
+      "bodyTextPrefix": "MIDI / STAGE REAL INSTRUMENTS. REAL PLAY. Connect MIDI GREEN ROO",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/app-builder-preview-mobile.png"
+    }
+  },
+  "brandWarnings": [],
+  "authWarnings": [],
+  "verdictFile": "/workspace/screenshots/app-builder-preview.json"
+}

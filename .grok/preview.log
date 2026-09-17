@@ -1,0 +1,90 @@
+
+> preview
+> node scripts/with-app-env.mjs vite preview
+
+
+ ╭────────── [Build Info] ─────────────╮
+ │                                     │
+ │  - Build Directory: .vercel/output  │
+ │  - Date: 9/17/2026, 12:43:54 AM     │
+ │  - Nitro Version: 3.0.260610-beta   │
+ │  - Nitro Preset: vercel             │
+ │                                     │
+ ╰─────────────────────────────────────╯
+
+  ➜  Local:   http://127.0.0.1:8081/
+
+> preview
+> node scripts/with-app-env.mjs vite preview
+
+
+ ╭────────── [Build Info] ─────────────╮
+ │                                     │
+ │  - Build Directory: .vercel/output  │
+ │  - Date: 9/17/2026, 12:58:04 AM     │
+ │  - Nitro Version: 3.0.260610-beta   │
+ │  - Nitro Preset: vercel             │
+ │                                     │
+ ╰─────────────────────────────────────╯
+
+  ➜  Local:   http://127.0.0.1:8081/
+
+> preview
+> node scripts/with-app-env.mjs vite preview
+
+
+ ╭────────── [Build Info] ─────────────╮
+ │                                     │
+ │  - Build Directory: .vercel/output  │
+ │  - Date: 9/17/2026, 1:08:11 AM      │
+ │  - Nitro Version: 3.0.260610-beta   │
+ │  - Nitro Preset: vercel             │
+ │                                     │
+ ╰─────────────────────────────────────╯
+
+  ➜  Local:   http://127.0.0.1:8081/
+
+> preview
+> node scripts/with-app-env.mjs vite preview
+
+
+ ╭────────── [Build Info] ─────────────╮
+ │                                     │
+ │  - Build Directory: .vercel/output  │
+ │  - Date: 9/17/2026, 1:10:20 AM      │
+ │  - Nitro Version: 3.0.260610-beta   │
+ │  - Nitro Preset: vercel             │
+ │                                     │
+ ╰─────────────────────────────────────╯
+
+  ➜  Local:   http://127.0.0.1:8081/
+
+> preview
+> node scripts/with-app-env.mjs vite preview
+
+
+ ╭────────── [Build Info] ─────────────╮
+ │                                     │
+ │  - Build Directory: .vercel/output  │
+ │  - Date: 9/17/2026, 1:23:43 AM      │
+ │  - Nitro Version: 3.0.260610-beta   │
+ │  - Nitro Preset: vercel             │
+ │                                     │
+ ╰─────────────────────────────────────╯
+
+  ➜  Local:   http://127.0.0.1:8081/
+
+> preview
+> node scripts/with-app-env.mjs vite preview
+
+
+ ╭────────── [Build Info] ─────────────╮
+ │                                     │
+ │  - Build Directory: .vercel/output  │
+ │  - Date: 9/17/2026, 1:36:02 AM      │
+ │  - Nitro Version: 3.0.260610-beta   │
+ │  - Nitro Preset: vercel             │
+ │                                     │
+ ╰─────────────────────────────────────╯
+
+  ➜  Local:   http://127.0.0.1:8081/
