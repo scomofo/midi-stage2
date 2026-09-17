@@ -76,14 +76,30 @@ export class StageRenderer {
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
     this.ctx = canvas.getContext("2d")!;
-    for (let i = 0; i < 70; i++) {
-      this.motes.push({ x: Math.random(), y: Math.random(), s: 0.4 + Math.random() * 1.4, p: Math.random() * Math.PI * 2 });
+    for (let i = 0; i < 96; i++) {
+      this.motes.push({
+        x: 0.08 + Math.random() * 0.84,
+        y: Math.random(),
+        s: 0.5 + Math.random() * 1.7,
+        p: Math.random() * Math.PI * 2,
+      });
     }
-    for (let i = 0; i < 140; i++) {
+    for (let i = 0; i < 88; i++) {
+      const side = Math.random() < 0.72;
+      const left = Math.random() < 0.5;
       this.crowd.push({
-        x: Math.random(),
-        y: 0.72 + Math.random() * 0.26,
-        s: 0.6 + Math.random() * 1.6,
+        x: side ? (left ? Math.random() * 0.2 : 0.8 + Math.random() * 0.2) : 0.18 + Math.random() * 0.64,
+        y: side ? 0.78 + Math.random() * 0.2 : 0.88 + Math.random() * 0.1,
+        s: 0.55 + Math.random() * 1.5,
+        phase: Math.random() * Math.PI * 2,
+      });
+    }
+    for (let i = 0; i < 44; i++) {
+      const left = Math.random() < 0.5;
+      this.crowd.push({
+        x: left ? Math.random() * 0.12 : 0.88 + Math.random() * 0.12,
+        y: 0.26 + Math.random() * 0.22,
+        s: 0.45 + Math.random() * 1.05,
         phase: Math.random() * Math.PI * 2,
       });
     }
@@ -145,68 +161,267 @@ export class StageRenderer {
     const { ctx, w, h } = this;
     const e = state.energy;
     const lights = state.feel.lights;
-    const g = ctx.createLinearGradient(0, 0, 0, h);
-    g.addColorStop(0, "#0c0a10");
-    g.addColorStop(0.28, `rgb(${10 + e * 8 * lights},${8 + e * 6 * lights},${14 + e * 6 * lights})`);
-    g.addColorStop(0.62, "#09080c");
-    g.addColorStop(1, "#050407");
-    ctx.fillStyle = g;
+    const bloom = state.bloom;
+    const hot = state.combo >= 20;
+
+    const loft = ctx.createLinearGradient(0, 0, 0, h);
+    loft.addColorStop(0, "#07050a");
+    loft.addColorStop(0.16, `rgb(${10 + e * 8 * lights},${7 + e * 4 * lights},${14 + e * 7 * lights})`);
+    loft.addColorStop(0.5, "#09080c");
+    loft.addColorStop(1, "#050407");
+    ctx.fillStyle = loft;
     ctx.fillRect(0, 0, w, h);
 
-    for (let i = 0; i < 14; i++) {
-      const x = (i / 13) * w;
-      const fold = ctx.createLinearGradient(x - 30, 0, x + 30, 0);
-      fold.addColorStop(0, "rgba(0,0,0,0)");
-      fold.addColorStop(0.5, "rgba(18,10,14,0.35)");
-      fold.addColorStop(1, "rgba(0,0,0,0)");
-      ctx.fillStyle = fold;
-      ctx.fillRect(x - 40, 0, 80, h * 0.42);
+    ctx.fillStyle = "#0c090f";
+    ctx.fillRect(w * 0.18, h * 0.07, w * 0.64, h * 0.26);
+    ctx.strokeStyle = "rgba(239,232,220,0.05)";
+    ctx.lineWidth = 1;
+    for (let i = 0; i < 5; i++) {
+      const y = h * (0.09 + i * 0.04);
+      ctx.beginPath();
+      ctx.moveTo(w * 0.2, y);
+      ctx.lineTo(w * 0.8, y);
+      ctx.stroke();
     }
 
-    const haze = ctx.createRadialGradient(w * 0.5, h * 0.16, 8, w * 0.5, h * 0.16, w * 0.62);
-    haze.addColorStop(0, hexA("#c4a882", (0.2 + e * 0.22 + state.bloom * 0.18) * lights));
-    haze.addColorStop(0.35, hexA("#8fd4c4", (0.08 + e * 0.1 + state.bloom * 0.1) * lights));
+    const cycX = w * 0.5;
+    const cycY = h * 0.175;
+    ctx.save();
+    ctx.beginPath();
+    ctx.ellipse(cycX, cycY, w * 0.36, h * 0.155, 0, 0, Math.PI * 2);
+    ctx.clip();
+    const cyc = ctx.createRadialGradient(cycX, cycY, 4, cycX, cycY, w * 0.38);
+    cyc.addColorStop(0, hexA(hot ? "#efe8dc" : "#e2c9a4", (0.26 + e * 0.18 + bloom * 0.3) * lights));
+    cyc.addColorStop(0.32, hexA(hot ? "#c4a882" : "#8fd4c4", (0.14 + e * 0.12 + bloom * 0.16) * lights));
+    cyc.addColorStop(0.7, hexA("#6a7a8a", (0.05 + e * 0.05) * lights));
+    cyc.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = cyc;
+    ctx.fillRect(0, 0, w, h);
+    ctx.restore();
+
+    ctx.strokeStyle = hexA("#c4a882", 0.12 + lights * 0.1);
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(w * 0.2, h * 0.3);
+    ctx.lineTo(w * 0.2, h * 0.09);
+    ctx.quadraticCurveTo(w * 0.5, h * 0.03, w * 0.8, h * 0.09);
+    ctx.lineTo(w * 0.8, h * 0.3);
+    ctx.stroke();
+
+    const boards = ctx.createLinearGradient(0, h * 0.38, 0, h);
+    boards.addColorStop(0, "rgba(16,12,14,0)");
+    boards.addColorStop(0.2, `rgba(30,20,18,${0.16 + lights * 0.1})`);
+    boards.addColorStop(1, "rgba(8,6,8,0.74)");
+    ctx.fillStyle = boards;
+    ctx.fillRect(0, h * 0.38, w, h * 0.62);
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, h * 0.42, w, h * 0.58);
+    ctx.clip();
+    ctx.strokeStyle = "rgba(58,42,34,0.7)";
+    ctx.lineWidth = 1;
+    ctx.globalAlpha = 0.07 + lights * 0.06;
+    for (let k = 0; k < 11; k++) {
+      const t = k / 10;
+      const y = h * 0.42 + h * 0.58 * t * t;
+      const inset = (1 - t) * w * 0.2;
+      ctx.beginPath();
+      ctx.moveTo(inset, y);
+      ctx.lineTo(w - inset, y);
+      ctx.stroke();
+    }
+    ctx.strokeStyle = "rgba(90,68,52,0.55)";
+    const vpX = w * 0.5;
+    const vpY = h * 0.18;
+    for (let i = -12; i <= 12; i++) {
+      if (Math.abs(i) < 5) continue;
+      ctx.beginPath();
+      ctx.moveTo(vpX + i * 9, vpY);
+      ctx.lineTo(vpX + i * w * 0.072, h);
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    const bounce = ctx.createLinearGradient(0, h * 0.72, 0, h);
+    bounce.addColorStop(0, "rgba(0,0,0,0)");
+    bounce.addColorStop(1, hexA("#c4a882", (0.045 + bloom * 0.05) * lights));
+    ctx.fillStyle = bounce;
+    ctx.fillRect(0, h * 0.72, w, h * 0.28);
+
+    ctx.fillStyle = "rgba(4,3,6,0.4)";
+    ctx.fillRect(0, h * 0.935, w, h * 0.065);
+    ctx.fillStyle = hexA("#c4a882", 0.1 + lights * 0.08);
+    ctx.fillRect(0, h * 0.933, w, 1.5);
+
+    this.paintDrapes(state);
+
+    const haze = ctx.createRadialGradient(w * 0.5, h * 0.2, 12, w * 0.5, h * 0.34, w * 0.68);
+    haze.addColorStop(0, hexA("#c4a882", (0.06 + e * 0.08 + bloom * 0.1) * lights));
+    haze.addColorStop(0.45, hexA("#8fd4c4", (0.03 + e * 0.05 + bloom * 0.06) * lights));
     haze.addColorStop(1, "rgba(0,0,0,0)");
     ctx.fillStyle = haze;
     ctx.fillRect(0, 0, w, h);
 
     if (!state.reduced && lights > 0.04) {
       for (const m of this.motes) {
-        const y = ((m.y + state.now * 0.012 * m.s) % 1) * h;
-        const x = m.x * w + Math.sin(state.now * 0.4 + m.p) * 12;
-        ctx.globalAlpha = (0.08 + e * 0.12 + state.bloom * 0.08) * lights;
-        ctx.fillStyle = "#efe8dc";
+        const y = ((m.y + state.now * 0.008 * m.s) % 1) * h;
+        const x = m.x * w + Math.sin(state.now * 0.32 + m.p) * 8;
+        ctx.globalAlpha = (0.05 + e * 0.08 + bloom * 0.07) * lights;
+        ctx.fillStyle = m.p > 3 ? "#c4a882" : "#efe8dc";
         ctx.fillRect(x, y, m.s, m.s);
       }
       ctx.globalAlpha = 1;
     }
   }
 
-  private paintSpots(state: DrawState) {
+  private paintDrapes(state: DrawState) {
     const { ctx, w, h } = this;
-    const e = state.energy;
-    const t = state.now;
     const lights = state.feel.lights;
-    const cans = [
-      { x: w * 0.18, sway: Math.sin(t * 0.35) * 0.08, tint: "#c4a882" },
-      { x: w * 0.5, sway: Math.sin(t * 0.28 + 1.2) * 0.05, tint: "#8fd4c4" },
-      { x: w * 0.82, sway: Math.sin(t * 0.32 + 2.1) * 0.08, tint: "#8aa4c4" },
-    ];
-    for (const c of cans) {
-      const tipX = w * 0.5 + c.sway * w;
-      const grd = ctx.createLinearGradient(c.x, 18, tipX, h * 0.92);
-      grd.addColorStop(0, hexA(c.tint, (0.28 + e * 0.22 + state.bloom * 0.2) * lights));
-      grd.addColorStop(0.55, hexA(c.tint, (0.08 + e * 0.08) * lights));
-      grd.addColorStop(1, hexA(c.tint, 0));
-      ctx.fillStyle = grd;
+    const paintSide = (side: number) => {
+      ctx.save();
+      if (side > 0) {
+        ctx.translate(w, 0);
+        ctx.scale(-1, 1);
+      }
+      const dw = Math.min(w * 0.145, 128);
       ctx.beginPath();
-      ctx.moveTo(c.x - 10, 22);
-      ctx.lineTo(c.x + 10, 22);
-      ctx.lineTo(tipX + w * 0.22, h);
-      ctx.lineTo(tipX - w * 0.22, h);
+      ctx.moveTo(0, 0);
+      ctx.lineTo(dw * 0.88, 0);
+      ctx.quadraticCurveTo(dw * 1.06, h * 0.22, dw * 0.7, h * 0.5);
+      ctx.quadraticCurveTo(dw * 0.48, h * 0.78, dw * 0.6, h);
+      ctx.lineTo(0, h);
       ctx.closePath();
+      const vel = ctx.createLinearGradient(0, 0, dw, 0);
+      vel.addColorStop(0, "#10080c");
+      vel.addColorStop(0.38, "#1a0e14");
+      vel.addColorStop(0.72, "#140a10");
+      vel.addColorStop(1, "#0a0608");
+      ctx.fillStyle = vel;
+      ctx.fill();
+
+      ctx.save();
+      ctx.clip();
+      for (let i = 0; i < 7; i++) {
+        const x = ((i + 0.2 + (i % 2) * 0.12) / 7) * dw * 0.86;
+        const fold = ctx.createLinearGradient(x - 11, 0, x + 18, 0);
+        fold.addColorStop(0, "rgba(0,0,0,0)");
+        fold.addColorStop(0.4, "rgba(5,2,4,0.58)");
+        fold.addColorStop(0.68, hexA("#7a444c", 0.07 + lights * 0.09));
+        fold.addColorStop(1, "rgba(0,0,0,0)");
+        ctx.fillStyle = fold;
+        ctx.fillRect(x - 12, 0, 30, h);
+      }
+      const kiss = ctx.createLinearGradient(dw * 0.45, 0, dw * 1.02, 0);
+      kiss.addColorStop(0, "rgba(0,0,0,0)");
+      kiss.addColorStop(0.72, hexA("#c4a882", 0.03 + lights * 0.07));
+      kiss.addColorStop(1, hexA("#efe8dc", 0.05 + lights * 0.1));
+      ctx.fillStyle = kiss;
+      ctx.fillRect(0, 0, dw * 1.05, h);
+      ctx.restore();
+      ctx.restore();
+    };
+    paintSide(-1);
+    paintSide(1);
+
+    ctx.fillStyle = "#10080c";
+    ctx.fillRect(0, 0, w, 22);
+    const n = 4;
+    for (let i = 0; i < n; i++) {
+      const x0 = (i / n) * w - 28;
+      const x1 = ((i + 1) / n) * w + 28;
+      const xm = (x0 + x1) / 2;
+      ctx.beginPath();
+      ctx.moveTo(x0, 20);
+      ctx.quadraticCurveTo(xm, 48, x1, 20);
+      ctx.lineTo(x1, 0);
+      ctx.lineTo(x0, 0);
+      ctx.closePath();
+      const cloth = ctx.createLinearGradient(x0, 20, x1, 20);
+      cloth.addColorStop(0, "#0a0608");
+      cloth.addColorStop(0.5, "#1c1218");
+      cloth.addColorStop(1, "#0a0608");
+      ctx.fillStyle = cloth;
       ctx.fill();
     }
+    const rail = ctx.createLinearGradient(0, 16, 0, 22);
+    rail.addColorStop(0, hexA("#efe8dc", 0.3 + lights * 0.14));
+    rail.addColorStop(0.45, hexA("#c4a882", 0.58));
+    rail.addColorStop(1, hexA("#6a4a32", 0.45));
+    ctx.fillStyle = rail;
+    ctx.fillRect(0, 18, w, 3);
+  }
+
+  private paintSpots(state: DrawState) {
+    const { ctx, w, h } = this;
+    const lights = state.feel.lights;
+    if (lights < 0.03) return;
+    const e = state.energy;
+    const t = state.now;
+    const beat = (state.song.bpm / 60) * Math.PI;
+    const cans = [
+      { i: 1, tint: "#c4a882", aim: 0.21, spread: 0.12 },
+      { i: 2, tint: "#d4b08a", aim: 0.35, spread: 0.09 },
+      { i: 4, tint: "#8fd4c4", aim: 0.5, spread: 0.14 },
+      { i: 6, tint: "#8aa4c4", aim: 0.65, spread: 0.09 },
+      { i: 7, tint: "#c4a882", aim: 0.79, spread: 0.12 },
+    ];
+    const landY = h * 0.845;
+    const cone = (ox: number, ax: number, half: number, alpha: number, tint: string) => {
+      const grd = ctx.createLinearGradient(ox, 28, ax, landY);
+      grd.addColorStop(0, hexA(tint, alpha * 0.85));
+      grd.addColorStop(0.38, hexA(tint, alpha * 0.28));
+      grd.addColorStop(1, hexA(tint, 0));
+      ctx.fillStyle = grd;
+      ctx.beginPath();
+      ctx.moveTo(ox - 3, 28);
+      ctx.lineTo(ox + 3, 28);
+      ctx.lineTo(ax + half, landY);
+      ctx.lineTo(ax - half, landY);
+      ctx.closePath();
+      ctx.fill();
+    };
+
+    ctx.save();
+    ctx.globalCompositeOperation = "screen";
+    for (const c of cans) {
+      const originX = w * ((c.i + 0.5) / 9);
+      const sway = state.reduced ? 0 : Math.sin(t * 0.16 + c.i) * w * 0.008;
+      const aimX = c.aim * w + sway;
+      const pulse = 0.72 + 0.28 * Math.abs(Math.sin(t * beat + c.i * 0.65));
+      const a = (0.12 + e * 0.1 + state.bloom * 0.16) * lights * pulse;
+      const half = w * c.spread * (0.9 + state.bloom * 0.1);
+      cone(originX, aimX, half * 1.32, a * 0.28, c.tint);
+      cone(originX, aimX, half, a * 0.55, c.tint);
+      cone(originX, aimX, half * 0.32, a * 0.7, c.tint);
+
+      const pool = ctx.createRadialGradient(aimX, landY, 2, aimX, landY, half * 0.9);
+      pool.addColorStop(0, hexA(c.tint, a * 0.48));
+      pool.addColorStop(0.45, hexA(c.tint, a * 0.16));
+      pool.addColorStop(1, hexA(c.tint, 0));
+      ctx.fillStyle = pool;
+      ctx.beginPath();
+      ctx.ellipse(aimX, landY, half * 0.8, 12 + state.bloom * 8, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = hexA(c.tint, a * 0.35);
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.ellipse(aimX, landY, half * 0.42, 6, 0, 0, Math.PI * 2);
+      ctx.stroke();
+
+      if (!state.reduced) {
+        for (let d = 0; d < 6; d++) {
+          const u = (d + 0.35) / 6;
+          const px = originX + (aimX - originX) * u + Math.sin(t * 0.7 + c.i + d) * 4;
+          const py = 28 + (landY - 28) * u;
+          ctx.globalAlpha = a * 0.45 * (1 - u);
+          ctx.fillStyle = c.tint;
+          ctx.fillRect(px, py, 1.2, 1.2);
+        }
+        ctx.globalAlpha = 1;
+      }
+    }
+    ctx.restore();
   }
 
   private paintCrowd(state: DrawState) {
@@ -214,14 +429,16 @@ export class StageRenderer {
     const crowd = state.feel.crowd;
     if (crowd < 0.03) return;
     const e = state.energy;
-    const pulse = 0.35 + 0.65 * (0.5 + 0.5 * Math.sin(state.now * (state.song.bpm / 60) * Math.PI));
-    const lift = 1 + state.bloom * 0.8;
+    const beat = (state.song.bpm / 60) * Math.PI;
+    const pulse = state.reduced ? 0.7 : 0.42 + 0.58 * (0.5 + 0.5 * Math.sin(state.now * beat));
+    const lift = 1 + state.bloom * 0.65;
     for (const c of this.crowd) {
-      const twinkle = 0.25 + 0.75 * (0.5 + 0.5 * Math.sin(state.now * 2.4 + c.phase));
-      ctx.globalAlpha = (0.08 + e * 0.35) * twinkle * pulse * lift * crowd;
-      ctx.fillStyle = c.phase % 2 > 1 ? "#efe8dc" : "#8fd4c4";
+      const gallery = c.y < 0.55;
+      const twinkle = 0.32 + 0.68 * (0.5 + 0.5 * Math.sin(state.now * (gallery ? 1.7 : 2.4) + c.phase));
+      ctx.globalAlpha = (0.06 + e * 0.3) * twinkle * pulse * lift * crowd * (gallery ? 0.7 : 1);
+      ctx.fillStyle = c.phase > 3.2 ? "#efe8dc" : c.phase > 1.6 ? "#c4a882" : "#8fd4c4";
       ctx.beginPath();
-      ctx.arc(c.x * w, c.y * h - state.bloom * 6, c.s * (1 + state.bloom * 0.4), 0, Math.PI * 2);
+      ctx.arc(c.x * w, c.y * h - state.bloom * (gallery ? 2 : 4), c.s * (1 + state.bloom * 0.24), 0, Math.PI * 2);
       ctx.fill();
     }
     ctx.globalAlpha = 1;
@@ -229,19 +446,47 @@ export class StageRenderer {
 
   private paintTruss(state: DrawState) {
     const { ctx, w } = this;
-    ctx.fillStyle = "rgba(239,232,220,0.08)";
-    ctx.fillRect(0, 14, w, 3);
-    ctx.fillRect(0, 28, w, 2);
+    const lights = state.feel.lights;
+    const metal = ctx.createLinearGradient(0, 12, 0, 24);
+    metal.addColorStop(0, "rgba(239,232,220,0.22)");
+    metal.addColorStop(0.4, "rgba(70,64,72,0.95)");
+    metal.addColorStop(1, "rgba(20,18,24,0.9)");
+    ctx.fillStyle = metal;
+    ctx.fillRect(0, 14, w, 6);
+    ctx.fillStyle = "rgba(8,6,10,0.7)";
+    ctx.fillRect(0, 20, w, 1.5);
+
     const cans = 9;
+    const beat = (state.song.bpm / 60) * Math.PI;
     for (let i = 0; i < cans; i++) {
       const x = w * ((i + 0.5) / cans);
-      const lit = 0.35 + 0.65 * Math.abs(Math.sin(state.now * 1.6 + i * 0.7));
-      ctx.fillStyle = "rgba(20,18,24,0.9)";
-      ctx.fillRect(x - 7, 8, 14, 12);
-      ctx.fillStyle = hexA(i % 2 ? "#c4a882" : "#8fd4c4", 0.25 + lit * 0.45 * (0.4 + state.energy + state.bloom * 0.5) * state.feel.lights);
+      const lit = 0.28 + 0.72 * Math.abs(Math.sin(state.now * beat + i * 0.55));
+      const tint = i % 3 === 1 ? "#8fd4c4" : i % 3 === 2 ? "#8aa4c4" : "#c4a882";
+      ctx.fillStyle = "rgba(36,32,38,0.96)";
+      ctx.fillRect(x - 5, 10, 10, 8);
+      ctx.fillStyle = "rgba(12,10,14,0.96)";
       ctx.beginPath();
-      ctx.ellipse(x, 28, 9, 4, 0, 0, Math.PI * 2);
+      ctx.roundRect(x - 8, 18, 16, 15, 2);
       ctx.fill();
+      ctx.fillStyle = "rgba(239,232,220,0.12)";
+      ctx.fillRect(x - 7, 20, 14, 1);
+      const glow = (0.22 + lit * 0.55) * (0.32 + state.energy * 0.4 + state.bloom * 0.45) * lights;
+      ctx.fillStyle = hexA(tint, glow);
+      ctx.beginPath();
+      ctx.ellipse(x, 34, 7, 3.8, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = hexA("#efe8dc", glow * 0.45);
+      ctx.beginPath();
+      ctx.ellipse(x, 33.2, 3.2, 1.6, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = "rgba(239,232,220,0.2)";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(x - 9, 22);
+      ctx.lineTo(x - 12, 15);
+      ctx.moveTo(x + 9, 22);
+      ctx.lineTo(x + 12, 15);
+      ctx.stroke();
     }
   }
 
@@ -256,12 +501,21 @@ export class StageRenderer {
       { id: "bass", dx: 46 },
     ];
     const bob = Math.sin(state.now * (state.song.bpm / 60) * Math.PI) * 1.6;
+    ctx.save();
+    ctx.fillStyle = "rgba(4,3,6,0.55)";
+    ctx.beginPath();
+    ctx.ellipse(cx, y + 26, 78, 11, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = hexA("#c4a882", 0.18 + state.feel.lights * 0.16);
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.restore();
     for (const f of figures) {
       const on = state.players.find((p) => p.id === f.id)?.enabled;
       const struck = state.flashes.some((fl) => fl.player === f.id && fl.until > state.now);
       const jump = struck ? 5 : 0;
       const x = cx + f.dx;
-      ctx.globalAlpha = on ? 0.85 : 0.28;
+      ctx.globalAlpha = on ? 0.9 : 0.28;
       ctx.fillStyle = on ? (struck ? "#3a3228" : "#2a241c") : "#16141a";
       ctx.beginPath();
       ctx.ellipse(x, y + 20 + (on ? bob : 0) - jump, 12 + (struck ? 1.4 : 0), 8, 0, 0, Math.PI * 2);
@@ -270,10 +524,15 @@ export class StageRenderer {
       ctx.arc(x, y + (on ? bob : 0) - jump, 7, 0, Math.PI * 2);
       ctx.fill();
       if (on) {
-        ctx.strokeStyle = hexA(struck ? "#8fd4c4" : "#c4a882", struck ? 0.9 : 0.5);
-        ctx.lineWidth = struck ? 1.8 : 1;
+        ctx.strokeStyle = hexA(struck ? "#8fd4c4" : "#c4a882", struck ? 0.9 : 0.45 + state.feel.lights * 0.25);
+        ctx.lineWidth = struck ? 1.8 : 1.1;
         ctx.beginPath();
         ctx.ellipse(x, y + 18 + bob - jump, 11, 7, 0, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.strokeStyle = hexA("#efe8dc", 0.12 + state.feel.lights * 0.12 + state.bloom * 0.15);
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.arc(x - 2, y - 2 + (on ? bob : 0) - jump, 5.2, -2.4, -0.4);
         ctx.stroke();
       }
     }
@@ -331,9 +590,9 @@ export class StageRenderer {
 
       const hot = state.combo >= 20;
       const track = ctx.createLinearGradient(0, far, 0, hit);
-      track.addColorStop(0, "rgba(36,32,40,0.55)");
-      track.addColorStop(0.45, "rgba(22,24,30,0.82)");
-      track.addColorStop(1, "rgba(12,14,18,0.96)");
+      track.addColorStop(0, "rgba(24,22,28,0.92)");
+      track.addColorStop(0.45, "rgba(16,16,20,0.96)");
+      track.addColorStop(1, "rgba(10,12,16,0.98)");
       this.poly(
         [
           [tl.x, tl.y],
@@ -665,14 +924,30 @@ export class StageRenderer {
 
   private paintVignette(state: DrawState) {
     const { ctx, w, h } = this;
-    const v = ctx.createRadialGradient(w * 0.5, h * 0.48, h * 0.2, w * 0.5, h * 0.5, h * 0.78);
+    const lights = state.feel.lights;
+    const v = ctx.createRadialGradient(w * 0.5, h * 0.42, h * 0.18, w * 0.5, h * 0.48, h * 0.84);
     v.addColorStop(0, "rgba(0,0,0,0)");
-    v.addColorStop(1, `rgba(5,4,7,${0.28 + 0.27 * (1 - state.feel.lights * 0.35)})`);
+    v.addColorStop(1, `rgba(5,4,7,${0.34 + 0.24 * (1 - lights * 0.4)})`);
     ctx.fillStyle = v;
     ctx.fillRect(0, 0, w, h);
-    const bottom = ctx.createLinearGradient(0, h * 0.72, 0, h);
+
+    const valance = ctx.createLinearGradient(0, 0, 0, h * 0.12);
+    valance.addColorStop(0, "rgba(5,3,6,0.4)");
+    valance.addColorStop(1, "rgba(5,3,6,0)");
+    ctx.fillStyle = valance;
+    ctx.fillRect(0, 0, w, h * 0.12);
+
+    const sides = ctx.createLinearGradient(0, 0, w, 0);
+    sides.addColorStop(0, "rgba(5,4,7,0.32)");
+    sides.addColorStop(0.12, "rgba(5,4,7,0)");
+    sides.addColorStop(0.88, "rgba(5,4,7,0)");
+    sides.addColorStop(1, "rgba(5,4,7,0.32)");
+    ctx.fillStyle = sides;
+    ctx.fillRect(0, 0, w, h);
+
+    const bottom = ctx.createLinearGradient(0, h * 0.82, 0, h);
     bottom.addColorStop(0, "rgba(5,4,7,0)");
-    bottom.addColorStop(1, "rgba(5,4,7,0.72)");
+    bottom.addColorStop(1, "rgba(5,4,7,0.5)");
     ctx.fillStyle = bottom;
     ctx.fillRect(0, 0, w, h);
 
@@ -682,7 +957,11 @@ export class StageRenderer {
       ctx.fillStyle = `rgba(211,106,106,${0.1 * k})`;
       ctx.fillRect(0, 0, w, h);
     } else if (state.bloom > 0.15 && !state.reduced) {
-      ctx.fillStyle = `rgba(239,232,220,${state.bloom * 0.06})`;
+      const flash = ctx.createRadialGradient(w * 0.5, h * 0.18, 8, w * 0.5, h * 0.22, w * 0.4);
+      flash.addColorStop(0, hexA("#efe8dc", state.bloom * 0.1));
+      flash.addColorStop(0.45, hexA("#c4a882", state.bloom * 0.05));
+      flash.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = flash;
       ctx.fillRect(0, 0, w, h);
     }
   }

@@ -1072,7 +1072,7 @@ export function StageApp() {
             ) : null}
 
             {overlay && status !== "playing" && !feelOpen ? (
-              <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-[radial-gradient(ellipse_at_50%_42%,rgba(7,6,10,0.72),rgba(7,6,10,0.28)_58%,transparent)] px-6 text-center">
+              <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-[radial-gradient(ellipse_at_50%_48%,rgba(7,6,10,0.58),rgba(7,6,10,0.16)_62%,transparent)] px-6 text-center">
                 {results ? (
                   <div className="overlay-enter max-w-md">
                     <div className="text-[10px] tracking-[0.22em] text-muted">

@@ -62,9 +62,9 @@
   --hit: 0;
   min-height: 100dvh;
   background:
-    radial-gradient(ellipse at 50% 0%, color-mix(in oklab, var(--color-tungsten) calc((var(--energy) + var(--hit)) * 16%), transparent), transparent 46%),
-    radial-gradient(ellipse at 80% 100%, color-mix(in oklab, var(--color-accent) calc(var(--energy) * 10%), transparent), transparent 40%),
-    var(--color-bg);
+    radial-gradient(ellipse at 50% -8%, color-mix(in oklab, var(--color-tungsten) calc((var(--energy) + var(--hit)) * 18%), transparent), transparent 44%),
+    radial-gradient(ellipse at 50% 110%, color-mix(in oklab, var(--color-accent) calc(var(--energy) * 9%), transparent), transparent 42%),
+    linear-gradient(180deg, #0c0a0e 0%, var(--color-bg) 32%, #050407 100%);
   color: var(--color-fg);
 }
 
