@@ -160,6 +160,7 @@ export function StageApp() {
 
   const initBag = useCallback(() => {
     const audio = bag.current?.audio || new AudioEngine();
+    audio.stop();
     const b: Bag = {
       audio,
       renderer: bag.current?.renderer || null,
@@ -171,9 +172,9 @@ export function StageApp() {
       demo: false,
       speed,
       difficulty,
-      volume: volume / 100,
-      guide,
-      metronome,
+      volume: audio.volume,
+      guide: bag.current?.guide ?? false,
+      metronome: bag.current?.metronome ?? false,
       particles: [],
       flashes: [],
       callouts: [],
@@ -195,7 +196,7 @@ export function StageApp() {
     };
     bag.current = b;
     rebuild(b);
-  }, [songs, song, players, speed, difficulty, volume, guide, metronome]);
+  }, [songs, song, players, speed, difficulty]);
 
   function rebuild(b: Bag) {
     b.judges.clear();
@@ -524,9 +525,23 @@ export function StageApp() {
 
   useEffect(() => {
     initBag();
+    setStatus("ready");
+    setResults(null);
+    setOverlay(true);
     setReady(true);
     setBest(loadBest(bestKey(song, difficulty, speed, players)));
   }, [initBag, song, difficulty, speed, players]);
+
+  // Listening controls belong to the live session. Rebuilding here would erase
+  // scores and holds while the audio clock continued playing.
+  useEffect(() => {
+    const b = bag.current;
+    if (!b) return;
+    b.volume = volume / 100;
+    b.guide = guide;
+    b.metronome = metronome;
+    b.audio.setVolume(b.volume);
+  }, [volume, guide, metronome, initBag]);
 
   useEffect(() => {
     setFeel(loadFeel());
@@ -835,7 +850,7 @@ export function StageApp() {
 
   return (
     <div className="stage-shell flex min-h-dvh flex-col">
-      <header className="relative z-20 flex items-center justify-between gap-3 px-4 py-3 md:px-6">
+      <header className="relative z-20 flex items-center justify-between gap-2 px-3 py-3 sm:gap-3 sm:px-4 md:px-6">
         <div className="flex items-center gap-3">
           <span className="eq-bars" aria-hidden="true">
             <i /><i /><i /><i />
@@ -1090,7 +1105,7 @@ export function StageApp() {
                       {Math.round(results.accuracy)}% accuracy · {results.perfect} perfect · {results.miss} missed · streak {results.combo}
                     </p>
                     <div className="mt-5 flex flex-wrap justify-center gap-2">
-                      <Button onClick={() => void startSession(false)}>
+                      <Button onClick={() => void startSession(false)} disabled={!ready || busy}>
                         <Play className="size-4 translate-x-px" />
                         Play again
                       </Button>
@@ -1108,12 +1123,12 @@ export function StageApp() {
                       {song.harmony ? " Chords light the piano. Play the glowing keys together." : ""}
                     </p>
                     <div className="mt-5 flex flex-wrap justify-center gap-2">
-                      <Button onClick={() => void startSession(false)}>
+                      <Button onClick={() => void startSession(false)} disabled={!ready || busy}>
                         <Play className="size-4 translate-x-px" />
                         Start set
                         <kbd className="ml-1 rounded-md bg-accent-fg/10 px-1.5 py-0.5 font-mono text-[10px]">ENTER</kbd>
                       </Button>
-                      <Button variant="secondary" onClick={() => void startSession(true)} disabled={busy}>
+                      <Button variant="secondary" onClick={() => void startSession(true)} disabled={!ready || busy}>
                         <Eye className="size-4" />
                         Watch the house
                       </Button>
@@ -1165,7 +1180,7 @@ export function StageApp() {
 
           <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
             <div className="flex flex-wrap gap-2">
-              <Button onClick={() => void startSession(false)} disabled={status === "playing" || status === "starting"}>
+              <Button onClick={() => void startSession(false)} disabled={!ready || busy}>
                 {status === "paused" ? (
                   <>
                     <Play className="size-4 translate-x-px" /> Resume
@@ -1183,7 +1198,7 @@ export function StageApp() {
                 <RotateCcw className="size-4" />
               </Button>
             </div>
-            <Button variant="ghost" onClick={() => void startSession(true)} disabled={busy}>
+            <Button variant="ghost" onClick={() => void startSession(true)} disabled={!ready || busy}>
               <Eye className="size-4" /> Watch the house
             </Button>
           </div>
@@ -1235,7 +1250,6 @@ export function StageApp() {
                 onChange={(e) => {
                   const v = Number(e.target.value);
                   setVolume(v);
-                  bag.current?.audio.setVolume(v / 100);
                 }}
                 suppressHydrationWarning
               />
