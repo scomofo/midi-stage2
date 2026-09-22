@@ -974,7 +974,7 @@ export function StageApp() {
               </span>
             </div>
             <p className="mt-1 text-[12px] leading-relaxed text-muted">
-              {feel.preset === "custom" ? "Your mix. Lights, sparks, and shake." : FEEL_COPY[feel.preset].line}
+              {feel.preset === "custom" ? "Your mix. Lights, gobos, and shake." : FEEL_COPY[feel.preset].line}
             </p>
           </button>
         </aside>
