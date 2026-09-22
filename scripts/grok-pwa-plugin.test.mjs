@@ -1,14 +1,14 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import test from "node:test";
+import test, { after } from "node:test";
 import {
   appNameFromHost,
-  createHeadInjector,
+  createHeadInjector as createHeadInjectorImpl,
   grokXCreatorHeadTags,
-  injectGrokPwaHead,
+  injectGrokPwaHead as injectGrokPwaHeadImpl,
   isDocumentPath,
   isInstallQuery,
   publicAppHost,
@@ -20,6 +20,16 @@ import {
 import { renderInstallPage } from "./grok-pwa-plugin.mjs";
 
 const TEMPLATE_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
+
+// Generic fixtures must not inherit this app's site.json or public/og.jpg.
+// Filesystem-specific cases can still supply their own cwd explicitly.
+const FIXTURE_ROOT = mkdtempSync(join(tmpdir(), "grok-pwa-fixture-"));
+after(() => rmSync(FIXTURE_ROOT, { recursive: true, force: true }));
+const injectGrokPwaHead = (html, ctx = {}) =>
+  injectGrokPwaHeadImpl(html, { cwd: FIXTURE_ROOT, ...ctx });
+const createHeadInjector = (ctx = {}) =>
+  createHeadInjectorImpl({ cwd: FIXTURE_ROOT, ...ctx });
+
 
 test("injects before </head>", () => {
   const out = injectGrokPwaHead("<html><head><title>x</title></head><body></body></html>");
