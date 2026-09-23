@@ -403,7 +403,9 @@ export function StageApp() {
       );
     }
   }
-  previewFeelRef.current = previewFeel;
+  useEffect(() => {
+    previewFeelRef.current = previewFeel;
+  });
 
   const startSession = useCallback(async (demo = false) => {
     const b = bag.current;
@@ -633,6 +635,7 @@ export function StageApp() {
       b.flashes = b.flashes.filter((f) => f.until > now);
       b.callouts = b.callouts.filter((c) => c.until > now);
       for (const [k, until] of b.pressed) if (until < now) b.pressed.delete(k);
+      for (const [k, until] of b.padFlash) if (until < now) b.padFlash.delete(k);
 
       b.renderer.draw({
         song: b.song,
@@ -822,15 +825,22 @@ export function StageApp() {
           for (const p of b.players.filter((p) => p.enabled)) release(b, p, `midi:${p.id}:${note}`);
         }
       };
-      access.inputs.forEach((input) => {
-        input.onmidimessage = onMessage;
-        inputs.push(input);
-      });
-      if (bag.current) bag.current.midiInputs = inputs;
-      setMidi({
-        connected: inputs.length > 0,
-        last: inputs.length ? `${inputs.length} MIDI input${inputs.length === 1 ? "" : "s"} live.` : "MIDI on. No inputs yet.",
-      });
+      const wireInputs = () => {
+        access.inputs.forEach((input) => {
+          if (!inputs.includes(input)) {
+            input.onmidimessage = onMessage;
+            inputs.push(input);
+          }
+        });
+        if (bag.current) bag.current.midiInputs = inputs;
+        setMidi({
+          connected: inputs.length > 0,
+          last: inputs.length ? `${inputs.length} MIDI input${inputs.length === 1 ? "" : "s"} live.` : "MIDI on. No inputs yet.",
+        });
+      };
+      wireInputs();
+      // Pick up devices plugged in after connecting (hot-plug).
+      access.onstatechange = () => wireInputs();
     } catch {
       setToast("MIDI permission was denied. Computer keys still work.");
     }
