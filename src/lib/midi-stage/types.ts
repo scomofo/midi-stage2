@@ -40,6 +40,12 @@ export type Song = {
   arrangement?: string;
   arrangementDescription?: string;
   key?: string;
+  /** Backing-track offset in seconds (shared chart imports). Preserved; not used by the engine. */
+  audioOffset?: number;
+  /** Backing audio file name (shared chart imports). Preserved; not used by the engine. */
+  audioName?: string;
+  /** Normalized tempo map (shared chart imports). Always constant in v1; the engine plays `bpm`. */
+  tempoMap?: { time: number; bpm: number }[];
   art: "open" | "circuit" | "hours" | "voltage" | "rehearsal";
 };
 
