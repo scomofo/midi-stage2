@@ -152,9 +152,9 @@ export function loadFeel(): Feel {
     const next: Feel = {
       ...withPreset("house"),
       ...parsed,
-      shake: clamp01(Number(parsed.shake)),
-      juice: clamp01(Number(parsed.juice)),
-      bloom: clamp01(Number(parsed.bloom)),
+      shake: clamp01(Number(parsed.shake ?? house.shake)),
+      juice: clamp01(Number(parsed.juice ?? house.juice)),
+      bloom: clamp01(Number(parsed.bloom ?? house.bloom)),
       punch: clamp01(Number(parsed.punch ?? house.punch)),
       lights: clamp01(Number(parsed.lights ?? house.lights)),
       crowd: clamp01(Number(parsed.crowd ?? house.crowd)),

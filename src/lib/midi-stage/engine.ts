@@ -276,6 +276,8 @@ export class Judge {
     const gained = Math.round(100 * weight * this.multiplier);
     this.stats.score += gained;
     this.stats.offsets.push(((t - closest.time) / this.speed) * 1000);
+    // Unconsumed per-hit timing data: keep only the most recent entries.
+    if (this.stats.offsets.length > 200) this.stats.offsets.splice(0, this.stats.offsets.length - 200);
     if (!this.drums && closest.duration / this.speed >= 0.35) {
       closest.hold = "held";
       closest.token = token;
