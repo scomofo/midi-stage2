@@ -322,7 +322,15 @@ export class AudioEngine {
     if (!this.ctx || this.ctx.state !== "running") return;
     this.release(token);
     const v = this.tone(type, pitch, velocity, this.ctx.currentTime, duration, 0.85, this.buses.monitor);
-    if (type !== "drums") this.monitorVoices.set(token, v);
+    if (type !== "drums") {
+      this.monitorVoices.set(token, v);
+      // Evict the token when the voice ends naturally, not only on release().
+      const ended = v.source.onended;
+      v.source.onended = (ev) => {
+        if (this.monitorVoices.get(token) === v) this.monitorVoices.delete(token);
+        ended?.call(v.source, ev);
+      };
+    }
   }
 
   release(token: string) {
