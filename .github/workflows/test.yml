@@ -20,7 +20,7 @@ jobs:
       - run: npm run lint
       - run: npm run build
       - run: npx playwright install --with-deps chromium
-      - name: Session and setup regressions
+      - name: Gameplay and import regressions
         run: |
           npm run dev > /tmp/midi-stage-dev.log 2>&1 &
           ready=false
@@ -38,3 +38,5 @@ jobs:
           fi
           npm run test:session
           npm run test:setup
+          npm run test:imports
+          npm run test:audio

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import {
   Lamp,
   SlidersHorizontal,
+  Upload,
   Maximize2,
   Minimize2,
   Menu,
@@ -15,6 +16,9 @@ import {
 import { Button } from "@/components/ui/button";
 import { FeelPanel } from "@/components/stage/feel-panel";
 import { SessionOverlay, type SessionResults } from "@/components/stage/session-overlay";
+import { loadAudioAsset, saveAudioAsset, deleteAudioAsset } from "@/lib/midi-stage/audio-assets";
+import { SongLibraryPanel } from "@/components/stage/song-library-panel";
+import { addLibraryEntry, chartIdentity, loadSongLibrary, MAX_CHART_IMPORT_BYTES, prepareChartImport, saveSongLibrary, songFromSavedChart, type SavedChart } from "@/lib/midi-stage/song-library";
 import { SoundcheckPanel } from "@/components/stage/soundcheck-panel";
 import { defaultMidiRoutes, loadMidiRoutes, saveMidiRoutes, resolveMidiPlayer, type MidiRoute } from "@/lib/midi-stage/midi-routing";
 import { loadSessionPreferences, saveSessionPreferences } from "@/lib/midi-stage/preferences";
@@ -51,7 +55,6 @@ import { cn } from "@/lib/utils";
 type Bag = {
   audio: AudioEngine;
   renderer: StageRenderer | null;
-  songs: Song[];
   song: Song;
   players: Player[];
   judges: Map<Instrument, Judge>;
@@ -78,6 +81,7 @@ type Bag = {
   feel: Feel;
   canvasPtrs: Map<number, { player: Player; lane: number; token: string }>;
   feelOpen: boolean;
+  libraryOpen: boolean;
   feelLane: number;
 };
 
@@ -100,10 +104,34 @@ function bestKey(song: Song, difficulty: string, speed: number, players: Player[
   return `midi-stage-best/${song.id}/${difficulty}/${speed}/${players.filter((p) => p.enabled).map((p) => p.id).join(",")}`;
 }
 
+function lineupForSong(song: Song, current: Player[]): Player[] {
+  if (song.original) return current;
+  const available = new Set(song.parts.filter((part) => part.notes.length > 0).map((part) => part.type));
+  const next = current.map((player) => ({ ...player, enabled: player.enabled && available.has(player.type) }));
+  if (!next.some((player) => player.enabled)) {
+    const preferred = next.find((player) => player.id === "keys" && available.has(player.type))
+      ?? next.find((player) => available.has(player.type));
+    if (preferred) preferred.enabled = true;
+  }
+  return next;
+}
+
 export function StageApp() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const startTicket = useRef(0);
   const pendingRehearsal = useRef(false);
+  const importTicket = useRef(0);
+  const libraryRef = useRef<HTMLDivElement>(null);
+  const [libraryOpen, setLibraryOpen] = useState(false);
+  const [importedCharts, setImportedCharts] = useState<SavedChart[]>([]);
+  const audioBuffers = useRef(new Map<string, AudioBuffer>());
+  const sessionAudioFiles = useRef(new Map<string, Blob>());
+  const volatileAudioIds = useRef(new Set<string>());
+  const [importCandidate, setImportCandidate] = useState<{ entry: SavedChart; warnings: string[]; kind: "audio" | "midi" | "chart"; buffer?: AudioBuffer; audioFile?: File } | null>(null);
+  const [savingImport, setSavingImport] = useState(false);
+  const [readingImport, setReadingImport] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [libraryWarning, setLibraryWarning] = useState<string | null>(null);
   const midiOwners = useRef(new Map<string, { playerId: Instrument; token: string }>());
   const [midiRoutes, setMidiRoutes] = useState(defaultMidiRoutes);
   const [preferencesHydrated, setPreferencesHydrated] = useState(false);
@@ -159,8 +187,12 @@ export function StageApp() {
   const [feelTap, setFeelTap] = useState(true);
   const previewFeelRef = useRef<(kind: "perfect" | "miss") => void>(() => {});
 
-  const songs = useMemo(() => catalog(difficulty), [difficulty]);
-  const song = songs.find((s) => s.id === songId) || songs[0]!;
+  const builtInSongs = useMemo(() => catalog(difficulty), [difficulty]);
+  const songs = useMemo(() => [...builtInSongs, ...importedCharts.map(songFromSavedChart)], [builtInSongs, importedCharts]);
+  const importedSelection = importedCharts.find((entry) => entry.id === songId);
+  // Editing a different saved song must not rebuild a paused take.
+  const song = useMemo(() => builtInSongs.find((entry) => entry.id === songId)
+    ?? (importedSelection ? songFromSavedChart(importedSelection) : builtInSongs[0]!), [builtInSongs, songId, importedSelection]);
 
   const initBag = useCallback(() => {
     startTicket.current++;
@@ -170,7 +202,6 @@ export function StageApp() {
     const b: Bag = {
       audio,
       renderer: bag.current?.renderer || null,
-      songs,
       song,
       players: players.map((p) => ({ ...p })),
       judges: new Map(),
@@ -197,11 +228,12 @@ export function StageApp() {
       feel: bag.current?.feel ?? feel,
       canvasPtrs: new Map(),
       feelOpen: bag.current?.feelOpen ?? false,
+      libraryOpen: bag.current?.libraryOpen ?? false,
       feelLane: bag.current?.feelLane ?? 0,
     };
     bag.current = b;
     rebuild(b);
-  }, [songs, song, players, speed, difficulty]);
+  }, [song, players, speed, difficulty]);
 
   function rebuild(b: Bag) {
     b.judges.clear();
@@ -284,7 +316,7 @@ export function StageApp() {
 
   function hit(b: Bag, p: Player, lane: number, token: string, velocity = 105, inputPitch?: number) {
     const judge = b.judges.get(p.id);
-    if (!judge || lane < 0 || lane >= judge.lanes.length || b.status === "paused" || b.status === "starting" || b.feelOpen) return;
+    if (!judge || lane < 0 || lane >= judge.lanes.length || b.status === "paused" || b.status === "starting" || b.feelOpen || b.libraryOpen) return;
     const pitch = inputPitch ?? judge.lanes[lane]!.pitch;
     if (b.status === "ready") {
       const source = token.startsWith("midi:") ? "MIDI" : token.startsWith("key:") || token.startsWith("pad-key:") ? "computer keyboard" : "touch / pointer";
@@ -297,7 +329,10 @@ export function StageApp() {
     const t = b.status === "playing" ? b.audio.songAt() : b.position;
     let matched = null;
     if (b.status === "playing" && t >= -judge.windows[2]! && !b.demo) matched = judge.hit(t, lane, token, inputPitch);
-    if (!b.demo) b.audio.monitor(token, p.type, pitch, velocity, matched ? matched.duration / b.speed : 1.4);
+    if (!b.demo) {
+      if (b.song.matching === "rhythm") b.audio.monitor(token, "drums", 42, velocity, 0.06);
+      else b.audio.monitor(token, p.type, pitch, velocity, matched ? matched.duration / b.speed : 1.4);
+    }
   }
 
   function release(b: Bag, p: Player, token: string) {
@@ -416,9 +451,22 @@ export function StageApp() {
     previewFeelRef.current = previewFeel;
   });
 
+  async function backingForSong(selected: Song): Promise<AudioBuffer | undefined> {
+    if (!selected.audioAssetId) return undefined;
+    const cached = audioBuffers.current.get(selected.audioAssetId);
+    if (cached) return cached;
+    const audioFile = sessionAudioFiles.current.get(selected.audioAssetId) ?? await loadAudioAsset(selected.audioAssetId);
+    if (!audioFile) throw new Error(`Original audio is missing. Reimport ${selected.audioName || selected.name} to play this song.`);
+    const { decodeSongAudio } = await import("@/lib/midi-stage/audio-import");
+    const decoded = await decodeSongAudio(await audioFile.arrayBuffer());
+    audioBuffers.current.clear();
+    audioBuffers.current.set(selected.audioAssetId, decoded);
+    return decoded;
+  }
+
   const startSession = useCallback(async (demo = false) => {
     const b = bag.current;
-    if (!b || b.status === "playing" || b.status === "starting") return;
+    if (!b || b.libraryOpen || b.status === "playing" || b.status === "starting") return;
     const ticket = ++startTicket.current;
     const resuming = b.status === "paused" && !demo;
     if (!resuming) {
@@ -438,7 +486,15 @@ export function StageApp() {
     b.status = "starting";
     setStatus("starting");
     try {
+      let backingBuffer: AudioBuffer | undefined;
+      if (b.song.audioAssetId) {
+        // Unlock in the Start gesture before reading a saved file asynchronously.
+        await b.audio.init();
+        backingBuffer = await backingForSong(b.song);
+        if (ticket !== startTicket.current || bag.current !== b || b.status !== "starting") return;
+      }
       await b.audio.begin({
+        backingBuffer,
         song: b.song,
         players: b.players,
         speed: b.speed,
@@ -556,9 +612,14 @@ export function StageApp() {
 
   // Restore after hydration; never write the server-rendered defaults over a saved setup.
   useLayoutEffect(() => {
-    const saved = loadSessionPreferences(catalog("standard").map((entry) => entry.id));
+    const library = loadSongLibrary();
+    const availableSongs = [...catalog("standard"), ...library.entries.map(songFromSavedChart)];
+    const saved = loadSessionPreferences(availableSongs.map((entry) => entry.id));
+    setImportedCharts(library.entries);
+    setLibraryWarning(library.warning);
     setSongId(saved.songId);
-    setPlayers(defaultPlayers().map((player) => ({ ...player, enabled: saved.enabledPlayers.includes(player.id) })));
+    const restoredPlayers = defaultPlayers().map((player) => ({ ...player, enabled: saved.enabledPlayers.includes(player.id) }));
+    setPlayers(lineupForSong(availableSongs.find((entry) => entry.id === saved.songId) ?? availableSongs[0]!, restoredPlayers));
     setDifficulty(saved.difficulty);
     setSpeed(saved.speed);
     setGuide(saved.guide);
@@ -620,6 +681,12 @@ export function StageApp() {
   useEffect(() => {
     if (bag.current) bag.current.feelOpen = feelOpen;
   }, [feelOpen]);
+
+  useEffect(() => {
+    if (bag.current) bag.current.libraryOpen = libraryOpen;
+  }, [libraryOpen, initBag]);
+
+  useEffect(() => () => { importTicket.current++; }, []);
 
   useEffect(() => {
     if (!feelOpen || !feelTap) return;
@@ -811,14 +878,15 @@ export function StageApp() {
       const el = e.target as HTMLElement;
       if (e.code === "Escape") {
         e.preventDefault();
-        if (feelOpen) setFeelOpen(false);
+        if (libraryOpen) closeSongLibrary();
+        else if (feelOpen) setFeelOpen(false);
         else if (menu) setMenu(false);
         else if (soundcheckOpen) setSoundcheckOpen(false);
         else if (b.status === "playing") pauseSession();
         return;
       }
       if (e.ctrlKey || e.metaKey || e.altKey || el.isContentEditable || el.closest("input, select, textarea, [role=dialog]")) return;
-      if (feelOpen || menu) return;
+      if (feelOpen || libraryOpen || menu) return;
       if ((e.code === "Enter" || e.code === "Space") && el.closest("button, a")) return;
       if (e.repeat) return;
       if (e.code === "Enter") {
@@ -852,7 +920,7 @@ export function StageApp() {
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("keyup", onUp);
     };
-  }, [pauseSession, startSession, resetReady, feelOpen, menu, soundcheckOpen]);
+  }, [pauseSession, startSession, resetReady, feelOpen, libraryOpen, menu, soundcheckOpen]);
 
   useEffect(() => {
     if (!toast) return;
@@ -867,10 +935,11 @@ export function StageApp() {
       const p = resolveMidiPlayer(b.players, midiRoutes, source);
       if (!p) return;
       const judge = b.judges.get(p.id);
-      const lane = p.type === "drums"
+      const anyLane = judge?.lanes.findIndex((lane) => lane.any) ?? -1;
+      const lane = anyLane >= 0 ? anyLane : p.type === "drums"
         ? judge?.lanes.findIndex((l) => l.notes?.includes(note)) ?? -1
         : judge?.lanes.findIndex((l) => l.pc === ((note % 12) + 12) % 12) ?? -1;
-      if (lane < 0 || b.status === "paused" || b.status === "starting" || b.feelOpen) return;
+      if (lane < 0 || b.status === "paused" || b.status === "starting" || b.feelOpen || b.libraryOpen) return;
       const ownedToken = `${token}:${p.id}`;
       midiOwners.current.set(token, { playerId: p.id, token: ownedToken });
       hit(b, p, lane, ownedToken, velocity, note);
@@ -944,8 +1013,8 @@ export function StageApp() {
   }, [pauseSession]);
 
   useEffect(() => {
-    if (!feelOpen && !menu) return;
-    const panel = feelOpen ? panelRef.current : menuRef.current;
+    if (!feelOpen && !libraryOpen && !menu) return;
+    const panel = libraryOpen ? libraryRef.current : feelOpen ? panelRef.current : menuRef.current;
     if (!panel) return;
     const previous = document.activeElement as HTMLElement | null;
     const focusable = () => [...panel.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), select:not(:disabled), [tabindex="0"]')].filter((el) => el.getClientRects().length);
@@ -959,7 +1028,7 @@ export function StageApp() {
     };
     document.addEventListener("keydown", trap);
     return () => { document.removeEventListener("keydown", trap); previous?.focus({ preventScroll: true }); };
-  }, [feelOpen, menu]);
+  }, [feelOpen, libraryOpen, menu]);
 
   function openMenu() {
     if (bag.current?.status === "starting") resetReady();
@@ -983,7 +1052,127 @@ export function StageApp() {
     setToast("First Rehearsal: solo keys, Chill, 75% tempo. Follow the guide and the click.");
   }
 
+  function closeSongLibrary() {
+    importTicket.current++;
+    setReadingImport(false);
+    setSavingImport(false);
+    setImportCandidate(null);
+    setLibraryOpen(false);
+  }
+
+  function openSongLibrary() {
+    importTicket.current++;
+    setReadingImport(false);
+    setSavingImport(false);
+    if (bag.current?.status === "starting") resetReady();
+    else pauseSession();
+    setFeelOpen(false);
+    setMenu(false);
+    setImportError(null);
+    setImportCandidate(null);
+    setLibraryOpen(true);
+  }
+
+  function selectSong(next: Song) {
+    resetReady();
+    setPlayers((current) => lineupForSong(next, current));
+    setSongId(next.id);
+    setMenu(false);
+    closeSongLibrary();
+  }
+
+  async function readSongFile(file: File) {
+    if (savingImport) return;
+    const ticket = ++importTicket.current;
+    setReadingImport(true);
+    setImportError(null);
+    setImportCandidate(null);
+    try {
+      if (!file.size) throw new Error("This file is empty. Choose audio, MIDI or an exported Stage chart.");
+      let candidate: NonNullable<typeof importCandidate>;
+      if (/\.(mp3|wav|wave|flac|ogg|oga|opus|m4a|aac|webm|aif|aiff)$/i.test(file.name)
+        || (file.type.startsWith("audio/") && !/midi/i.test(file.type) && !/\.(midi?|json)$/i.test(file.name))) {
+        const { importAudioFile } = await import("@/lib/midi-stage/audio-import");
+        const { chart, warnings, buffer } = await importAudioFile(file);
+        candidate = { entry: { id: chartIdentity(chart), chart, fileName: file.name, addedAt: Date.now(), audio: true }, warnings, buffer, audioFile: file, kind: "audio" };
+      } else if (/\.midi?$/i.test(file.name)) {
+        if (file.size > MAX_CHART_IMPORT_BYTES) throw new Error("Choose a MIDI file smaller than 4 MB.");
+        const { importMidiFile } = await import("@/lib/midi-stage/midi-file-import");
+        const { chart, warnings } = importMidiFile(new Uint8Array(await file.arrayBuffer()), file.name);
+        candidate = { entry: { id: chartIdentity(chart), chart, fileName: file.name, addedAt: Date.now() }, warnings, kind: "midi" };
+      } else if (/\.json$/i.test(file.name)) {
+        if (file.size > MAX_CHART_IMPORT_BYTES) throw new Error("Choose a chart file smaller than 4 MB.");
+        candidate = { ...prepareChartImport(await file.text(), file.name), kind: "chart" };
+      } else {
+        throw new Error("Choose audio (MP3, WAV, FLAC and other browser-supported formats), MIDI, or a Stage chart (.midistage.json).");
+      }
+      if (ticket === importTicket.current) setImportCandidate(candidate);
+    } catch (error) {
+      if (ticket === importTicket.current) setImportError(error instanceof Error ? error.message : "This song could not be imported.");
+    } finally {
+      if (ticket === importTicket.current) setReadingImport(false);
+    }
+  }
+
+  function persistLibrary(entries: SavedChart[]) {
+    const stored = saveSongLibrary(entries.filter((entry) => !volatileAudioIds.current.has(entry.id)));
+    return { ...stored, warning: stored.warning ?? (entries.some((entry) => volatileAudioIds.current.has(entry.id))
+      ? "Some audio is available for this visit only. Browser storage could not save it; reimport those files next time." : null) };
+  }
+
+  async function addImportedSong() {
+    if (!importCandidate || readingImport || savingImport) return;
+    const candidate = importCandidate;
+    const ticket = importTicket.current;
+    setSavingImport(true);
+    try {
+      const next = addLibraryEntry(importedCharts, candidate.entry);
+      const duplicate = importedCharts.some((entry) => entry.id === candidate.entry.id);
+      if (candidate.audioFile && candidate.buffer) {
+        const written = await saveAudioAsset(candidate.entry.id, candidate.audioFile);
+        // A quota failure while reimporting must not discard a durable copy.
+        const savedAudio = written || (await loadAudioAsset(candidate.entry.id)) !== null;
+        if (ticket !== importTicket.current) return;
+        if (savedAudio) {
+          volatileAudioIds.current.delete(candidate.entry.id);
+          sessionAudioFiles.current.delete(candidate.entry.id);
+        } else {
+          volatileAudioIds.current.add(candidate.entry.id);
+          sessionAudioFiles.current.set(candidate.entry.id, candidate.audioFile);
+        }
+        audioBuffers.current.clear();
+        audioBuffers.current.set(candidate.entry.id, candidate.buffer);
+      }
+      setImportedCharts(next);
+      const stored = persistLibrary(next);
+      setLibraryWarning(stored.warning);
+      const imported = songFromSavedChart(next.find((entry) => entry.id === candidate.entry.id) ?? candidate.entry);
+      selectSong(imported);
+      setToast(stored.warning ?? `${imported.name} ${duplicate ? "is already in your setlist" : "is ready"}. Start the set when you’re ready.`);
+      setImportCandidate(null);
+    } catch (error) {
+      if (ticket === importTicket.current) setImportError(error instanceof Error ? error.message : "This song could not be added.");
+    } finally {
+      if (ticket === importTicket.current) setSavingImport(false);
+    }
+  }
+
+  function removeImportedSong(id: string) {
+    if (savingImport) return;
+    const next = importedCharts.filter((entry) => entry.id !== id);
+    setImportedCharts(next);
+    const stored = persistLibrary(next);
+    setLibraryWarning(stored.warning);
+    if (stored.saved) void deleteAudioAsset(id).catch(() => {});
+    volatileAudioIds.current.delete(id);
+    audioBuffers.current.delete(id);
+    sessionAudioFiles.current.delete(id);
+    if (songId === id) { resetReady(); setSongId("open-stage"); }
+    setToast(stored.warning ?? "Song removed from your setlist.");
+  }
+
   function togglePlayer(id: Instrument) {
+    if (!song.original && !song.parts.some((part) => part.type === id && part.notes.length > 0)) return;
     setPlayers((prev) => {
       const next = prev.map((p) => (p.id === id ? { ...p, enabled: !p.enabled } : p));
       if (!next.some((p) => p.enabled)) return prev;
@@ -1062,20 +1251,16 @@ export function StageApp() {
               <h2 className="text-[10px] font-semibold tracking-[0.18em] text-muted">SETLIST</h2>
               <span className="text-[9px] tracking-[0.14em] text-subtle">{String(songs.length).padStart(2, "0")} TRACKS</span>
             </div>
-            <div className="flex flex-col gap-2">
+            <div className="-m-1 flex max-h-[390px] flex-col gap-2 overflow-y-auto p-1">
               {songs.map((s) => (
                 <button
                   key={s.id}
                   type="button"
                   aria-pressed={s.id === song.id}
                   disabled={busy}
-                  onClick={() => {
-                    setSongId(s.id);
-                    setMenu(false);
-                    resetReady();
-                  }}
+                  onClick={() => selectSong(s)}
                   className={cn(
-                    "flex items-center gap-3 rounded-xl p-2 text-left shadow-[0_0_0_1px_rgba(239,232,220,0.08)] transition-[background,box-shadow] duration-150",
+                    "flex shrink-0 items-center gap-3 rounded-xl p-2 text-left shadow-[0_0_0_1px_rgba(239,232,220,0.08)] transition-[background,box-shadow] duration-150",
                     s.id === song.id ? "bg-elevated shadow-[0_0_0_1px_rgba(143,212,196,0.45)]" : "bg-surface hover:bg-elevated",
                   )}
                 >
@@ -1083,12 +1268,16 @@ export function StageApp() {
                   <span className="min-w-0">
                     <strong className="block truncate text-[13px] font-medium">{s.name}</strong>
                     <small className="mt-0.5 block text-[10px] text-muted">
-                      {s.bpm} BPM · {formatTime(Math.ceil(s.duration))}
+                      {Math.round(s.bpm)} BPM · {formatTime(Math.ceil(s.duration))}{s.original ? "" : " · IMPORT"}
                     </small>
                   </span>
                 </button>
               ))}
             </div>
+            <Button variant="secondary" className="mt-3 w-full" onClick={openSongLibrary}>
+              <Upload className="size-4" /> Import songs
+            </Button>
+            {libraryWarning ? <p className="mt-2 text-[11px] leading-relaxed text-tungsten">{libraryWarning}</p> : null}
           </div>
 
           <div>
@@ -1102,7 +1291,7 @@ export function StageApp() {
                   key={p.id}
                   type="button"
                   aria-pressed={p.enabled}
-                  disabled={busy}
+                  disabled={busy || (!song.original && !song.parts.some((part) => part.type === p.id && part.notes.length > 0))}
                   onClick={() => togglePlayer(p.id)}
                   className={cn(
                     "flex h-11 items-center justify-between rounded-xl px-3 text-[12px] font-medium shadow-[0_0_0_1px_rgba(239,232,220,0.1)]",
@@ -1110,7 +1299,7 @@ export function StageApp() {
                   )}
                 >
                   {p.label}
-                  <span className="text-[10px] text-accent">{p.enabled ? "ON" : "OFF"}</span>
+                  <span className="text-[10px] text-accent">{!song.original && !song.parts.some((part) => part.type === p.id && part.notes.length > 0) ? "NO PART" : p.enabled ? "ON" : "OFF"}</span>
                 </button>
               ))}
             </div>
@@ -1174,7 +1363,7 @@ export function StageApp() {
               </span>
             </div>
           </div>
-          <p className="mb-3 max-w-[70ch] text-[13px] text-pretty text-muted">{song.arrangementDescription}</p>
+          <p className="mb-3 max-w-[70ch] text-[13px] text-pretty text-muted">{song.arrangementDescription}{song.audioAssetId ? " Tempo changes playback speed and pitch." : ""}</p>
 
           <div className="stage-transport flex flex-wrap items-center justify-between gap-2">
             <div className="flex flex-wrap gap-2">
@@ -1306,10 +1495,7 @@ export function StageApp() {
                 onQuickStart={quickStart}
                 onBack={resetReady}
                 nextSongName={songs[(songs.findIndex((s) => s.id === song.id) + 1) % songs.length]!.name}
-                onNext={() => {
-                  resetReady();
-                  setSongId(songs[(songs.findIndex((s) => s.id === song.id) + 1) % songs.length]!.id);
-                }}
+                onNext={() => selectSong(songs[(songs.findIndex((s) => s.id === song.id) + 1) % songs.length]!)}
               />
             ) : null}
 
@@ -1469,6 +1655,35 @@ export function StageApp() {
           </p>
         </section>
       </div>
+
+      {libraryOpen ? (
+        <>
+          <button type="button" className="fixed inset-0 z-40 bg-bg/55" aria-label="Dismiss song library" onClick={closeSongLibrary} />
+          <div ref={libraryRef} role="dialog" aria-modal="true" aria-labelledby="song-library-title" className="feel-sheet fixed inset-y-0 right-0 z-50 flex w-[min(480px,96vw)] flex-col overflow-hidden bg-bg shadow-[0_0_0_1px_rgba(239,232,220,0.1)]">
+            <SongLibraryPanel
+              candidate={importCandidate ? {
+                kind: importCandidate.kind,
+                name: importCandidate.entry.chart.title,
+                fileName: importCandidate.entry.fileName,
+                bpm: importCandidate.entry.chart.bpm,
+                duration: importCandidate.entry.chart.duration,
+                counts: Object.fromEntries(importCandidate.entry.chart.parts.map((part) => [part.type, part.notes.length])) as Record<Instrument, number>,
+                warnings: importCandidate.warnings,
+              } : null}
+              reading={readingImport}
+              saving={savingImport}
+              error={importError}
+              libraryWarning={libraryWarning}
+              songs={importedCharts.map((entry) => ({ id: entry.id, name: entry.chart.title, fileName: entry.fileName }))}
+              onFile={(file) => void readSongFile(file)}
+              onAdd={() => void addImportedSong()}
+              onClose={closeSongLibrary}
+              onSelect={(id) => { const selected = songs.find((entry) => entry.id === id); if (selected) selectSong(selected); }}
+              onRemove={removeImportedSong}
+            />
+          </div>
+        </>
+      ) : null}
 
       {feelOpen ? (
         <>

@@ -91,6 +91,7 @@ export interface SharedSection {
 export interface SharedChart {
   schema: typeof CHART_SCHEMA;
   version: ChartVersion;
+  matching?: "pitch" | "rhythm";
   id: string;
   title: string;
   bpm: number;
@@ -151,7 +152,7 @@ function optStr(v: unknown, label: string, path: string, max: number, fallback: 
   return (v as string).slice(0, max);
 }
 
-function checkParts(raw: unknown, duration: number): SharedPart[] {
+function checkParts(raw: unknown, duration: number, rhythm = false): SharedPart[] {
   const path = "parts";
   if (!Array.isArray(raw) || raw.length !== 4) {
     fail("INVALID_PARTS", "A chart must contain exactly four instrument parts", path);
@@ -178,7 +179,7 @@ function checkParts(raw: unknown, duration: number): SharedPart[] {
         fail("OUT_OF_RANGE", "Note extends beyond the song duration", np);
       }
       const pitch = int(n.pitch, 0, 127, "MIDI pitch", `${np}.pitch`);
-      if (type === "drums" && !DRUMS.some((d) => d.notes?.includes(pitch))) {
+      if (!rhythm && type === "drums" && !DRUMS.some((d) => d.notes?.includes(pitch))) {
         fail("DRUM_PITCH_UNMAPPED", `Drum pitch ${pitch} maps to no drum lane`, `${np}.pitch`);
       }
       const velocity = n.velocity === undefined || n.velocity === null
@@ -316,10 +317,11 @@ export function validateSharedChart(input: unknown): SharedChart {
   if (version !== 1 && version !== 2 && version !== 3) {
     fail("UNSUPPORTED_VERSION", "Unsupported chart version", "version");
   }
-  if (version === 2 || root.matching === "rhythm") {
+  if ((root.matching !== undefined && root.matching !== "pitch" && root.matching !== "rhythm") ||
+      (version === 2 && root.matching !== "rhythm")) {
     fail(
       "UNSUPPORTED_MATCHING",
-      'Rhythm-only charts ("matching": "rhythm") are not playable in Stage 2 yet',
+      'Matching must be "pitch" or "rhythm"; version 2 requires explicit "rhythm" matching',
       "matching",
     );
   }
@@ -337,7 +339,9 @@ export function validateSharedChart(input: unknown): SharedChart {
   const audioName = optStr(root.audioName, "Audio name", "audioName", 256, "");
   const origin = optStr(root.origin, "Origin", "origin", 32, "manual");
 
-  const parts = checkParts(root.parts, duration);
+  // Keep existing pitch-chart serialization byte-stable for saved IDs/bests.
+  const matching = root.matching === "rhythm" ? "rhythm" : undefined;
+  const parts = checkParts(root.parts, duration, matching === "rhythm");
   const tempoMap = checkTempoMap(root.tempoMap, duration, bpm);
   const beats = checkBeats(root.beats, duration);
   const chordHighways = checkChordHighways(root.chordHighways, duration);
@@ -350,7 +354,8 @@ export function validateSharedChart(input: unknown): SharedChart {
 
   return {
     schema: CHART_SCHEMA,
-    version: hasChords ? 3 : (version as ChartVersion),
+    version: matching === "rhythm" ? 2 : hasChords ? 3 : (version as ChartVersion),
+    ...(matching !== undefined ? { matching } : {}),
     id,
     title,
     bpm,
@@ -417,12 +422,13 @@ export function sharedChartToSong(chart: SharedChart): Song {
     bpm: chart.bpm,
     duration: chart.duration,
     original: false,
+    ...(chart.matching !== undefined ? { matching: chart.matching } : {}),
     parts,
     beats: chart.beats.length
       ? chart.beats.map((b) => ({ time: b.time, bar: b.bar }))
       : generateBeats(chart.firstBeat, chart.bpm, chart.duration),
     sections: chart.sections.map((s) => ({ time: s.time, name: s.name })),
-    harmony: chart.harmony.length ? chart.harmony.map((h) => ({ ...h })) : undefined,
+    harmony: chart.matching !== "rhythm" && chart.harmony.length ? chart.harmony.map((h) => ({ ...h })) : undefined,
     audioOffset: chart.audioOffset,
     audioName: chart.audioName,
     tempoMap: chart.tempoMap.map((t) => ({ ...t })),
@@ -441,7 +447,7 @@ export function parseSharedChart(input: unknown): Song {
 
 /** Emit the canonical JSON form. `parse(serialize(parse(x)))` is stable. */
 export function serializeSharedChart(chart: SharedChart): string {
-  const { schema, version, id, title, bpm, duration, firstBeat, audioOffset, audioName, origin, parts, tempoMap, beats, sections, chordHighways } =
+  const { schema, version, matching, id, title, bpm, duration, firstBeat, audioOffset, audioName, origin, parts, tempoMap, beats, sections, chordHighways } =
     chart;
   const wire: Record<string, unknown> = {
     schema,
@@ -459,6 +465,7 @@ export function serializeSharedChart(chart: SharedChart): string {
     beats,
     sections,
   };
+  if (matching === "rhythm") wire.matching = matching;
   if (chordHighways.keys.length || chordHighways.guitar.length) wire.chordHighways = chordHighways;
   return JSON.stringify(wire, null, 2);
 }

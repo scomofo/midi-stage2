@@ -195,9 +195,11 @@ describe("shared chart format", () => {
     expectCode(() => parseSharedChart({ ...minimalChart(), schema: "nope" }), "BAD_SCHEMA");
     expectCode(() => parseSharedChart({ ...minimalChart(), version: 9 }), "UNSUPPORTED_VERSION");
     expectCode(
-      () => parseSharedChart({ ...minimalChart(), version: 2, matching: "rhythm" }),
+      () => parseSharedChart({ ...minimalChart(), version: 2 }),
       "UNSUPPORTED_MATCHING",
     );
+    expectCode(() => parseSharedChart(minimalChart({ version: 2, matching: "pitch" })), "UNSUPPORTED_MATCHING");
+    expectCode(() => parseSharedChart(minimalChart({ matching: "unknown" })), "UNSUPPORTED_MATCHING");
     expectCode(() => parseSharedChart({ ...minimalChart(), title: "  " }), "INVALID_STRING");
     expectCode(() => parseSharedChart({ ...minimalChart(), bpm: 500 }), "OUT_OF_RANGE");
     expectCode(() => parseSharedChart({ ...minimalChart(), duration: 0.1 }), "OUT_OF_RANGE");
@@ -249,6 +251,42 @@ describe("shared chart format", () => {
       "INVALID_PARTS",
     );
     expectCode(() => parseSharedChart(null), "NOT_AN_OBJECT");
+  });
+
+  it("round-trips explicit version 2 rhythm charts into any-note tap highways", () => {
+    const chart = validateSharedChart(minimalChart({
+      version: 2,
+      matching: "rhythm",
+      origin: "audio-rhythm",
+      audioName: "my-song.flac",
+      parts: [
+        { type: "drums", notes: [{ time: 1, duration: 0.06, pitch: 60 }] },
+        { type: "keys", notes: [{ time: 1, duration: 0.06, pitch: 60 }, { time: 1, duration: 0.06, pitch: 64 }] },
+        { type: "guitar", notes: [] },
+        { type: "bass", notes: [] },
+      ],
+    }));
+    const wire = serializeSharedChart(chart);
+    assert.equal(JSON.parse(wire).matching, "rhythm");
+    assert.equal(JSON.parse(wire).version, 2);
+    assert.deepEqual(parseSharedChartText(wire), chart);
+    const song = sharedChartToSong(chart);
+    assert.equal(song.matching, "rhythm");
+    assert.equal(song.audioName, "my-song.flac");
+    for (const p of [keysPlayer(), drumsPlayer()]) {
+      const playable = makeChart(song, p);
+      assert.equal(playable.lanes.length, 1);
+      assert.equal(playable.lanes[0]!.any, true);
+      assert.equal(playable.notes.length, 1);
+    }
+  });
+
+  it("keeps pitch serialization unchanged when matching is omitted or explicitly pitch", () => {
+    const omitted = validateSharedChart(minimalChart());
+    const explicit = validateSharedChart(minimalChart({ matching: "pitch" }));
+    assert.equal(serializeSharedChart(explicit), serializeSharedChart(omitted));
+    assert.equal(Object.hasOwn(JSON.parse(serializeSharedChart(omitted)), "matching"), false);
+    assert.equal(sharedChartToSong(explicit).matching, undefined);
   });
 
   it("round-trips through serialize", () => {
