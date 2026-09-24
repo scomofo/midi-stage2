@@ -13,6 +13,18 @@ cache; an unchanged viewport reuses it. There are no external graphics assets,
 network dependencies, or renderer-library changes. Reduced motion freezes ambient
 lighting and performer/crowd motion, hides particles, and keeps moving notes.
 
+## Song lighting
+
+Beat pulses follow the chart’s beat grid and bar accents. Fixtures, crowd motion
+and light patterns use song time, so pause and seek preserve their alignment.
+Existing section markers crossfade the stage through three complementary palettes.
+
+Backing audio adds bass and overall-level response through a reusable analyser
+on the backing bus. Microphone input, instrument monitoring, guide tones and the
+metronome do not drive the lights. Analysis happens before master volume, so
+muting does not remove the visual rhythm. Calm and reduced-motion modes disable
+beat, section and audio animation.
+
 ## Strum arrows
 
 Enable **Strum arrows** beside the tempo and listening controls when a guitar
@@ -30,6 +42,10 @@ during playback without resetting the score, held notes, or audio clock.
   The on-screen legend explicitly states this. Complex/sixteenth-note or swung
   picking patterns may need a different practice pattern.
 
+A **NEXT STRUM ↓ DOWN / ↑ UP** cue above the highway previews the next unplayed
+note for the first eligible player, including on narrow screens. It skips
+judged and held notes without changing scoring.
+
 The arrows follow chart time, so pause, resume, replay and tempo changes retain
 the same suggestions. Keys, bass and drum pitch charts retain their normal note
 heads. Rhythm charts can use arrows regardless of their assigned instrument.
@@ -41,6 +57,8 @@ Canvas2D. It checks desktop and phone dimensions for dense chords, solo rhythm,
 four-player charts, perfect-hit feedback, Calm, and guitar/rhythm strum arrows.
 It verifies lane hit-testing, unchanged-size cache reuse, reduced-motion pixel
 stability, feedback de-duplication, and live/persisted strum-toggle behavior.
+It also checks real backing-bus audio analysis, monitor isolation, muted playback,
+pause stability, wall-clock independence, visible audio response and the next-strum HUD.
 
 `SESSION_SCREENSHOT_DIR=/workspace/screenshots/concert npm run test:graphics`
 saves captures. Optional `GRAPHICS_BASELINE_MODULE` supplies a development module
@@ -56,4 +74,4 @@ preferences. Existing session/setup/import regressions remain part of CI.
 
 ## Preview
 
-![Concert stage with optional guitar strum arrows](../screenshots/concert-graphics.jpg)
+![Concert stage with optional guitar strum arrows](../screenshots/concert-lighting.jpg)

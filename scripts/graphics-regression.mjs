@@ -36,10 +36,51 @@ try {
       return draw.call(this, state);
     };
   });
+  // A real Web Audio sine verifies the analysis tap, not mocked FFT samples.
+  await page.evaluate(async () => {
+    const { AudioEngine } = await import('/src/lib/midi-stage/audio.ts');
+    const audio = new AudioEngine();
+    await audio.init();
+    const ctx = audio.ctx;
+    const tone = ctx.createOscillator();
+    const gain = ctx.createGain();
+    tone.frequency.value = 90;
+    gain.gain.value = 0.08;
+    tone.connect(gain);
+    gain.connect(audio.buses.backing);
+    audio.running = true;
+    tone.start();
+    const wait = () => new Promise((done) => setTimeout(done, 80));
+    try {
+      let found = false;
+      for (let i = 0; i < 20; i++) {
+        await wait();
+        const energy = audio.readStageEnergy();
+        if (energy.level > 0.1 && energy.bass > 0.01) { found = true; break; }
+      }
+      if (!found) throw Error('Backing signal does not reach stage lighting analysis');
+      audio.setVolume(0);
+      await wait();
+      if (audio.readStageEnergy().level < 0.1) throw Error('Master volume must not alter the light choreography');
+      gain.disconnect(audio.buses.backing);
+      gain.connect(audio.buses.monitor);
+      await wait(); await wait();
+      if (audio.readStageEnergy().level > 0.02) throw Error('Live monitor sound leaked into backing lighting');
+      gain.disconnect(audio.buses.monitor);
+      gain.connect(audio.buses.backing);
+      audio.running = false;
+      const paused = audio.readStageEnergy();
+      if (paused.level !== 0 || paused.bass !== 0) throw Error('Stopped audio must report no live stage energy');
+    } finally {
+      tone.stop(); gain.disconnect(); tone.disconnect();
+      await ctx.close();
+    }
+  });
   await page.getByRole('button', { name: 'Watch the house', exact: true }).click();
   await page.getByRole('button', { name: 'Focus stage', exact: true }).click();
   await page.waitForTimeout(2500);
   await page.waitForFunction(() => window.liveGraphics?.state.strumGuide === true);
+  await page.waitForFunction(() => document.querySelector('[aria-label="Next suggested strum"]')?.textContent.includes('NEXT STRUM'));
   await page.evaluate(() => { window.strumJudge = window.liveGraphics.state.judges.get('guitar'); });
   await strum.uncheck();
   await page.waitForFunction(() => window.liveGraphics.state.strumGuide === false);
@@ -52,6 +93,11 @@ try {
   if (output) await page.screenshot({ path: `${output}/concert-mobile.png`, fullPage: true });
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
   await page.getByRole('button', { name: 'Pause', exact: true }).click();
+  await page.waitForTimeout(200);
+  const pausedCue = await page.getByLabel('Next suggested strum', { exact: true }).innerText();
+  await page.waitForTimeout(200);
+  assert.equal(await page.getByLabel('Next suggested strum', { exact: true }).innerText(), pausedCue,
+    'next strum must not advance while paused');
 
   // Fixed song positions make dense chords, rhythm notes and hit effects
   // reviewable without replacing the renderer, its Judge, or real Canvas APIs.
@@ -81,6 +127,14 @@ try {
         particles: [], flashes: [], callouts: [], pressed: new Map(), reduced,
         feel: withPreset(mode === 'calm' ? 'calm' : 'house'), strumGuide: mode.startsWith('strum-') };
       renderer.draw(state);
+      if (mode === 'chords' && !reduced) {
+        const original = canvas.toDataURL();
+        renderer.draw({ ...state, now: 1234 });
+        if (canvas.toDataURL() !== original) throw Error('Stage choreography drifted away from the song clock');
+        renderer.draw({ ...state, music: { level: 1, bass: 1 } });
+        if (canvas.toDataURL() === original) throw Error('Backing audio energy did not affect lighting');
+        renderer.draw(state);
+      }
       for (const p of players.filter((p) => p.enabled)) {
         const g = renderer.geom.get(p.id);
         for (let lane = 0; lane < g.n; lane++) {

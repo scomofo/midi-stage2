@@ -3,6 +3,7 @@ import { Judge, clamp, currentHarmony, keyLabel, KEYS } from "./engine";
 import type { Feel, GoboMotion, GoboPattern, HeadCue } from "./feel";
 import { createClubArt, createNoteArt, createPerformerArt } from "./concert-art";
 import { suggestedStrum } from "./strum-guide";
+import { concertCue, type ConcertCue, type MusicEnergy } from "./concert-cues";
 
 const GRADE_COLOR: Record<Grade, string> = {
   perfect: "#8fd4c4",
@@ -53,6 +54,7 @@ export type DrawState = {
   reduced: boolean;
   feel: Feel;
   strumGuide?: boolean;
+  music?: MusicEnergy;
 };
 
 function hexA(hex: string, a: number) {
@@ -134,6 +136,7 @@ export class StageRenderer {
   crowd: { x: number; y: number; s: number; phase: number }[] = [];
   geom = new Map<Instrument, Geom>();
   active: Player[] = [];
+  private cue: ConcertCue = { clock: 0, beatPosition: 0, pulse: 0, drive: 0, primary: "#8fd4c4", secondary: "#c4a882" };
   private clubArt: HTMLCanvasElement | null = null;
   private noteArt = new Map<string, HTMLCanvasElement>();
   private performerArt = new Map<Instrument, HTMLCanvasElement>();
@@ -216,6 +219,7 @@ export class StageRenderer {
     ctx.scale(1 + punch, 1 + punch);
     ctx.translate(-w * 0.5, -h * 0.5);
 
+    this.cue = concertCue(state.song, state.t, state.reduced || state.feel.preset === "calm", state.music);
     this.paintHouse(state);
     this.paintSpots(state);
     this.paintCrowd(state);
@@ -231,7 +235,7 @@ export class StageRenderer {
 
   private paintHouse(state: DrawState) {
     const { ctx, w, h } = this;
-    const e = state.energy;
+    const e = Math.min(1, state.energy * 0.8 + this.cue.drive * 0.4);
     const lights = state.feel.lights;
     const bloom = state.bloom;
     const hot = state.combo >= 20;
@@ -272,11 +276,11 @@ export class StageRenderer {
     const cyc = ctx.createRadialGradient(cycX, cycY, 4, cycX, cycY, w * 0.38);
     cyc.addColorStop(
       0,
-      hexA(hot ? "#efe8dc" : "#e2c9a4", (0.26 + e * 0.18 + bloom * 0.3) * lights),
+      hexA(hot ? "#efe8dc" : this.cue.secondary, (0.26 + e * 0.18 + bloom * 0.3) * lights),
     );
     cyc.addColorStop(
       0.32,
-      hexA(hot ? "#c4a882" : "#8fd4c4", (0.14 + e * 0.12 + bloom * 0.16) * lights),
+      hexA(hot ? "#c4a882" : this.cue.primary, (0.14 + e * 0.12 + bloom * 0.16) * lights),
     );
     cyc.addColorStop(0.7, hexA("#6a7a8a", (0.05 + e * 0.05) * lights));
     cyc.addColorStop(1, "rgba(0,0,0,0)");
@@ -350,8 +354,8 @@ export class StageRenderer {
 
     if (!state.reduced && lights > 0.04) {
       for (const m of this.motes) {
-        const y = ((m.y + state.now * 0.008 * m.s) % 1) * h;
-        const x = m.x * w + Math.sin(state.now * 0.32 + m.p) * 8;
+        const y = ((m.y + this.cue.clock * 0.008 * m.s) % 1) * h;
+        const x = m.x * w + Math.sin(this.cue.clock * 0.32 + m.p) * 8;
         ctx.globalAlpha = (0.05 + e * 0.08 + bloom * 0.07) * lights;
         ctx.fillStyle = m.p > 3 ? "#c4a882" : "#efe8dc";
         ctx.fillRect(x, y, m.s, m.s);
@@ -441,9 +445,9 @@ export class StageRenderer {
     const { ctx, w, h } = this;
     const lights = state.feel.lights;
     if (lights < 0.03) return;
-    const e = state.energy;
-    const t = state.reduced ? 0 : state.now;
-    const beat = (state.song.bpm / 60) * Math.PI;
+    const e = Math.min(1, state.energy * 0.8 + this.cue.drive * 0.4);
+    const t = state.reduced ? 0 : this.cue.clock;
+    const beat = Math.PI;
     const cue = state.feel.heads ?? "fan";
     const cone = (
       ox: number,
@@ -471,16 +475,17 @@ export class StageRenderer {
     ctx.globalCompositeOperation = "screen";
     for (const c of MOVING_HEADS) {
       const { originX, aimX, landY } = aimHead(cue, state.reduced, t, w, h, c);
-      const pulse = 0.72 + 0.28 * Math.abs(Math.sin(t * beat + c.i * 0.65));
+      const pulse = 0.68 + this.cue.pulse * 0.22 + this.cue.drive * 0.1;
+      const tint = c.i % 2 ? this.cue.secondary : this.cue.primary;
       const a = (0.12 + e * 0.1 + state.bloom * 0.16) * lights * pulse;
       const half = w * c.spread * (0.9 + state.bloom * 0.1);
-      cone(originX, aimX, landY, half * 1.32, a * 0.28, c.tint);
-      cone(originX, aimX, landY, half, a * 0.55, c.tint);
-      cone(originX, aimX, landY, half * 0.32, a * 0.7, c.tint);
+      cone(originX, aimX, landY, half * 1.32, a * 0.28, tint);
+      cone(originX, aimX, landY, half, a * 0.55, tint);
+      cone(originX, aimX, landY, half * 0.32, a * 0.7, tint);
 
       const gobo = state.feel.gobo ?? "breakup";
       const motion = state.feel.goboMotion ?? "drift";
-      const phase = t + c.i * 0.37;
+      const phase = this.cue.beatPosition;
       this.paintGobo(
         ctx,
         gobo,
@@ -489,7 +494,7 @@ export class StageRenderer {
         landY,
         half * 0.82,
         13 + state.bloom * 7,
-        c.tint,
+        tint,
         a,
         phase,
         beat,
@@ -505,7 +510,7 @@ export class StageRenderer {
           28 + (landY - 28) * 0.55,
           half * 0.34,
           6,
-          c.tint,
+          tint,
           a * 0.45,
           phase,
           beat,
@@ -520,7 +525,7 @@ export class StageRenderer {
           28 + (landY - 28) * 0.78,
           half * 0.55,
           9,
-          c.tint,
+          tint,
           a * 0.55,
           phase,
           beat,
@@ -537,7 +542,7 @@ export class StageRenderer {
           h * 0.175,
           w * 0.15,
           h * 0.07,
-          c.tint,
+          tint,
           a * 0.32,
           t * 0.45,
           beat,
@@ -552,7 +557,7 @@ export class StageRenderer {
           const px = originX + (aimX - originX) * u + Math.sin(t * 0.7 + c.i + d) * 4;
           const py = 28 + (landY - 28) * u;
           ctx.globalAlpha = a * 0.45 * (1 - u);
-          ctx.fillStyle = c.tint;
+          ctx.fillStyle = tint;
           ctx.fillRect(px, py, 1.2, 1.2);
         }
         ctx.globalAlpha = 1;
@@ -678,21 +683,20 @@ export class StageRenderer {
     const { ctx, w, h } = this;
     const crowd = state.feel.crowd;
     if (crowd < 0.03) return;
-    const e = state.energy;
-    const beat = (state.song.bpm / 60) * Math.PI;
-    const pulse = state.reduced ? 0.7 : 0.42 + 0.58 * (0.5 + 0.5 * Math.sin(state.now * beat));
+    const e = Math.min(1, state.energy * 0.8 + this.cue.drive * 0.4);
+    const pulse = 0.7 + this.cue.pulse * 0.3;
     const lift = 1 + state.bloom * 0.65;
     for (const c of this.crowd) {
       const gallery = c.y < 0.55;
       const twinkle = state.reduced
         ? 0.7
-        : 0.32 + 0.68 * (0.5 + 0.5 * Math.sin(state.now * (gallery ? 1.7 : 2.4) + c.phase));
+        : 0.32 + 0.68 * (0.5 + 0.5 * Math.sin(this.cue.clock * (gallery ? 1.7 : 2.4) + c.phase));
       // Foreground silhouettes stay in the wings, behind the opaque highway.
       if (!gallery && (c.x < 0.19 || c.x > 0.81)) {
         const sway =
           state.reduced || state.feel.preset === "calm"
             ? 0
-            : Math.sin(state.now * 1.4 + c.phase) * 2;
+            : Math.sin(this.cue.clock * 1.4 + c.phase) * 2;
         const x = c.x * w + sway;
         const y = c.y * h;
         const s = c.s * Math.min(1, w / 600);
@@ -739,23 +743,20 @@ export class StageRenderer {
     ctx.fillStyle = "rgba(8,6,10,0.7)";
     ctx.fillRect(0, 20, w, 1.5);
 
-    const beat = (state.song.bpm / 60) * Math.PI;
     const cue = state.feel.heads ?? "fan";
     const movers = new Map<number, (typeof MOVING_HEADS)[number]>(
       MOVING_HEADS.map((c) => [c.i, c]),
     );
     for (let i = 0; i < 9; i++) {
       const x = w * ((i + 0.5) / 9);
-      const lit = state.reduced
-        ? 0.65
-        : 0.28 + 0.72 * Math.abs(Math.sin(state.now * beat + i * 0.55));
+      const lit = 0.4 + this.cue.pulse * 0.35 + this.cue.drive * 0.25;
       const mover = movers.get(i);
-      const tint = mover?.tint ?? (i % 3 === 1 ? "#8fd4c4" : i % 3 === 2 ? "#8aa4c4" : "#c4a882");
+      const tint = i % 2 ? this.cue.secondary : this.cue.primary;
       const glow = (0.22 + lit * 0.55) * (0.32 + state.energy * 0.4 + state.bloom * 0.45) * lights;
       ctx.fillStyle = "rgba(36,32,38,0.96)";
       ctx.fillRect(x - 5, 10, 10, 8);
       if (mover) {
-        const { aimX, landY } = aimHead(cue, state.reduced, state.now, w, h, mover);
+        const { aimX, landY } = aimHead(cue, state.reduced, this.cue.clock, w, h, mover);
         const ang = Math.atan2(landY - 22, aimX - x);
         ctx.save();
         ctx.translate(x, 22);

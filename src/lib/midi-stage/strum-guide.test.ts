@@ -1,6 +1,6 @@
 import { it } from "node:test";
 import assert from "node:assert/strict";
-import { suggestedStrum } from "./strum-guide.ts";
+import { suggestedStrum, nextStrum } from "./strum-guide.ts";
 
 const chart = { bpm: 120, beats: [0.2, 0.7, 1.2, 1.7].map((time) => ({ time, bar: false })) };
 
@@ -25,4 +25,13 @@ it("handles pickups, empty beat grids, and small onset timing errors", () => {
   assert.equal(suggestedStrum(chart, -0.05), "up");
   assert.equal(suggestedStrum({ bpm: 120, beats: [] }, 0.25), "up");
   for (const t of [0.69, 0.7, 0.71]) assert.equal(suggestedStrum(chart, t), "down");
+});
+
+it("previews the next unplayed strum and skips scored chords and held notes", () => {
+  const notes = [{ time: 0.2, state: 1 as const }, { time: 0.2, state: 1 as const },
+    { time: 0.45, state: 0 as const }, { time: 0.7, state: 0 as const }];
+  assert.equal(nextStrum(chart, notes, 0.2), "up");
+  assert.equal(nextStrum(chart, notes, 0.6), "down");
+  assert.equal(nextStrum(chart, notes, 1), null);
+  assert.equal(nextStrum(chart, [], 0), null);
 });

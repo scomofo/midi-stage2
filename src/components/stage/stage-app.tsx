@@ -40,6 +40,7 @@ import {
 import { loadFeel, saveFeel, FEEL_COPY, withPreset, type Feel } from "@/lib/midi-stage/feel";
 import { catalog } from "@/lib/midi-stage/songs";
 import { StageRenderer, spawnHitJuice } from "@/lib/midi-stage/renderer";
+import { nextStrum } from "@/lib/midi-stage/strum-guide";
 import type {
   Callout,
   Difficulty,
@@ -171,6 +172,7 @@ export function StageApp() {
     pop: 0,
     bloom: 0,
     trauma: 0,
+    nextStrum: "",
   });
   const [overlay, setOverlay] = useState(true);
   const [results, setResults] = useState<SessionResults | null>(null);
@@ -799,6 +801,8 @@ export function StageApp() {
         reduced: b.reduced,
         feel: b.feel,
         strumGuide: b.strumGuide,
+        music: b.status === "playing" && !b.reduced && b.feel.preset !== "calm" && b.feel.lights > 0
+          ? b.audio.readStageEnergy() : undefined,
       });
       const shell = canvas.closest(".stage-shell") as HTMLElement | null;
       shell?.style.setProperty("--energy", String(b.energy));
@@ -827,6 +831,8 @@ export function StageApp() {
           countdown = String(Math.max(1, Math.min(4, count)));
         } else if (b.status === "paused") countdown = "PAUSED";
         const harm = b.song.harmony?.filter((h) => h.time <= Math.max(0, sessionTime)).at(-1);
+        const strumPlayer = b.strumGuide ? b.players.find((p) => p.enabled && (p.type === "guitar" || b.song.matching === "rhythm")) : undefined;
+        const strum = strumPlayer ? nextStrum(b.song, b.judges.get(strumPlayer.id)?.notes ?? [], Math.max(0, sessionTime)) : null;
         setHud((prev) => ({
           score,
           combo,
@@ -842,6 +848,7 @@ export function StageApp() {
           pop: score > prev.score ? stamp : prev.pop,
           bloom: b.bloom,
           trauma: b.trauma,
+          nextStrum: strum === "down" ? "↓ DOWN" : strum === "up" ? "↑ UP" : "",
         }));
         const expected = new Set<number>();
         const approaching = new Set<number>();
@@ -1499,7 +1506,11 @@ export function StageApp() {
               <meter className={cn("energy-meter", hud.energy > 70 && "hot")} min={0} max={100} value={hud.energy} />
               <span className="font-mono tabular-nums text-fg">{hud.energy}%</span>
             </label>
-            <span>{enabled.length === 1 ? "SOLO · FIND YOUR GROOVE" : `${enabled.length}-PLAYER BAND`}</span>
+            {strumGuide && (rhythm || enabled.some((p) => p.type === "guitar")) ? (
+              <span aria-label="Next suggested strum" aria-describedby="strum-guide-help" className="font-mono font-semibold text-accent">
+                {hud.nextStrum ? `NEXT STRUM ${hud.nextStrum}` : "STRUM GUIDE"}
+              </span>
+            ) : <span>{enabled.length === 1 ? "SOLO · FIND YOUR GROOVE" : `${enabled.length}-PLAYER BAND`}</span>}
             <span className="text-tungsten">{hud.section}</span>
           </div>
 

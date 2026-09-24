@@ -16,7 +16,7 @@
     "preview:stop": "node scripts/preview.mjs stop",
     "typecheck": "tsc --noEmit",
     "check:auth": "node scripts/check-auth-invariant.mjs",
-    "test": "node --test 'scripts/**/*.test.mjs' && node --experimental-strip-types --import ./scripts/ts-resolve.mjs --test src/lib/midi-stage/chart-format.test.ts src/lib/midi-stage/engine.test.ts src/lib/midi-stage/preferences.test.ts src/lib/midi-stage/strum-guide.test.ts src/lib/midi-stage/midi-routing.test.ts src/lib/midi-stage/song-library.test.ts src/lib/midi-stage/midi-file-import.test.ts src/lib/midi-stage/audio-import.test.ts src/components/stage/midi-notes.test.ts src/lib/app-data/app-data.test.ts src/lib/app-data/readiness-schedule.test.ts src/lib/auth/gate-identity.test.ts src/lib/auth/sign-in-gate.test.ts",
+    "test": "node --test 'scripts/**/*.test.mjs' && node --experimental-strip-types --import ./scripts/ts-resolve.mjs --test src/lib/midi-stage/chart-format.test.ts src/lib/midi-stage/engine.test.ts src/lib/midi-stage/preferences.test.ts src/lib/midi-stage/strum-guide.test.ts src/lib/midi-stage/concert-cues.test.ts src/lib/midi-stage/midi-routing.test.ts src/lib/midi-stage/song-library.test.ts src/lib/midi-stage/midi-file-import.test.ts src/lib/midi-stage/audio-import.test.ts src/components/stage/midi-notes.test.ts src/lib/app-data/app-data.test.ts src/lib/app-data/readiness-schedule.test.ts src/lib/auth/gate-identity.test.ts src/lib/auth/sign-in-gate.test.ts",
     "lint": "eslint .",
     "format": "prettier --write .",
     "test:session": "node scripts/session-regression.mjs",

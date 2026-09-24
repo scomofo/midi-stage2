@@ -67,7 +67,8 @@ locally, and the keyboard/piano controls support focus and touch cancellation.
 See `docs/player-polish.md` for the acceptance boundary.
 
 The [concert graphics pass](docs/concert-graphics.md) adds richer highways and
-club scenery. **Strum arrows** offers an optional, saved ↓ down / ↑ up practice
+club scenery, song-synced lighting, section color fades and backing-audio response.
+A next-strum cue stays readable above the highway. **Strum arrows** offers an optional, saved ↓ down / ↑ up practice
 pattern on guitar and rhythm charts. These are beat-grid suggestions, not
 directions detected from imported recordings or an additional scoring rule.
 
