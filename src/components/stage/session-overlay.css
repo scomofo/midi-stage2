@@ -6,6 +6,7 @@
   --session-space-xl: 24px;
   --session-text-sm: 0.75rem;
   --session-text-body: 0.875rem;
+  --session-control-height: 2.75rem;
   --session-motion: 220ms;
   position: relative;
   min-height: inherit;
@@ -346,6 +347,56 @@
   font-size: var(--session-text-sm);
   line-height: 1.5;
 }
+.session-recommendation {
+  margin-top: var(--session-space-lg);
+  padding-block: var(--session-space-md);
+  border-block: 1px solid var(--color-border);
+  text-align: left;
+}
+.session-recommendation h3 {
+  margin: 0;
+  color: var(--color-fg);
+  font-size: var(--session-text-sm);
+  font-weight: 600;
+}
+.session-recommendation-passage {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--session-space-xs) var(--session-space-sm);
+  margin: var(--session-space-sm) 0 0;
+  font-size: var(--session-text-body);
+  line-height: 1.5;
+}
+.session-recommendation-passage strong {
+  min-width: 0;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+.session-recommendation-passage span {
+  color: var(--color-muted);
+  font-size: var(--session-text-sm);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.session-recommendation-counts,
+.session-recommendation-description {
+  margin: var(--session-space-xs) 0 0;
+  color: var(--color-muted);
+  font-size: var(--session-text-sm);
+  line-height: 1.5;
+}
+.session-recommendation-counts {
+  font-variant-numeric: tabular-nums;
+}
+.session-recommendation button {
+  height: auto;
+  min-height: var(--session-control-height);
+  max-width: 100%;
+  margin-top: var(--session-space-md);
+  padding-block: var(--session-space-sm);
+  white-space: normal;
+}
 
 @keyframes session-enter {
   from {
@@ -370,6 +421,9 @@
     grid-template-columns: 1fr;
   }
   .session-actions button {
+    width: 100%;
+  }
+  .session-recommendation button {
     width: 100%;
   }
   .session-controls {

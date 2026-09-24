@@ -110,8 +110,18 @@ try {
       if (bounds.top < 0 || bounds.bottom > innerHeight) throw Error('Completed set heading must be in view');
     });
     await page.keyboard.press('Tab');
+    const recommendedPractice = page.locator('[data-session-overlay="results"]')
+      .getByRole('button', { name: 'Practice this passage', exact: true });
+    if (await recommendedPractice.count()) {
+      assert.equal(await recommendedPractice.evaluate((button) => button === document.activeElement), true,
+        'Tab from the results heading must reach the recommended passage when one is offered');
+      await frames();
+      assert.equal(await recommendedPractice.evaluate((button) => button === document.activeElement), true,
+        'HUD updates must not steal focus from the recommended passage action');
+      await page.keyboard.press('Tab');
+    }
     assert.equal(await page.getByRole('button', { name: 'Play again', exact: true }).evaluate((button) => button === document.activeElement), true,
-      'Tab from the results heading must reach Play again');
+      'Results keyboard navigation must reach Play again after any recommended passage action');
     await frames();
     assert.equal(await page.getByRole('button', { name: 'Play again', exact: true }).evaluate((button) => button === document.activeElement), true,
       'HUD updates must not steal focus from a results action');

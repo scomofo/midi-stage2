@@ -43,6 +43,34 @@ Judge offsets at each supported playback speed.
 
 ## Section practice
 
+### From results to practice
+
+Completed full-song results can suggest **A passage to work on**. The suggestion
+compares the share of missed notes or broken holds in each passage, using the
+finished targets from the enabled lineup. At least eight resolved notes are
+required in a passage; this is a practice heuristic, not a statistical confidence
+claim. Ties prefer more affected notes, then the earlier passage. Holds belong to
+the passage where they begin, and each target counts once.
+
+The card shows the passage's original time range and its missed-note, broken-hold
+and total-note counts. **Practice this passage** opens that passage ready to play,
+with the same tempo, difficulty, lineup, listening options and repeat setting.
+Start begins a fresh count-in and isolated practice score. The recommendation
+does not change full-song records or automatically start audio.
+
+Autoplay, practice takes, single-passage songs, all-miss takes with no successful
+hits, passages with fewer than eight resolved notes, and clean passages do not
+produce a recommendation. Extra presses and early/late hit timing remain separate
+feedback; they do not affect this suggestion. Replaying or changing the setup
+clears the old recommendation, and the next completed full song computes a new one.
+
+`npm run test:targeted-practice` exercises the actual results-to-practice action,
+setup preservation, a fresh practice take, record isolation, recommendation
+suppression, replay and desktop/mobile interaction. The pure recommendation tests
+cover rates, ties, section boundaries, holds and sparse data.
+
+### Choosing and repeating a passage
+
 Choose **Practice section** above the stage, then use the existing tempo control
 to slow the passage down. Authored section markers take priority. Songs with only
 one generic marker, including audio imports, get passages of 32 beats (eight bars
