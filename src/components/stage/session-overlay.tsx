@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { ArrowRight, Eye, Keyboard, Pause, Play, RotateCcw, Star, Trophy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -24,6 +25,7 @@ type SessionOverlayProps = {
   nextSongName: string;
   busy: boolean;
   demo: boolean;
+  rhythm?: boolean;
   results?: SessionResults | null;
   controls: { label: string; keys: string[] }[];
   onStart: () => void;
@@ -34,10 +36,12 @@ type SessionOverlayProps = {
   onBack: () => void;
 };
 
-function practiceTip(results: SessionResults) {
+function practiceTip(results: SessionResults, rhythm: boolean) {
   if (results.demo)
-    return "Your turn: follow one lane and press its key when a gem reaches the strike line.";
-  if (results.holdBreaks > 0)
+    return rhythm
+      ? "Your turn: tap once as each gem reaches the strike line. Any MIDI note works."
+      : "Your turn: follow one lane and press its key when a gem reaches the strike line.";
+  if (!rhythm && results.holdBreaks > 0)
     return "Follow the whole tail. Keep each long note held until its tail passes the strike line.";
   const hits = results.perfect + results.great + results.good;
   if (results.miss > hits)
@@ -51,12 +55,12 @@ function practiceTip(results: SessionResults) {
   return "Every note landed perfectly. Try the next song, or raise the difficulty for a fresh challenge.";
 }
 
-function KeyGuide({ controls }: Pick<SessionOverlayProps, "controls">) {
+function KeyGuide({ controls, rhythm }: Pick<SessionOverlayProps, "controls" | "rhythm">) {
   if (!controls.length) return null;
   return (
     <div className="session-controls" aria-label="Your keyboard controls">
       <div className="session-controls-heading">
-        <Keyboard size={14} aria-hidden="true" /> Your keys, left to right
+        <Keyboard size={14} aria-hidden="true" /> {rhythm ? "Your rhythm controls" : "Your keys, left to right"}
       </div>
       {controls.map((control, index) => (
         <div className="session-control-row" key={`${control.label}-${index}`}>
@@ -78,6 +82,7 @@ export function SessionOverlay({
   nextSongName,
   busy,
   demo,
+  rhythm = false,
   results,
   controls,
   onStart,
@@ -89,6 +94,17 @@ export function SessionOverlay({
 }: SessionOverlayProps) {
   const isResults = mode === "results" && results;
   const isPaused = mode === "paused";
+  const resultsVisible = Boolean(isResults);
+  const resultsHeadingRef = useRef<HTMLHeadingElement>(null);
+
+  useEffect(() => {
+    if (!resultsVisible) return;
+    const heading = resultsHeadingRef.current;
+    heading?.focus({ preventScroll: true });
+    heading?.closest(".session-panel")?.scrollIntoView({ block: "start", behavior: "auto" });
+    // Announce each completed set once. HUD refreshes and navigation within
+    // the results must not move the player's focus back to this heading.
+  }, [resultsVisible]);
 
   return (
     <div className="session-overlay" data-session-overlay={mode}>
@@ -100,7 +116,7 @@ export function SessionOverlay({
         {isResults ? (
           <>
             <div className="session-eyebrow">SET COMPLETE{results.demo ? " · AUTOPLAY" : ""}</div>
-            <h2 id="session-heading">
+            <h2 ref={resultsHeadingRef} id="session-heading" tabIndex={-1} aria-describedby="session-result-summary">
               {results.demo
                 ? "Now make it yours."
                 : results.newBest
@@ -109,6 +125,10 @@ export function SessionOverlay({
                     ? "You found the pocket."
                     : "One set further."}
             </h2>
+            <p id="session-result-summary" className="sr-only">
+              {songName}. {results.demo ? "Autoplay score" : "Your score"} {results.score.toLocaleString()}.
+              {" "}Accuracy {Math.round(results.accuracy)} percent.
+            </p>
             <p className="session-song">{songName}</p>
 
             <div className="session-score-block">
@@ -182,13 +202,13 @@ export function SessionOverlay({
             </dl>
             <p className="session-detail-stats">
               {results.extra} extra {results.extra === 1 ? "press" : "presses"}
-              {results.holds + results.holdBreaks > 0
+              {!rhythm && results.holds + results.holdBreaks > 0
                 ? ` · ${results.holds} holds completed · ${results.holdBreaks} broken`
                 : ""}
             </p>
             <div className="session-practice-tip">
               <span>{results.demo ? "STEP INTO THE SPOTLIGHT" : "FOR YOUR NEXT SET"}</span>
-              <p>{practiceTip(results)}</p>
+              <p>{practiceTip(results, rhythm)}</p>
             </div>
             <div className="session-actions">
               <Button type="button" onClick={onRestart} disabled={busy} data-session-primary>
@@ -227,7 +247,7 @@ export function SessionOverlay({
             <p className="session-description">
               Your place is saved. Pick up the groove when you’re ready.
             </p>
-            <KeyGuide controls={controls} />
+            <KeyGuide controls={controls} rhythm={rhythm} />
             <div className="session-actions">
               <Button type="button" onClick={onStart} disabled={busy} data-session-primary>
                 <Play size={16} aria-hidden="true" />
@@ -247,10 +267,11 @@ export function SessionOverlay({
             <h2 id="session-heading">Take the stage.</h2>
             <p className="session-song">{songName}</p>
             <p className="session-description">
-              Hit each gem as it crosses the strike line. Hold long notes to the end. You can use
-              keys, MIDI, or tap the lanes.
+              {rhythm
+                ? "Tap once per gem as it crosses the strike line. Use your mapped key, tap the HIT pad, or play any MIDI note. No holds needed."
+                : "Hit each gem as it crosses the strike line. Hold long notes to the end. You can use keys, MIDI, or tap the lanes."}
             </p>
-            <KeyGuide controls={controls} />
+            <KeyGuide controls={controls} rhythm={rhythm} />
             <div className="session-actions">
               <Button type="button" onClick={onStart} disabled={busy} data-session-primary>
                 <Play size={16} aria-hidden="true" />

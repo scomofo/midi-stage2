@@ -118,6 +118,12 @@ try {
     await dialog.getByLabel('Choose song file', { exact: true }).setInputFiles(file);
     await frames();
   };
+  const assertPreviewFocused = async (title) => {
+    await page.waitForFunction((name) => document.activeElement?.id === 'song-preview-title'
+      && document.activeElement.textContent === name, title);
+    assert.match(await dialog.getByRole('status').filter({ hasText: `${title} is ready.` }).innerText(), /add it to your setlist/,
+      'completed imports must announce the next action');
+  };
   const add = async (title) => {
     phase = `adding ${title}: clicking Add to setlist`;
     await dialog.getByRole('button', { name: 'Add to setlist', exact: true }).click();
@@ -148,12 +154,16 @@ try {
   await page.keyboard.press('Escape');
   await dialog.waitFor({ state: 'hidden' });
   await assertReady();
+  assert.equal(await page.getByRole('button', { name: 'Import songs', exact: true }).evaluate((button) => document.activeElement === button), true,
+    'closing the library must return keyboard focus to the opener');
   assert.equal(await page.evaluate(() => window.importProbe.beginCalls), 0, 'Escape must close the import dialog without starting a set');
 
   await openLibrary();
   await upload({ name: 'broken.json', mimeType: 'application/json', buffer: Buffer.from('{broken') });
   await dialog.getByRole('alert').waitFor();
   assert.match(await dialog.getByRole('alert').innerText(), /JSON|chart|valid/i);
+  assert.equal(await dialog.getByRole('alert').evaluate((alert) => document.activeElement === alert), true,
+    'a rejected import must move keyboard focus to its recovery message');
   assert.equal(await page.getByRole('heading', { level: 2, name: 'Open Stage', exact: true }).count(), 1,
     'a rejected file must leave the selected song unchanged');
   await upload({ name: 'notes.txt', mimeType: 'text/plain', buffer: Buffer.from('unsupported-file') });
@@ -163,6 +173,13 @@ try {
   const keysFile = chartFile('Imported Rehearsal');
   await upload(keysFile);
   await dialog.getByRole('button', { name: 'Add to setlist', exact: true }).waitFor();
+  await assertPreviewFocused('Imported Rehearsal');
+  await page.keyboard.press('Tab');
+  assert.equal(await dialog.getByRole('button', { name: 'Add to setlist', exact: true }).evaluate((button) => document.activeElement === button), true,
+    'the next Tab after the preview heading must reach Add to setlist');
+  await frames();
+  assert.equal(await dialog.getByRole('button', { name: 'Add to setlist', exact: true }).evaluate((button) => document.activeElement === button), true,
+    'live stage HUD updates must not steal focus back from Add to setlist');
   assert.match(await dialog.innerText(), /3\s+notes/i, 'JSON preview must count the actual notes');
   assert.match(await dialog.innerText(), /Keys/);
   await screenshot('import-preview-desktop.png');
@@ -190,11 +207,34 @@ try {
     if (note.hold !== 'complete') throw new Error('Imported sustain did not complete');
   });
   await page.getByRole('button', { name: 'Pause', exact: true }).click();
-  await page.getByRole('button', { name: 'Restart', exact: true }).click();
+  await page.getByRole('button', { name: 'Reset set', exact: true }).click();
   await assertReady();
 
   await openLibrary();
+  await dialog.getByRole('button', { name: 'Remove Imported Rehearsal', exact: true }).click();
+  await page.evaluate((fileName) => {
+    const readText = File.prototype.text;
+    File.prototype.text = function () {
+      const result = readText.call(this);
+      if (this.name !== fileName) return result;
+      File.prototype.text = readText;
+      return new Promise((resolve, reject) => {
+        window.finishImportRead = () => result.then(resolve, reject);
+      });
+    };
+  }, keysFile.name);
   await upload(keysFile);
+  await dialog.getByRole('status').filter({ hasText: 'Reading your song' }).waitFor();
+  for (const name of ['Play Imported Rehearsal', 'Remove Imported Rehearsal', 'Remove song', 'Keep']) {
+    assert.equal(await dialog.getByRole('button', { name, exact: true }).isDisabled(), true,
+      `${name} must wait until file processing finishes`);
+  }
+  assert.equal(await dialog.getByRole('button', { name: 'Close song library', exact: true }).isEnabled(), true,
+    'file processing must remain dismissible');
+  await page.evaluate(() => window.finishImportRead());
+  await assertPreviewFocused('Imported Rehearsal');
+  assert.equal(await dialog.getByRole('button', { name: 'Keep', exact: true }).isEnabled(), true,
+    'saved song controls must recover when processing finishes');
   await add('Imported Rehearsal');
   await openLibrary();
   assert.equal(await dialog.getByRole('button', { name: 'Play Imported Rehearsal', exact: true }).count(), 1,
@@ -265,7 +305,7 @@ try {
       throw new Error('Removing another imported song replaced the paused Judge or score');
   });
   await page.getByRole('button', { name: 'Pause', exact: true }).click();
-  await page.getByRole('button', { name: 'Restart', exact: true }).click();
+  await page.getByRole('button', { name: 'Reset set', exact: true }).click();
 
   await openLibrary();
   await upload(midiFile('Bass Line.mid', false));
@@ -291,9 +331,15 @@ try {
   await openLibrary();
   await upload(chartFile('Mobile Rehearsal'));
   await dialog.getByRole('button', { name: 'Add to setlist', exact: true }).waitFor();
+  await assertPreviewFocused('Mobile Rehearsal');
   await page.getByRole('status').filter({ hasText: 'Song removed from your setlist.' }).waitFor({ state: 'hidden' });
-  await dialog.getByRole('button', { name: 'Add to setlist', exact: true }).scrollIntoViewIfNeeded();
   await frames();
+  const previewBounds = await dialog.getByRole('heading', { level: 3, name: 'Mobile Rehearsal', exact: true }).boundingBox();
+  const addBounds = await dialog.getByRole('button', { name: 'Add to setlist', exact: true }).boundingBox();
+  assert.ok(previewBounds && previewBounds.y >= 0 && previewBounds.y + previewBounds.height <= 844,
+    'mobile file processing must bring the preview into view without manual scrolling');
+  assert.ok(addBounds && addBounds.y >= 0 && addBounds.y + addBounds.height <= 844,
+    'the compact mobile chart preview must reveal Add to setlist');
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false,
     'mobile import preview must not overflow horizontally');
   const bounds = await dialog.boundingBox();
@@ -304,7 +350,7 @@ try {
   assert.equal(await page.evaluate(() => window.midiPermissionRequests), 0,
     'local file imports must not request MIDI hardware permission');
   assert.deepEqual(errors, []);
-  console.log('PASS: JSON/MIDI preview and import; invalid/unsupported file isolation; keyboard scoring and sustain; difficulty-safe chart data; duplicate prevention; reload persistence; populated part selection; safe removal; unrelated removal preserves paused take; Escape; local import without MIDI permission; mobile dialog');
+  console.log('PASS: JSON/MIDI preview and import; focused preview/error recovery; stable keyboard focus; busy library controls; invalid/unsupported file isolation; keyboard scoring and sustain; difficulty-safe chart data; duplicate prevention; reload persistence; populated part selection; safe removal; unrelated removal preserves paused take; Escape; local import without MIDI permission; mobile preview visibility');
 } catch (error) {
   // Print the original exception before attempting optional diagnostics. CI may
   // not have /workspace, and an unavailable screenshot must never replace it.

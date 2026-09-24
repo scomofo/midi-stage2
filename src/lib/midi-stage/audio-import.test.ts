@@ -8,6 +8,7 @@ import {
   isSupportedAudioFile,
   MAX_AUDIO_IMPORT_BYTES,
   MAX_AUDIO_SECONDS,
+  type AudioImportProgress,
   type SongAudioSamples,
 } from "./audio-import.ts";
 
@@ -43,6 +44,16 @@ function installMetadataAudio(context: TestContext, duration = 4, complete = tru
   context.after(() => {
     if (original) Object.defineProperty(globalThis, "Audio", original);
     else Reflect.deleteProperty(globalThis, "Audio");
+  });
+}
+
+function installDecoder(context: TestContext, decode: (data: ArrayBuffer) => Promise<AudioBuffer>) {
+  class Decoder { decodeAudioData = decode; }
+  const original = Object.getOwnPropertyDescriptor(globalThis, "OfflineAudioContext");
+  Object.defineProperty(globalThis, "OfflineAudioContext", { value: Decoder, configurable: true });
+  context.after(() => {
+    if (original) Object.defineProperty(globalThis, "OfflineAudioContext", original);
+    else Reflect.deleteProperty(globalThis, "OfflineAudioContext");
   });
 }
 
@@ -192,6 +203,103 @@ describe("audio file import", () => {
     context.mock.timers.tick(15000);
     await rejection;
     assert.equal(revoke.mock.callCount(), 1);
+  });
+
+  it("cancels unreadable metadata immediately and releases its temporary URL", async (context) => {
+    installMetadataAudio(context, 4, false);
+    context.mock.timers.enable({ apis: ["setTimeout"] });
+    const controller = new AbortController();
+    const revoke = context.mock.method(URL, "revokeObjectURL");
+    const file = new File(["waiting for metadata"], "Waiting.wav");
+    const read = context.mock.method(file, "arrayBuffer");
+    const progress: AudioImportProgress[] = [];
+    const pending = importAudioFile(file, { signal: controller.signal, onProgress: (value) => progress.push(value) });
+    const rejection = assert.rejects(pending, { name: "AbortError" });
+    controller.abort();
+    await rejection;
+    assert.equal(read.mock.callCount(), 0);
+    assert.equal(revoke.mock.callCount(), 1);
+    assert.deepEqual(progress, [{ phase: "checking" }]);
+    context.mock.timers.tick(15000);
+    assert.equal(revoke.mock.callCount(), 1, "the abandoned metadata timer must be cleared");
+  });
+
+  it("skips decoding when cancelled during file reading", async (context) => {
+    installMetadataAudio(context);
+    const controller = new AbortController();
+    const file = new File(["cancel while reading"], "Cancelled.wav");
+    context.mock.method(file, "arrayBuffer", async () => {
+      controller.abort();
+      return new ArrayBuffer(20);
+    });
+    const decode = mock.fn(async () => samples(4) as AudioBuffer);
+    installDecoder(context, decode);
+    await assert.rejects(importAudioFile(file, { signal: controller.signal }), { name: "AbortError" });
+    assert.equal(decode.mock.callCount(), 0);
+  });
+
+  it("discards a native decode completed after cancellation without reading its samples", async (context) => {
+    installMetadataAudio(context);
+    const controller = new AbortController();
+    const buffer = samples(4) as AudioBuffer;
+    const getSamples = context.mock.method(buffer, "getChannelData");
+    const progress: AudioImportProgress[] = [];
+    installDecoder(context, async () => {
+      controller.abort();
+      return buffer;
+    });
+    await assert.rejects(importAudioFile(new File(["decoded too late"], "Cancelled.wav"), {
+      signal: controller.signal, onProgress: (value) => progress.push(value),
+    }), { name: "AbortError" });
+    assert.equal(getSamples.mock.callCount(), 0);
+    assert.deepEqual(progress.map((value) => value.phase), ["checking", "decoding"]);
+  });
+
+  it("produces identical charts in cooperative and synchronous analysis with useful progress", async (context) => {
+    installMetadataAudio(context, 20);
+    const buffer = samples(20, 16000, 2) as AudioBuffer;
+    addPulses(buffer, Array.from({ length: 35 }, (_, index) => 0.3 + index * 0.53));
+    installDecoder(context, async () => buffer);
+    const file = new File(["same chunked recording"], "Cooperative.wav");
+    const fingerprint = createHash("sha256").update("same chunked recording").digest("hex");
+    const expected = analyzeSongAudio(buffer, file.name, fingerprint);
+    const progress: AudioImportProgress[] = [];
+    const result = await importAudioFile(file, { onProgress: (value) => progress.push(value) });
+    assert.deepEqual({ chart: result.chart, warnings: result.warnings }, expected);
+    assert.equal(result.buffer, buffer, "chunking must preserve the original playback buffer");
+    assert.deepEqual(progress.slice(0, 2), [{ phase: "checking" }, { phase: "decoding" }]);
+    const fractions = progress.filter((value) => value.phase === "analyzing").map((value) => value.progress!);
+    assert.equal(fractions[0], 0);
+    assert.equal(fractions.at(-1), 1);
+    assert.ok(fractions.length > 4, "longer songs must publish progress across multiple chunks");
+    fractions.forEach((fraction, index) => {
+      assert.ok(fraction >= 0 && fraction <= 1);
+      if (index) assert.ok(fraction >= fractions[index - 1]!);
+    });
+  });
+
+  it("yields between sample chunks so a timer can cancel before the next channel", async (context) => {
+    installMetadataAudio(context, 20);
+    const controller = new AbortController();
+    const buffer = samples(20, 16000, 2) as AudioBuffer;
+    addPulses(buffer, [0.3, 1.3, 2.3, 3.3]);
+    const getSamples = context.mock.method(buffer, "getChannelData");
+    installDecoder(context, async () => buffer);
+    let cancelScheduled = false;
+    let timerRan = false;
+    const progress: AudioImportProgress[] = [];
+    await assert.rejects(importAudioFile(new File(["cancel during analysis"], "Long.wav"), {
+      signal: controller.signal,
+      onProgress: (value) => {
+        progress.push(value);
+        if (value.phase !== "analyzing" || !value.progress || cancelScheduled) return;
+        cancelScheduled = true;
+        setTimeout(() => { timerRan = true; controller.abort(); }, 0);
+      },
+    }), { name: "AbortError" });
+    assert.equal(timerRan, true, "cancellation must receive a browser task between sample chunks");
+    assert.equal(getSamples.mock.callCount(), 1, "cancelled analysis must not read the second channel");
+    assert.ok(progress.at(-1)!.progress! < 0.45, "cancellation must stop before finishing even the first channel");
   });
 
   it("gives a useful decode error for codecs the browser cannot read", async (context) => {

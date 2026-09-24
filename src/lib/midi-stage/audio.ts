@@ -268,6 +268,14 @@ export class AudioEngine {
     this.origin = this.ctx!.currentTime + 0.12 + pre - seek / speed;
     this.events = [];
     if (countIn) for (let i = 4; i > 0; i--) this.events.push({ time: seek - i * beat, click: true, accent: i === 4 });
+    else if (seek < 0) {
+      // A pause can freeze the opening count-in. Resume its remaining beats on
+      // the same song timeline, without inserting another four-beat lead-in.
+      for (let i = 4; i > 0; i--) {
+        const time = -i * beat;
+        if (time >= seek - 1e-6) this.events.push({ time, click: true, accent: i === 4 });
+      }
+    }
     if (opts.metronome) {
       for (const b of song.beats) if (b.time >= seek && b.time < end) this.events.push({ time: b.time, click: true, accent: b.bar });
     }

@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { FeelPanel } from "@/components/stage/feel-panel";
 import { SessionOverlay, type SessionResults } from "@/components/stage/session-overlay";
 import { loadAudioAsset, saveAudioAsset, deleteAudioAsset } from "@/lib/midi-stage/audio-assets";
+import type { AudioImportProgress } from "@/lib/midi-stage/audio-import";
 import { SongLibraryPanel } from "@/components/stage/song-library-panel";
 import { addLibraryEntry, chartIdentity, loadSongLibrary, MAX_CHART_IMPORT_BYTES, prepareChartImport, saveSongLibrary, songFromSavedChart, type SavedChart } from "@/lib/midi-stage/song-library";
 import { SoundcheckPanel } from "@/components/stage/soundcheck-panel";
@@ -121,6 +122,7 @@ export function StageApp() {
   const startTicket = useRef(0);
   const pendingRehearsal = useRef(false);
   const importTicket = useRef(0);
+  const importController = useRef<AbortController | null>(null);
   const libraryRef = useRef<HTMLDivElement>(null);
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [importedCharts, setImportedCharts] = useState<SavedChart[]>([]);
@@ -130,6 +132,7 @@ export function StageApp() {
   const [importCandidate, setImportCandidate] = useState<{ entry: SavedChart; warnings: string[]; kind: "audio" | "midi" | "chart"; buffer?: AudioBuffer; audioFile?: File } | null>(null);
   const [savingImport, setSavingImport] = useState(false);
   const [readingImport, setReadingImport] = useState(false);
+  const [importProgress, setImportProgress] = useState<AudioImportProgress | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
   const [libraryWarning, setLibraryWarning] = useState<string | null>(null);
   const midiOwners = useRef(new Map<string, { playerId: Instrument; token: string }>());
@@ -682,11 +685,14 @@ export function StageApp() {
     if (bag.current) bag.current.feelOpen = feelOpen;
   }, [feelOpen]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (bag.current) bag.current.libraryOpen = libraryOpen;
   }, [libraryOpen, initBag]);
 
-  useEffect(() => () => { importTicket.current++; }, []);
+  useEffect(() => () => {
+    importTicket.current++;
+    importController.current?.abort();
+  }, []);
 
   useEffect(() => {
     if (!feelOpen || !feelTap) return;
@@ -888,6 +894,13 @@ export function StageApp() {
       if (e.ctrlKey || e.metaKey || e.altKey || el.isContentEditable || el.closest("input, select, textarea, [role=dialog]")) return;
       if (feelOpen || libraryOpen || menu) return;
       if ((e.code === "Enter" || e.code === "Space") && el.closest("button, a")) return;
+      const activePlayers = b.players.filter((p) => p.enabled);
+      if (e.code === "Space" && b.song.matching === "rhythm" && activePlayers.length === 1) {
+        e.preventDefault();
+        const p = activePlayers[0]!;
+        if (!e.repeat) hit(b, p, 0, `key:${p.id}:Space`);
+        return;
+      }
       if (e.repeat) return;
       if (e.code === "Enter") {
         e.preventDefault();
@@ -899,7 +912,7 @@ export function StageApp() {
         resetReady();
         return;
       }
-      for (const p of b.players.filter((p) => p.enabled)) {
+      for (const p of activePlayers) {
         const lane = KEYS[p.id].indexOf(e.code);
         if (lane >= 0) {
           e.preventDefault();
@@ -911,7 +924,7 @@ export function StageApp() {
       const b = bag.current;
       if (!b) return;
       for (const p of b.players.filter((p) => p.enabled)) {
-        if (KEYS[p.id].includes(e.code)) release(b, p, `key:${p.id}:${e.code}`);
+        if (KEYS[p.id].includes(e.code) || e.code === "Space") release(b, p, `key:${p.id}:${e.code}`);
       }
     };
     window.addEventListener("keydown", onKey);
@@ -1054,7 +1067,10 @@ export function StageApp() {
 
   function closeSongLibrary() {
     importTicket.current++;
+    importController.current?.abort();
+    importController.current = null;
     setReadingImport(false);
+    setImportProgress(null);
     setSavingImport(false);
     setImportCandidate(null);
     setLibraryOpen(false);
@@ -1062,7 +1078,10 @@ export function StageApp() {
 
   function openSongLibrary() {
     importTicket.current++;
+    importController.current?.abort();
+    importController.current = null;
     setReadingImport(false);
+    setImportProgress(null);
     setSavingImport(false);
     if (bag.current?.status === "starting") resetReady();
     else pauseSession();
@@ -1084,7 +1103,11 @@ export function StageApp() {
   async function readSongFile(file: File) {
     if (savingImport) return;
     const ticket = ++importTicket.current;
+    importController.current?.abort();
+    const controller = new AbortController();
+    importController.current = controller;
     setReadingImport(true);
+    setImportProgress(null);
     setImportError(null);
     setImportCandidate(null);
     try {
@@ -1093,7 +1116,12 @@ export function StageApp() {
       if (/\.(mp3|wav|wave|flac|ogg|oga|opus|m4a|aac|webm|aif|aiff)$/i.test(file.name)
         || (file.type.startsWith("audio/") && !/midi/i.test(file.type) && !/\.(midi?|json)$/i.test(file.name))) {
         const { importAudioFile } = await import("@/lib/midi-stage/audio-import");
-        const { chart, warnings, buffer } = await importAudioFile(file);
+        const { chart, warnings, buffer } = await importAudioFile(file, {
+          signal: controller.signal,
+          onProgress: (progress) => {
+            if (ticket === importTicket.current) setImportProgress(progress);
+          },
+        });
         candidate = { entry: { id: chartIdentity(chart), chart, fileName: file.name, addedAt: Date.now(), audio: true }, warnings, buffer, audioFile: file, kind: "audio" };
       } else if (/\.midi?$/i.test(file.name)) {
         if (file.size > MAX_CHART_IMPORT_BYTES) throw new Error("Choose a MIDI file smaller than 4 MB.");
@@ -1110,7 +1138,11 @@ export function StageApp() {
     } catch (error) {
       if (ticket === importTicket.current) setImportError(error instanceof Error ? error.message : "This song could not be imported.");
     } finally {
-      if (ticket === importTicket.current) setReadingImport(false);
+      if (ticket === importTicket.current) {
+        setReadingImport(false);
+        setImportProgress(null);
+        importController.current = null;
+      }
     }
   }
 
@@ -1183,6 +1215,8 @@ export function StageApp() {
 
   const enabled = players.filter((p) => p.enabled);
   const busy = status === "playing" || status === "starting";
+  const rhythm = song.matching === "rhythm";
+  const spaceToHit = rhythm && enabled.length === 1;
 
   return (
     <div className={cn("stage-shell flex min-h-dvh flex-col", focusStage && "stage-focused")}>
@@ -1381,7 +1415,7 @@ export function StageApp() {
               <Button variant="secondary" onClick={() => pauseSession()} disabled={status !== "playing"}>
                 <Pause className="size-4" /> Pause
               </Button>
-              <Button variant="ghost" size="icon" aria-label="Restart" onClick={resetReady}>
+              <Button variant="ghost" size="icon" aria-label="Reset set" title="Reset to ready without starting playback" onClick={resetReady}>
                 <RotateCcw className="size-4" />
               </Button>
             </div>
@@ -1485,10 +1519,11 @@ export function StageApp() {
               <SessionOverlay
                 mode={results ? "results" : status === "paused" ? "paused" : "ready"}
                 songName={song.name}
+                rhythm={rhythm}
                 busy={!ready || busy}
                 demo={bag.current?.demo ?? false}
                 results={results}
-                controls={enabled.map((p) => ({ label: p.label, keys: (bag.current?.judges.get(p.id)?.lanes || []).map((lane, i) => `${keyLabel(KEYS[p.id][i] || "")} · ${lane.short}`) }))}
+                controls={enabled.map((p) => ({ label: rhythm ? "Rhythm" : p.label, keys: (bag.current?.judges.get(p.id)?.lanes || []).map((lane, i) => `${keyLabel(KEYS[p.id][i] || "")}${spaceToHit && KEYS[p.id][i] !== "Space" ? " / SPACE" : ""} · ${lane.short}`) }))}
                 onStart={() => void startSession(false)}
                 onDemo={() => void startSession(true)}
                 onRestart={() => { resetReady(); void startSession(false); }}
@@ -1568,7 +1603,7 @@ export function StageApp() {
             </label>
             <label className="flex h-10 items-center gap-2 text-[12px] text-muted">
               <input type="checkbox" checked={guide} disabled={busy} onChange={(e) => setGuide(e.target.checked)} suppressHydrationWarning />
-              Guide part
+              {rhythm ? "Hit guide" : "Guide part"}
             </label>
             <label className="flex h-10 items-center gap-2 text-[12px] text-muted">
               <input type="checkbox" checked={metronome} disabled={busy} onChange={(e) => setMetronome(e.target.checked)} suppressHydrationWarning />
@@ -1596,15 +1631,16 @@ export function StageApp() {
               const lanes = bag.current?.judges.get(p.id)?.lanes || [];
               return (
                 <div key={p.id} className="flex items-center gap-2">
-                  <span className="w-12 shrink-0 text-[9px] tracking-[0.14em] text-muted">{p.label.toUpperCase()}</span>
-                  <div className="grid flex-1 grid-cols-4 gap-1.5 sm:grid-cols-6 md:grid-cols-8">
+                  <span className="w-12 shrink-0 text-[9px] tracking-[0.14em] text-muted">{rhythm ? "RHYTHM" : p.label.toUpperCase()}</span>
+                  <div className={cn("grid flex-1 gap-1.5", rhythm ? "grid-cols-1" : "grid-cols-4 sm:grid-cols-6 md:grid-cols-8")}>
                     {lanes.map((lane, i) => (
                       <button
                         key={lane.short + i}
-                        aria-label={`${p.label} ${lane.name}, ${keyLabel(KEYS[p.id][i] || "")} key`}
+                        aria-label={`${p.label} ${lane.name}, ${keyLabel(KEYS[p.id][i] || "")}${spaceToHit && KEYS[p.id][i] !== "Space" ? " or Space" : ""} key`}
                         type="button"
                         className={cn(
                           "pad",
+                          rhythm && "pad-rhythm",
                           padFlash[`${p.id}:${i}`] && "flash",
                           padHeld[`${p.id}:${i}`] && "held",
                           (padApproach[`${p.id}:${i}`] || 0) > 0.82 && "soon",
@@ -1642,7 +1678,7 @@ export function StageApp() {
                         }}
                       >
                         <span>{lane.short}</span>
-                        <kbd>{keyLabel(KEYS[p.id][i] || "")}</kbd>
+                        <kbd>{keyLabel(KEYS[p.id][i] || "")}{spaceToHit && KEYS[p.id][i] !== "Space" ? " / SPACE" : ""}</kbd>
                       </button>
                     ))}
                   </div>
@@ -1651,7 +1687,7 @@ export function StageApp() {
             })}
           </div>
           <p className="mt-3 text-[11px] text-subtle">
-            <kbd className="rounded bg-elevated px-1">ENTER</kbd> start / pause · <kbd className="rounded bg-elevated px-1">SHIFT + R</kbd> restart while paused · Tap the strike line, pads, or piano. Hold melodic notes through their tails.
+            <kbd className="rounded bg-elevated px-1">ENTER</kbd> start / pause · <kbd className="rounded bg-elevated px-1">SHIFT + R</kbd> reset set while paused or ready · {rhythm ? `Press ${spaceToHit ? "the shown key or Space" : "the shown keys"}, play any MIDI note, or tap the hit pad. Tap once per gem; no holds.` : "Tap the strike line, pads, or piano. Hold melodic notes through their tails."}
           </p>
         </section>
       </div>
@@ -1671,6 +1707,10 @@ export function StageApp() {
                 warnings: importCandidate.warnings,
               } : null}
               reading={readingImport}
+              readingLabel={importProgress?.phase === "checking" ? "Checking song…"
+                : importProgress?.phase === "decoding" ? "Decoding audio…"
+                : importProgress?.phase === "analyzing" ? `Finding rhythm hits… ${Math.round((importProgress.progress ?? 0) * 100)}%`
+                : undefined}
               saving={savingImport}
               error={importError}
               libraryWarning={libraryWarning}
@@ -1724,7 +1764,7 @@ export function StageApp() {
       ) : null}
 
       {toast ? (
-        <div role="status" aria-live="polite" className="fixed bottom-5 left-1/2 z-50 max-w-[min(640px,90vw)] -translate-x-1/2 rounded-xl bg-elevated px-4 py-3 text-[13px] text-fg shadow-[0_0_0_1px_rgba(143,212,196,0.35)]">
+        <div role="status" aria-live="polite" className="pointer-events-none fixed inset-x-3 top-20 z-50 rounded-xl bg-elevated px-4 py-3 text-[13px] text-fg shadow-[0_0_0_1px_rgba(143,212,196,0.35)] sm:inset-x-auto sm:bottom-5 sm:left-1/2 sm:top-auto sm:w-max sm:max-w-[min(640px,90vw)] sm:-translate-x-1/2">
           {toast}
         </div>
       ) : null}

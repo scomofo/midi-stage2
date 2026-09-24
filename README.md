@@ -78,6 +78,9 @@ npm run test:session
 
 - **Enter** starts/pauses when the stage has focus; **Escape** pauses or closes a panel.
 - **Shift+R** resets while paused/ready; unmodified R remains a playable keys lane.
+- **Space** also hits the single lane in solo rhythm charts. Focused buttons keep
+  their normal Space/Enter actions. **Reset set** returns to ready; **Restart set**
+  in the pause panel starts a fresh take.
 
 - **Keyboard** — one lane per key, per instrument:
   - Drums: `Space D F G H J`
@@ -94,10 +97,12 @@ npm run test:session
 
 Choose **Import songs** in the setlist, select a file, review the detected parts
 and warnings, then choose **Add to setlist**. Nothing starts until you press Start.
+The importer reports checking, decoding and rhythm-analysis progress. Close the
+library to cancel; long analysis yields so the controls remain responsive.
 
 - **MP3, WAV, FLAC and other browser-supported audio:** generates a single HIT
   lane from detected attacks and plays the original recording in sync. Press the
-  shown computer key, tap the pad, or play any MIDI note. This is a rhythm chart;
+  shown computer key or Space, tap the wide hit pad, or play any MIDI note. This is a rhythm chart;
   dense mixes and vocals may create extra or missed hits. Tempo is estimated for
   count-in/click; actual hit times follow the recording. Audio is limited to
   50 MB and six minutes. Tempo changes playback speed and pitch.
