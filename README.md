@@ -39,6 +39,18 @@ npm run dev   # serves the app on http://0.0.0.0:8082
 | `npm test`          | Script tests (`node --test`) plus platform unit tests                 |
 | `npm run test:session` | Playwright session regression — needs Chromium and `npm run dev` running |
 
+## Player experience
+
+Playback controls stay above the highway. **Focus stage** expands the playfield;
+**Try beginner rehearsal** starts solo keys at 75% tempo with Chill timing, guide
+and click enabled. Results show the judgement breakdown, sustained notes, a
+personal best and a practice tip, with replay and next-song actions.
+
+Leaving the window, hiding the tab, disconnecting a MIDI input, or opening a
+settings panel pauses the set. Resume is deliberate. The game bundles its fonts
+locally, and the keyboard/piano controls support focus and touch cancellation.
+See `docs/player-polish.md` for the acceptance boundary.
+
 The full acceptance loop from `docs/session-stability.md`:
 
 ```sh
@@ -49,6 +61,9 @@ npm run test:session
 ```
 
 ## Controls
+
+- **Enter** starts/pauses when the stage has focus; **Escape** pauses or closes a panel.
+- **Shift+R** resets while paused/ready; unmodified R remains a playable keys lane.
 
 - **Keyboard** — one lane per key, per instrument:
   - Drums: `Space D F G H J`

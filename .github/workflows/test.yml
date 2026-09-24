@@ -23,8 +23,17 @@ jobs:
       - name: Session regression
         run: |
           npm run dev > /tmp/midi-stage-dev.log 2>&1 &
+          ready=false
           for attempt in $(seq 1 60); do
-            if curl -fsS http://127.0.0.1:8080/ > /dev/null; then break; fi
+            if curl -fsS http://127.0.0.1:8082/ > /dev/null; then
+              ready=true
+              break
+            fi
             sleep 1
           done
+          if [ "$ready" != true ]; then
+            cat /tmp/midi-stage-dev.log
+            echo "Development server did not become ready on port 8082." >&2
+            exit 1
+          fi
           npm run test:session

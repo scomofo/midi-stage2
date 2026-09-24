@@ -153,7 +153,8 @@ export function makeChart(song: Song, player: Player, start = 0, end = song.dura
       state: 0,
       hold: null,
     }))
-    .filter((n) => n.lane >= 0);
+    .filter((n) => n.lane >= 0)
+    .sort((a, b) => a.time - b.time || a.pitch - b.pitch);
 
   if (player.type === "keys" || player.type === "guitar") {
     const grouped = new Map<number, ChartNote[]>();
@@ -180,7 +181,33 @@ export function makeChart(song: Song, player: Player, start = 0, end = song.dura
     }
   }
 
-  return { lanes, notes };
+  if (player.type === "drums") return { lanes, notes };
+
+  // Melodic lanes represent pitch classes, so an octave-doubled chord must
+  // remain playable with one press per visible lane. Keep its full voicing
+  // above for the guide, and keep the longest tail for that lane. The source
+  // arrangement remains untouched for backing audio and piano guidance.
+  const playable: ChartNote[] = [];
+  const byTime = new Map<number, Map<number, ChartNote>>();
+  for (const note of notes) {
+    let atTime = byTime.get(note.time);
+    if (!atTime) {
+      atTime = new Map();
+      byTime.set(note.time, atTime);
+    }
+    const existing = atTime.get(note.lane);
+    if (existing) {
+      existing.duration = Math.max(existing.duration, note.duration);
+      existing.velocity = Math.max(existing.velocity, note.velocity);
+      if (!existing.pitches) existing.pitches = [existing.pitch];
+      if (!existing.pitches.includes(note.pitch)) existing.pitches.push(note.pitch);
+    } else {
+      atTime.set(note.lane, note);
+      playable.push(note);
+    }
+  }
+
+  return { lanes, notes: playable };
 }
 
 export class Judge {
@@ -193,6 +220,7 @@ export class Judge {
   cursor = 0;
   held = new Map<string, Set<ChartNote>>();
   activeHolds = new Set<ChartNote>();
+  private voicingInputs = new Map<ChartNote, Set<number>>();
   stats: JudgeStats = {
     score: 0,
     combo: 0,
@@ -244,19 +272,44 @@ export class Judge {
     }
   }
 
-  hit(t: number, lane: number, token = "keyboard") {
+  hit(t: number, lane: number, token = "keyboard", inputPitch?: number) {
     this.tick(t);
     let closest: ChartNote | null = null;
     let best = Infinity;
+    let voiced: ChartNote | null = null;
+    let voicedDistance = Infinity;
     for (let i = this.cursor; i < this.notes.length; i++) {
       const n = this.notes[i]!;
       if (n.time > t + this.windows[2]! + 1e-8) break;
-      if (n.state || n.lane !== lane) continue;
+      if (n.lane !== lane) continue;
       const d = Math.abs(n.time - t);
+      if (n.state) {
+        // A real keyboard can play the source chord's octave doubles even
+        // though they share one lane. Accept each additional source pitch
+        // within 40 ms of its first strike, without another score or penalty.
+        // Repeated pitches and unrelated octaves are still extra presses.
+        // The first strike retains ownership of the lane's sustain.
+        if (
+          !this.drums && inputPitch != null && n.state === 1 && n.hitAt != null &&
+          Math.abs(t - n.hitAt) <= 0.04 * this.speed + 1e-8 &&
+          d <= this.windows[2]! + 1e-8 && d < voicedDistance &&
+          n.pitches?.includes(inputPitch) && pc(inputPitch) === pc(n.pitch) &&
+          new Set(n.pitches.filter((pitch) => pc(pitch) === pc(n.pitch))).size > 1 &&
+          !this.voicingInputs.get(n)?.has(inputPitch)
+        ) {
+          voiced = n;
+          voicedDistance = d;
+        }
+        continue;
+      }
       if (d <= this.windows[2]! + 1e-8 && d < best) {
         closest = n;
         best = d;
       }
+    }
+    if (voiced && voicedDistance <= best) {
+      this.voicingInputs.get(voiced)!.add(inputPitch!);
+      return voiced;
     }
     if (!closest) {
       this.stats.extra++;
@@ -269,6 +322,7 @@ export class Judge {
     closest.state = 1;
     closest.hitAt = t;
     closest.grade = grade;
+    this.voicingInputs.set(closest, new Set([inputPitch ?? closest.pitch]));
     this.stats[grade]++;
     this.stats.weight += weight;
     this.stats.combo++;
