@@ -18,6 +18,29 @@ HUD updates leave focus alone, so Tab continues to the next action. If a persona
 best cannot be saved because browser storage is blocked or full, results clearly
 say **Score not saved**, preserve existing records, and keep replay available.
 
+## Results coaching
+
+Results capture the completed take's difficulty, tempo and enabled instruments,
+including autoplay. A **Recent hit timing** panel gives each played part its own
+counts and practice cue. It uses up to that part's last 200 successful hits;
+misses, extra presses and broken holds remain in the separate score breakdown.
+Autoplay never shows personal timing coaching.
+
+Timing is measured in real milliseconds, so changing playback speed does not
+change the meaning of early or late. The coaching target is within 20 ms of the
+strike line, independent of difficulty and scoring windows. This tighter practice
+target does not alter grades or scores. At least eight hits are required for a
+takeaway; a category needs 60% of the sample to be called mostly early, near the
+centre or mostly late. Otherwise the cue says **Mixed timing**, so equal early
+and late hits cannot cancel out into misleading praise. These are practice
+heuristics, not a latency measurement or a full-session assessment.
+
+Results retain keyboard focus and replay actions. Replay starts a fresh timing
+sample; changing the chart setup clears the old results. Session browser checks
+exercise completed takes, independent band parts, sparse samples, autoplay and
+desktop/mobile layouts. Unit checks cover the coaching boundaries and actual
+Judge offsets at each supported playback speed.
+
 ## Soundcheck and saved setup
 
 Open **Soundcheck** before a set and choose **Enable sound**. Mapped keyboard,

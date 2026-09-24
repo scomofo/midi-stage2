@@ -27,10 +27,16 @@ try {
   await page.evaluate(async () => {
     const { AudioEngine } = await import('/src/lib/midi-stage/audio.ts');
     const { Judge, KEYS } = await import('/src/lib/midi-stage/engine.ts');
+    const { StageRenderer } = await import('/src/lib/midi-stage/renderer.ts');
     const probe = window.sessionProbe = {
       time: -1, ticks: 0, judge: null, audio: null, keys: KEYS.keys,
       beginCalls: 0, beginSettled: 0, blockInit: false, pendingInit: [], tones: [], clicks: [],
       controlCountInSchedule: false,
+    };
+    const draw = StageRenderer.prototype.draw;
+    StageRenderer.prototype.draw = function (state) {
+      probe.live = state;
+      return draw.call(this, state);
     };
     AudioEngine.prototype.songAt = function () { probe.audio = this; return probe.time; };
     const init = AudioEngine.prototype.init;
@@ -266,6 +272,10 @@ try {
     return { score: p.finalScore, saved: stored.map((k) => Number(localStorage.getItem(k))) };
   });
   assert.ok(result.score > 0 && result.saved.includes(result.score), 'completed score must persist');
+  assert.match(await page.locator('.session-run-context').innerText(), /Standard · 100% tempo · Keys/);
+  assert.match(await page.locator('.session-timing-part[data-part="keys"]').innerText(), /Not enough hits yet/,
+    'one successful hit must not produce a confident timing diagnosis');
+  assert.match(await page.locator('.session-timing-part[data-part="keys"]').innerText(), /1 recent hit/);
   await screenshot('session-results.png');
   // A genuine scored replay must still finish when durable best storage fails.
   await page.evaluate(() => {
@@ -364,6 +374,8 @@ try {
   });
   await page.evaluate(() => { window.sessionProbe.time = window.sessionProbe.audio.song.duration + 2; });
   await page.getByText('AUTOPLAY · NOT SAVED', { exact: true }).waitFor();
+  assert.equal(await page.getByRole('region', { name: 'Recent hit timing', exact: true }).count(), 0,
+    'autoplay timing must not be presented as player coaching');
   const savedAfterDemo = await page.evaluate(() => Object.keys(localStorage)
     .filter((key) => key.startsWith('midi-stage-best/')).sort().map((key) => [key, localStorage.getItem(key)]));
   assert.deepEqual(savedAfterDemo, savedBeforeDemo, 'autoplay must not create or replace a personal best');
@@ -408,8 +420,134 @@ try {
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false,
     'mobile results must not overflow horizontally');
   await screenshot('session-mobile-results.png');
+  const emptyTiming = page.locator('.session-timing-part[data-part="keys"]');
+  assert.match(await emptyTiming.innerText(), /Not enough hits yet/);
+  assert.match(await emptyTiming.innerText(), /No successful hits to review\./,
+    'a no-hit take must not report perfect timing or a trend');
+
+  // Finish genuine keyboard takes at known offsets. The probe observes the
+  // same judges drawn by the stage; scores and timing samples are never seeded.
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.getByRole('button', { name: 'Reset set', exact: true }).click();
+  await page.getByRole('button', { name: /^Open Stage\b/ }).click();
+  await page.getByRole('combobox', { name: /DIFFICULTY/ }).selectOption('standard');
+  await page.getByRole('combobox', { name: /TEMPO/ }).selectOption('1');
+  const completeTimingTake = async (offsetsByPart, replay = false) => {
+    await page.evaluate(() => {
+      const p = window.sessionProbe;
+      p.time = -1;
+      p.beforeTimingJudge = p.live.judges.get('keys');
+    });
+    await (replay ? page.getByRole('button', { name: 'Play again', exact: true }) : start).click();
+    await page.waitForFunction(() => {
+      const p = window.sessionProbe;
+      return p.audio.running && p.live.status === 'playing' && p.live.judges.get('keys') !== p.beforeTimingJudge;
+    });
+    const offsets = await page.evaluate(async (offsetsByPart) => {
+      const { KEYS } = await import('/src/lib/midi-stage/engine.ts');
+      const p = window.sessionProbe;
+      const events = [];
+      for (const [id, milliseconds] of Object.entries(offsetsByPart)) {
+        const judge = p.live.judges.get(id);
+        if (!judge || judge.stats.offsets.length) throw Error(`New ${id} take must start with empty timing samples`);
+        if (judge.notes.length < milliseconds.length) throw Error(`Timing fixture needs more ${id} notes`);
+        for (const [index, ms] of milliseconds.entries()) {
+          const note = judge.notes[index];
+          events.push({ id, note, time: note.time + ms * judge.speed / 1000 });
+        }
+      }
+      events.sort((a, b) => a.time - b.time);
+      for (const { id, note, time } of events) {
+        p.time = time;
+        const code = KEYS[id][note.lane];
+        document.body.dispatchEvent(new KeyboardEvent('keydown', { code, bubbles: true }));
+        document.body.dispatchEvent(new KeyboardEvent('keyup', { code, bubbles: true }));
+        if (note.state !== 1) throw Error(`Timing fixture failed to hit ${id} note at ${note.time}`);
+      }
+      const captured = Object.fromEntries([...p.live.judges].map(([id, judge]) => [id, [...judge.stats.offsets]]));
+      p.time = p.audio.song.duration + 2;
+      return captured;
+    }, offsetsByPart);
+    for (const [id, expected] of Object.entries(offsetsByPart)) {
+      assert.equal(offsets[id].length, expected.length, `${id} timing must contain only this take's successful hits`);
+      for (const [index, ms] of expected.entries()) {
+        assert.ok(Math.abs(offsets[id][index] - ms) < 1e-6, `${id} timing must use real milliseconds at the selected tempo`);
+      }
+    }
+    await page.getByText('SET COMPLETE', { exact: true }).waitFor();
+    await frames();
+  };
+  const timingPart = (id) => page.locator(`.session-timing-part[data-part="${id}"]`);
+  await completeTimingTake({ keys: [-50, -50, -50, -50, -50, -50, 0, 0] });
+  assert.match(await page.locator('.session-run-context').innerText(), /Standard · 100% tempo · Keys/);
+  assert.match(await timingPart('keys').innerText(), /Mostly early/);
+  assert.match(await timingPart('keys').innerText(), /8 recent hits · 6 early · 2 near centre · 0 late/);
+  assert.equal(await page.locator('.session-timing-part').count(), 1, 'solo results must contain only the active part');
+  await assertResultsFocus();
+  await screenshot('session-timing-early.png');
+
+  await completeTimingTake({ keys: [50, 50, 50, 50, 50, 50, 0, 0] }, true);
+  assert.match(await timingPart('keys').innerText(), /Mostly late/);
+  assert.match(await timingPart('keys').innerText(), /8 recent hits · 0 early · 2 near centre · 6 late/,
+    'a replay must replace the previous early trend rather than pool both takes');
+
+  // Perfect grading has a wider window than the coaching target. An all-hit
+  // short chart must not pair mixed timing advice with "raise the difficulty".
+  await page.getByRole('button', { name: 'Import songs', exact: true }).click();
+  const timingLibrary = page.getByRole('dialog', { name: 'Your songs', exact: true });
+  await timingLibrary.getByLabel('Choose song file', { exact: true }).setInputFiles({
+    name: 'timing-practice.midistage.json', mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify({
+      schema: 'midi-stage-chart', version: 1, id: 'timing-practice', title: 'Timing practice', bpm: 120, duration: 10,
+      parts: ['drums', 'keys', 'guitar', 'bass'].map((type) => ({ type,
+        notes: type === 'keys' ? Array.from({ length: 8 }, (_, i) => ({ time: i + 1, duration: 0.1, pitch: 60, velocity: 100 })) : [],
+      })),
+    })),
+  });
+  await timingLibrary.getByRole('button', { name: 'Add to setlist', exact: true }).click();
+  await timingLibrary.waitFor({ state: 'hidden' });
+  await completeTimingTake({ keys: [-30, 30, -30, 30, -30, 30, -30, 30] });
+  assert.match(await timingPart('keys').innerText(), /Mixed timing/);
+  assert.match(await page.locator('.session-practice-tip').innerText(), /Every note earned Perfect/);
+  assert.doesNotMatch(await page.locator('.session-practice-tip').innerText(), /raise the difficulty/);
+
+  await page.getByRole('button', { name: 'Reset set', exact: true }).click();
+  await page.getByRole('button', { name: /^Open Stage\b/ }).click();
+  await page.getByRole('combobox', { name: /DIFFICULTY/ }).selectOption('expert');
+  await page.getByRole('combobox', { name: /TEMPO/ }).selectOption('0.75');
+  for (const label of ['Drums', 'Guitar', 'Bass']) {
+    await setlist.getByRole('button', { name: new RegExp(`^${label}\\s+OFF$`) }).click();
+  }
+  await completeTimingTake({
+    keys: Array(8).fill(-25),
+    guitar: Array(8).fill(25),
+    drums: Array(8).fill(0),
+    bass: [-50, 50, -50, 50, -50, 50, -50, 50],
+  });
+  const context = await page.locator('.session-run-context').innerText();
+  assert.match(context, /Expert · 75% tempo/);
+  for (const label of ['Drums', 'Keys', 'Guitar', 'Bass']) assert.ok(context.includes(label));
+  assert.equal(await page.locator('.session-timing-part').count(), 4);
+  assert.match(await timingPart('keys').innerText(), /Mostly early/);
+  assert.match(await timingPart('keys').innerText(), /8 recent hits · 8 early · 0 near centre · 0 late/);
+  assert.match(await timingPart('guitar').innerText(), /Mostly late/);
+  assert.match(await timingPart('guitar').innerText(), /8 recent hits · 0 early · 0 near centre · 8 late/,
+    'opposite band timing trends must remain distinct at slower tempos');
+  assert.match(await timingPart('drums').innerText(), /Near the centre/);
+  assert.match(await timingPart('bass').innerText(), /Mixed timing/,
+    'opposing early and late hits must not cancel into an on-time takeaway');
+  await assertResultsFocus();
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false);
+  await screenshot('session-timing-band.png');
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.locator('[data-session-overlay="results"] h2').focus();
+  await assertResultsFocus();
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false,
+    'four-part timing and run context must fit mobile results without horizontal overflow');
+  assert.equal(await page.getByRole('button', { name: 'Play again', exact: true }).isEnabled(), true);
+  await screenshot('session-timing-band-mobile.png');
   assert.deepEqual(errors, []);
-  console.log('PASS: ready clock; duplicate/cancelled start; count-in input and resumed audible beats; native button keys; hit/hold through volume and pause; finish/save; results focus and keyboard actions; chart reset; first rehearsal; focus-loss pause/release; autoplay never saves; room pauses; mobile setlist and results discovery');
+  console.log('PASS: ready clock; duplicate/cancelled start; count-in input and resumed audible beats; native button keys; hit/hold through volume and pause; finish/save; results focus and keyboard actions; chart reset; first rehearsal; focus-loss pause/release; autoplay never saves or coaches; room pauses; mobile setlist and results discovery; per-part early/late/centred/mixed timing; replay clears samples; empty/few-hit coaching; tempo-normalized timing and run context; desktop/mobile four-part results');
 } finally {
   await browser.close();
 }
