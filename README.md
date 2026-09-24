@@ -38,6 +38,8 @@ npm run dev   # serves the app on http://0.0.0.0:8082
 | `npm run lint`      | `eslint .`                                                            |
 | `npm test`          | Script tests (`node --test`) plus platform unit tests                 |
 | `npm run test:session` | Playwright session regression — needs Chromium and `npm run dev` running |
+| `npm run test:practice` | Section boundaries, repeated takes, count-ins and imported audio seeking |
+| `npm run test:targeted-practice` | Results recommendations, passage selection and preserved practice setup |
 | `npm run test:setup` | Soundcheck, MIDI routing and saved-setup browser regression |
 | `npm run test:imports` | Chart/MIDI import, playback, saved songs and mobile regression |
 | `npm run test:audio` | Real WAV/MP3/FLAC import, backing playback, storage and rhythm-input regression |
@@ -49,6 +51,11 @@ Playback controls stay above the highway. **Focus stage** expands the playfield;
 **Try beginner rehearsal** starts solo keys at 75% tempo with Chill timing, guide
 and click enabled. Results show the judgement breakdown, sustained notes, a
 personal best and a practice tip, with replay and next-song actions.
+
+Results can also suggest a passage with a high share of missed notes or broken
+holds. **Practice this passage** opens it with your current setup. Section
+practice repeats a passage with a fresh count-in and keeps practice scores
+separate from full-song personal bests.
 
 **Soundcheck** enables audio before a set so you can try mapped keys, pads, or MIDI
 without scoring. Choose a device and channel for each part; automatic routing

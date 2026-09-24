@@ -3,6 +3,7 @@ import { ArrowRight, Eye, Keyboard, Pause, Play, RotateCcw, Star, Trophy } from 
 import { Button } from "@/components/ui/button";
 import type { Difficulty, Instrument } from "@/lib/midi-stage/types";
 import { TIMING_CENTER_MS, type TimingSummary } from "@/lib/midi-stage/timing-summary";
+import type { PracticeRecommendation } from "@/lib/midi-stage/practice-recommendation";
 import { formatTime } from "@/lib/midi-stage/engine";
 
 export type PracticeContext = { name: string; start: number; end: number; pass: number };
@@ -27,6 +28,7 @@ export type SessionResults = {
   speed: number;
   parts: { id: Instrument; label: string; timing: TimingSummary }[];
   practice?: PracticeContext;
+  recommendation?: PracticeRecommendation | null;
 };
 
 const DIFFICULTY_LABELS: Record<Difficulty, string> = {
@@ -86,6 +88,7 @@ type SessionOverlayProps = {
   onNext: () => void;
   onQuickStart: () => void;
   onBack: () => void;
+  onPractice?: () => void;
 };
 
 function practiceTip(results: SessionResults, rhythm: boolean) {
@@ -118,6 +121,38 @@ function PracticeSummary({ practice }: { practice: PracticeContext }) {
     <p className="session-practice-context">
       {practice.name} · {formatTime(practice.start)}–{formatTime(practice.end)} · Take {practice.pass}
     </p>
+  );
+}
+
+function RecommendedPractice({
+  recommendation,
+  busy,
+  onPractice,
+}: {
+  recommendation: PracticeRecommendation;
+  busy: boolean;
+  onPractice: () => void;
+}) {
+  const { section, notes, misses, brokenHolds } = recommendation;
+  return (
+    <section className="session-recommendation" aria-labelledby="session-recommendation-heading">
+      <h3 id="session-recommendation-heading">A passage to work on</h3>
+      <p className="session-recommendation-passage">
+        <strong>{section.name}</strong>
+        <span>{formatTime(section.start)}–{formatTime(section.end)}</span>
+      </p>
+      <p className="session-recommendation-counts">
+        {misses} missed {misses === 1 ? "note" : "notes"} · {brokenHolds} broken {brokenHolds === 1 ? "hold" : "holds"} · {notes} {notes === 1 ? "note" : "notes"}
+      </p>
+      <p className="session-recommendation-description">
+        Highest share of missed notes or broken holds among passages with enough notes.
+      </p>
+      <Button type="button" variant="secondary" onClick={onPractice} disabled={busy}>
+        Practice this passage
+        <ArrowRight size={16} aria-hidden="true" />
+      </Button>
+      <p className="session-recommendation-description">Opens practice with your current setup.</p>
+    </section>
   );
 }
 
@@ -158,6 +193,7 @@ export function SessionOverlay({
   onNext,
   onQuickStart,
   onBack,
+  onPractice,
 }: SessionOverlayProps) {
   const isResults = mode === "results" && results;
   const isPaused = mode === "paused";
@@ -166,15 +202,18 @@ export function SessionOverlay({
     ? `${DIFFICULTY_LABELS[results.difficulty]} · ${Math.round(results.speed * 100)}% tempo · ${results.parts.map((part) => part.label).join(" + ")}`
     : "";
   const resultsHeadingRef = useRef<HTMLHeadingElement>(null);
+  const previousMode = useRef(mode);
 
   useEffect(() => {
-    if (!resultsVisible) return;
+    const leavingResults = previousMode.current === "results" && mode === "ready";
+    previousMode.current = mode;
+    if (!resultsVisible && !leavingResults) return;
     const heading = resultsHeadingRef.current;
     heading?.focus({ preventScroll: true });
     heading?.closest(".session-panel")?.scrollIntoView({ block: "start", behavior: "auto" });
-    // Announce each completed set once. HUD refreshes and navigation within
-    // the results must not move the player's focus back to this heading.
-  }, [resultsVisible]);
+    // Announce completed sets and the ready screen after leaving results.
+    // HUD refreshes must not move focus away from the player's next action.
+  }, [resultsVisible, mode]);
 
   return (
     <div className="session-overlay" data-session-overlay={mode}>
@@ -301,6 +340,9 @@ export function SessionOverlay({
               <span>{results.demo ? "STEP INTO THE SPOTLIGHT" : results.practice ? "FOR YOUR NEXT TAKE" : "FOR YOUR NEXT SET"}</span>
               <p>{practiceTip(results, rhythm)}</p>
             </div>
+            {!results.demo && !results.practice && results.recommendation && onPractice ? (
+              <RecommendedPractice recommendation={results.recommendation} busy={busy} onPractice={onPractice} />
+            ) : null}
             <div className="session-actions">
               <Button type="button" onClick={onRestart} disabled={busy} data-session-primary>
                 <RotateCcw size={16} aria-hidden="true" />
@@ -360,7 +402,7 @@ export function SessionOverlay({
         ) : (
           <>
             <div className="session-eyebrow">{practice ? "SECTION PRACTICE" : "YOUR NEXT SESSION"}</div>
-            <h2 id="session-heading">Take the stage.</h2>
+            <h2 ref={resultsHeadingRef} id="session-heading" tabIndex={-1}>Take the stage.</h2>
             <p className="session-song">{songName}</p>
             {practice ? <PracticeSummary practice={practice} /> : null}
             <p className="session-description">

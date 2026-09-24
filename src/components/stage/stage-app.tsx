@@ -44,6 +44,7 @@ import { StageRenderer, spawnHitJuice } from "@/lib/midi-stage/renderer";
 import { nextStrum } from "@/lib/midi-stage/strum-guide";
 import { summarizeTiming } from "@/lib/midi-stage/timing-summary";
 import { practiceSections, practiceSong, type PracticeSection } from "@/lib/midi-stage/practice";
+import { recommendPractice } from "@/lib/midi-stage/practice-recommendation";
 import type {
   Callout,
   Difficulty,
@@ -666,6 +667,9 @@ export function StageApp() {
         timing: summarizeTiming(b.judges.get(player.id)?.stats.offsets ?? []),
       })),
       practice: b.practice ? { ...b.practice, pass: b.practicePass } : undefined,
+      recommendation: !b.demo && !b.practice
+        ? recommendPractice(practiceSections(b.fullSong), [...b.judges.values()].flatMap((judge) => judge.notes))
+        : null,
     };
     if (b.practice && b.repeatPractice && !b.demo) {
       setLastPracticeTake({ accuracy, score });
@@ -1200,6 +1204,16 @@ export function StageApp() {
     closeSongLibrary();
   }
 
+  function openRecommendedPractice() {
+    const recommended = results?.recommendation?.section;
+    if (!recommended || results?.demo || results?.practice || bag.current?.status !== "ready") return;
+    const section = passages.find((passage) => passage.id === recommended.id
+      && passage.start === recommended.start && passage.end === recommended.end);
+    if (!section) return;
+    resetReady();
+    setPracticeSelection({ songId: song.id, sectionId: section.id });
+  }
+
   async function readSongFile(file: File) {
     if (savingImport) return;
     const ticket = ++importTicket.current;
@@ -1648,6 +1662,7 @@ export function StageApp() {
                 onDemo={() => void startSession(true)}
                 onRestart={() => { resetReady(); void startSession(false); }}
                 onQuickStart={quickStart}
+                onPractice={openRecommendedPractice}
                 onBack={() => { resetReady(); if (practice) setPracticeSelection(null); }}
                 nextSongName={songs[(songs.findIndex((s) => s.id === song.id) + 1) % songs.length]!.name}
                 onNext={() => selectSong(songs[(songs.findIndex((s) => s.id === song.id) + 1) % songs.length]!)}
