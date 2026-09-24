@@ -1,5 +1,13 @@
 @import "tailwindcss";
 @import "tw-animate-css";
+@import "@fontsource/ibm-plex-sans/latin-400.css";
+@import "@fontsource/ibm-plex-sans/latin-500.css";
+@import "@fontsource/ibm-plex-sans/latin-600.css";
+@import "@fontsource/ibm-plex-mono/latin-500.css";
+@import "@fontsource/ibm-plex-mono/latin-600.css";
+@import "@fontsource/syne/latin-600.css";
+@import "@fontsource/syne/latin-700.css";
+@import "./components/stage/session-overlay.css";
 
 @theme {
   --font-display: "Syne", ui-sans-serif, system-ui, sans-serif;
@@ -189,6 +197,7 @@
   z-index: 2;
   border-color: #07060a;
   border-radius: 0 0 4px 4px;
+  transform: translateX(-50%);
 }
 .pkey.expected {
   background: #c4a882;
@@ -226,6 +235,13 @@
 }
 .pkey.live:active {
   transform: translateY(2px);
+}
+.pkey.black.live:active {
+  transform: translate(-50%, 2px);
+}
+.pkey.live:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -3px;
 }
 
 .pad {
@@ -511,3 +527,39 @@
     #120e12;
 }
 
+
+
+/* Player controls stay in reach above the highway. */
+.stage-transport { padding: 0.75rem 0; }
+.stage-focused .stage-layout { grid-template-columns: minmax(0, 1fr); }
+.stage-focused .stage-layout > aside { display: none; }
+.stage-focused .stage-viewport { min-height: 62dvh; }
+button:focus-visible, select:focus-visible, input:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 3px;
+}
+button:disabled { opacity: 0.5; }
+@media (max-width: 639px) {
+  .stage-transport { gap: 0.5rem; }
+  .stage-transport > .flex { gap: 0.25rem; }
+  .stage-transport button { padding-inline: 0.625rem; font-size: 0.75rem; }
+  .stage-shell header button { min-height: 44px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .stage-shell *, .stage-shell *::before, .stage-shell *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+@media (max-width: 1023px) {
+  .hud-personal-best { display: none; }
+}
+@media (max-width: 639px) {
+  .stage-hud { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; padding-inline: 12px; }
+  .stage-hud .hud-chip strong { font-size: 1rem; gap: 2px; }
+  .stage-hud .hud-chip span { font-size: 8px; letter-spacing: 0.05em; }
+  .stage-hud .hud-chip strong > small { display: none; }
+}

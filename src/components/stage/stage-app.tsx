@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent } from "react";
 import {
-  Eye,
   Lamp,
+  Maximize2,
+  Minimize2,
   Menu,
   Pause,
   Play,
@@ -12,6 +13,8 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { FeelPanel } from "@/components/stage/feel-panel";
+import { SessionOverlay, type SessionResults } from "@/components/stage/session-overlay";
+import { useStageMidi } from "@/components/stage/use-stage-midi";
 import { PianoGuide } from "@/components/stage/piano-guide";
 import { AudioEngine } from "@/lib/midi-stage/audio";
 import {
@@ -41,18 +44,6 @@ import type {
 } from "@/lib/midi-stage/types";
 import { cn } from "@/lib/utils";
 
-type MidiStatus = { connected: boolean; last: string };
-type Results = {
-  score: number;
-  accuracy: number;
-  perfect: number;
-  miss: number;
-  extra: number;
-  combo: number;
-  stars: number;
-  demo: boolean;
-};
-
 type Bag = {
   audio: AudioEngine;
   renderer: StageRenderer | null;
@@ -81,7 +72,6 @@ type Bag = {
   pressed: Map<string, number>;
   bloom: number;
   feel: Feel;
-  midiInputs: { onmidimessage: ((ev: MIDIMessageEvent) => void) | null }[];
   canvasPtrs: Map<number, { player: Player; lane: number; token: string }>;
   feelOpen: boolean;
   feelLane: number;
@@ -108,6 +98,11 @@ function bestKey(song: Song, difficulty: string, speed: number, players: Player[
 
 export function StageApp() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const startTicket = useRef(0);
+  const pendingRehearsal = useRef(false);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLElement>(null);
+  const [focusStage, setFocusStage] = useState(false);
   const bag = useRef<Bag | null>(null);
   const [ready, setReady] = useState(false);
   const [songId, setSongId] = useState("open-stage");
@@ -135,8 +130,7 @@ export function StageApp() {
     trauma: 0,
   });
   const [overlay, setOverlay] = useState(true);
-  const [results, setResults] = useState<Results | null>(null);
-  const [midi, setMidi] = useState<MidiStatus>({ connected: false, last: "Computer keys ready. MIDI is optional." });
+  const [results, setResults] = useState<SessionResults | null>(null);
   const [menu, setMenu] = useState(false);
   const [toast, setToast] = useState("");
   const [piano, setPiano] = useState({
@@ -159,6 +153,7 @@ export function StageApp() {
   const song = songs.find((s) => s.id === songId) || songs[0]!;
 
   const initBag = useCallback(() => {
+    startTicket.current++;
     const audio = bag.current?.audio || new AudioEngine();
     audio.stop();
     const b: Bag = {
@@ -189,8 +184,7 @@ export function StageApp() {
       pressed: new Map(),
       bloom: 0,
       feel: bag.current?.feel ?? feel,
-      midiInputs: bag.current?.midiInputs || [],
-      canvasPtrs: bag.current?.canvasPtrs || new Map(),
+      canvasPtrs: new Map(),
       feelOpen: bag.current?.feelOpen ?? false,
       feelLane: bag.current?.feelLane ?? 0,
     };
@@ -277,17 +271,17 @@ export function StageApp() {
     if (b.particles.length > 280) b.particles.splice(0, b.particles.length - 280);
   }
 
-  function hit(b: Bag, p: Player, lane: number, token: string, velocity = 105) {
+  function hit(b: Bag, p: Player, lane: number, token: string, velocity = 105, inputPitch?: number) {
     const judge = b.judges.get(p.id);
-    if (!judge || lane < 0 || lane >= judge.lanes.length) return;
-    const pitch = judge.lanes[lane]!.pitch;
+    if (!judge || lane < 0 || lane >= judge.lanes.length || b.status === "paused" || b.status === "starting" || b.feelOpen) return;
+    const pitch = inputPitch ?? judge.lanes[lane]!.pitch;
     const now = performance.now() / 1000;
     b.padFlash.set(`${p.id}:${lane}`, now + 0.16);
     b.pressed.set(`${p.id}:${lane}`, now + 0.18);
     b.flashes.push({ player: p.id, lane, until: now + 0.1, kind: "press" });
     const t = b.status === "playing" ? b.audio.songAt() : b.position;
     let matched = null;
-    if (b.status === "playing" && !b.demo) matched = judge.hit(t, lane, token);
+    if (b.status === "playing" && t >= -judge.windows[2]! && !b.demo) matched = judge.hit(t, lane, token, inputPitch);
     if (!b.demo) b.audio.monitor(token, p.type, pitch, velocity, matched ? matched.duration / b.speed : 1.4);
   }
 
@@ -304,7 +298,7 @@ export function StageApp() {
     if (!p) return;
     const judge = b.judges.get("keys");
     const lane = judge?.lanes.findIndex((l) => l.pc === ((midi % 12) + 12) % 12) ?? -1;
-    if (lane >= 0) hit(b, p, lane, `piano:${midi}`);
+    if (lane >= 0) hit(b, p, lane, `piano:${midi}`, 105, midi);
   }
 
   function releasePiano(midi: number) {
@@ -409,24 +403,10 @@ export function StageApp() {
 
   const startSession = useCallback(async (demo = false) => {
     const b = bag.current;
-    if (!b) return;
-    try {
-      if (b.status === "paused" && !demo) {
-        await b.audio.begin({
-          song: b.song,
-          players: b.players,
-          speed: b.speed,
-          seek: b.position,
-          countIn: false,
-          guide: b.guide,
-          demo: b.demo,
-          metronome: b.metronome,
-        });
-        b.status = "playing";
-        setStatus("playing");
-        setOverlay(false);
-        return;
-      }
+    if (!b || b.status === "playing" || b.status === "starting") return;
+    const ticket = ++startTicket.current;
+    const resuming = b.status === "paused" && !demo;
+    if (!resuming) {
       b.demo = demo;
       b.position = 0;
       b.particles = [];
@@ -435,26 +415,35 @@ export function StageApp() {
       b.energy = 0.4;
       b.bloom = 0;
       b.pressed.clear();
+      b.padFlash.clear();
+      b.canvasPtrs.clear();
       rebuild(b);
-      b.status = "starting";
-      setStatus("starting");
       setResults(null);
+    }
+    b.status = "starting";
+    setStatus("starting");
+    try {
       await b.audio.begin({
         song: b.song,
         players: b.players,
         speed: b.speed,
-        seek: 0,
-        countIn: true,
-        guide: b.guide || demo,
-        demo,
+        seek: resuming ? b.position : 0,
+        countIn: !resuming,
+        guide: b.guide || b.demo,
+        demo: b.demo,
         metronome: b.metronome,
       });
+      if (ticket !== startTicket.current || bag.current !== b || b.status !== "starting") return;
       b.status = "playing";
       setStatus("playing");
       setOverlay(false);
+      setMenu(false);
+      canvasRef.current?.focus({ preventScroll: true });
     } catch (e) {
-      b.status = "ready";
-      setStatus("ready");
+      if (ticket !== startTicket.current || bag.current !== b) return;
+      b.status = resuming ? "paused" : "ready";
+      setStatus(b.status);
+      setOverlay(true);
       setToast(e instanceof Error ? e.message : "Could not start the set.");
     }
   }, []);
@@ -466,10 +455,12 @@ export function StageApp() {
     b.status = "paused";
     b.audio.stop();
     setStatus("paused");
+    setOverlay(true);
     if (message) setToast(message);
   }, []);
 
   const resetReady = useCallback(() => {
+    startTicket.current++;
     const b = bag.current;
     if (!b) return;
     b.audio.stop();
@@ -477,6 +468,11 @@ export function StageApp() {
     b.demo = false;
     b.position = 0;
     b.particles = [];
+    b.callouts = [];
+    b.flashes = [];
+    b.pressed.clear();
+    b.padFlash.clear();
+    b.canvasPtrs.clear();
     rebuild(b);
     setStatus("ready");
     setOverlay(true);
@@ -489,6 +485,10 @@ export function StageApp() {
     setStatus("ready");
     let score = 0;
     let perfect = 0;
+    let great = 0;
+    let good = 0;
+    let holdBreaks = 0;
+    let holds = 0;
     let miss = 0;
     let extra = 0;
     let combo = 0;
@@ -498,6 +498,10 @@ export function StageApp() {
       const f = j.finish(b.song.duration + 1);
       score += f.score;
       perfect += f.perfect;
+      great += f.great;
+      good += f.good;
+      holdBreaks += f.holdBreaks;
+      holds += f.holds;
       miss += f.miss;
       extra += f.extra;
       combo = Math.max(combo, f.maxCombo);
@@ -505,9 +509,11 @@ export function StageApp() {
       n += f.perfect + f.great + f.good + f.miss + f.extra;
     }
     const accuracy = n ? (100 * weight) / n : 100;
+    const key = bestKey(b.song, b.difficulty, b.speed, b.players);
+    const previousBest = loadBest(key);
+    const newBest = !b.demo && score > previousBest;
     if (!b.demo) {
-      const key = bestKey(b.song, b.difficulty, b.speed, b.players);
-      if (score > loadBest(key)) {
+      if (newBest) {
         saveBest(key, score);
         setBest(score);
       }
@@ -516,23 +522,38 @@ export function StageApp() {
       score,
       accuracy,
       perfect,
+      great,
+      good,
+      holds,
+      holdBreaks,
+      previousBest,
+      newBest,
       miss,
       extra,
       combo,
       stars: stars(accuracy),
       demo: b.demo,
     });
+    b.position = b.song.duration;
     setOverlay(true);
   }
 
-  useEffect(() => {
+  // Commit session readiness before the animation loop can publish HUD updates.
+  useLayoutEffect(() => {
     initBag();
     setStatus("ready");
     setResults(null);
     setOverlay(true);
     setReady(true);
     setBest(loadBest(bestKey(song, difficulty, speed, players)));
-  }, [initBag, song, difficulty, speed, players]);
+    if (pendingRehearsal.current) {
+      pendingRehearsal.current = false;
+      // Configuration has just rebuilt the bag; apply the promised listening
+      // options before begin snapshots them into its scheduled audio events.
+      if (bag.current) { bag.current.guide = true; bag.current.metronome = true; }
+      void startSession(false);
+    }
+  }, [initBag, song, difficulty, speed, players, startSession]);
 
   // Listening controls belong to the live session. Rebuilding here would erase
   // scores and holds while the audio clock continued playing.
@@ -675,27 +696,28 @@ export function StageApp() {
           weight += j.stats.weight;
           n += j.stats.perfect + j.stats.great + j.stats.good + j.stats.miss + j.stats.extra;
         }
-        const section = [...b.song.sections].reverse().find((s) => s.time <= Math.max(0, t));
+        const sessionTime = b.status === "playing" ? t : b.position;
+        const section = [...b.song.sections].reverse().find((s) => s.time <= Math.max(0, sessionTime));
         const beat = 60 / b.song.bpm;
         let countdown = "";
         if (b.status === "playing" && t < 0) {
           const count = Math.ceil(-t / beat);
           countdown = String(Math.max(1, Math.min(4, count)));
         } else if (b.status === "paused") countdown = "PAUSED";
-        const harm = b.song.harmony?.filter((h) => h.time <= Math.max(0, t)).at(-1);
+        const harm = b.song.harmony?.filter((h) => h.time <= Math.max(0, sessionTime)).at(-1);
         setHud((prev) => ({
           score,
           combo,
           multiplier,
           accuracy: n ? (100 * weight) / n : 100,
           energy: Math.round(b.energy * 100),
-          elapsed: Math.max(0, t),
-          remaining: Math.max(0, b.song.duration - Math.max(0, t)),
-          section: b.demo ? "AUTOPLAY" : section?.name || (t < 0 ? "COUNT IN" : "HOUSE LIGHTS"),
+          elapsed: Math.min(b.song.duration, Math.max(0, sessionTime)),
+          remaining: Math.max(0, b.song.duration - Math.max(0, sessionTime)),
+          section: b.demo ? "AUTOPLAY" : sessionTime < 0 ? "COUNT IN" : b.status === "ready" && b.position === 0 ? "HOUSE LIGHTS" : section?.name || "HOUSE LIGHTS",
           countdown,
           chord: harm ? `${harm.roman}  ${harm.name}` : "",
-          gain: b.feel.floaters && score > prev.score ? score - prev.score : b.feel.floaters ? prev.gain : 0,
-          pop: score > prev.score ? prev.pop + 1 : prev.pop,
+          gain: b.feel.floaters && score > prev.score ? score - prev.score : b.feel.floaters && stamp - prev.pop < 700 ? prev.gain : 0,
+          pop: score > prev.score ? stamp : prev.pop,
           bloom: b.bloom,
           trauma: b.trauma,
         }));
@@ -747,7 +769,16 @@ export function StageApp() {
       const b = bag.current;
       if (!b) return;
       const el = e.target as HTMLElement;
-      if (el.tagName === "INPUT" || el.tagName === "SELECT" || el.tagName === "TEXTAREA") return;
+      if (e.code === "Escape") {
+        e.preventDefault();
+        if (feelOpen) setFeelOpen(false);
+        else if (menu) setMenu(false);
+        else if (b.status === "playing") pauseSession();
+        return;
+      }
+      if (e.ctrlKey || e.metaKey || e.altKey || el.isContentEditable || el.closest("input, select, textarea, [role=dialog]")) return;
+      if (feelOpen || menu) return;
+      if ((e.code === "Enter" || e.code === "Space") && el.closest("button, a")) return;
       if (e.repeat) return;
       if (e.code === "Enter") {
         e.preventDefault();
@@ -755,11 +786,7 @@ export function StageApp() {
         else void startSession(false);
         return;
       }
-      if (e.code === "Escape") {
-        if (b.status === "playing") pauseSession();
-        return;
-      }
-      if (e.code === "KeyR" && b.status !== "playing") {
+      if (e.code === "KeyR" && e.shiftKey && b.status !== "playing") {
         resetReady();
         return;
       }
@@ -784,7 +811,7 @@ export function StageApp() {
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("keyup", onUp);
     };
-  }, [pauseSession, startSession, resetReady]);
+  }, [pauseSession, startSession, resetReady, feelOpen, menu]);
 
   useEffect(() => {
     if (!toast) return;
@@ -792,58 +819,95 @@ export function StageApp() {
     return () => clearTimeout(id);
   }, [toast]);
 
-  async function connectMidi() {
-    const midiAccess = navigator.requestMIDIAccess;
-    if (!midiAccess) {
-      setToast("This browser has no Web MIDI. Use the computer keys.");
-      return;
-    }
-    try {
-      const access = await midiAccess.call(navigator, { sysex: false });
-      const inputs: { onmidimessage: ((ev: MIDIMessageEvent) => void) | null }[] = [];
-      const onMessage = (ev: MIDIMessageEvent) => {
-        const b = bag.current;
-        if (!b) return;
-        const data = ev.data;
-        if (!data || data.length < 2) return;
-        const status = data[0]!;
-        const type = status & 0xf0;
-        const note = data[1]!;
-        const vel = data[2] ?? 0;
-        const channel = (status & 0x0f) + 1;
-        if (type === 0x90 && vel) {
-          setMidi({ connected: true, last: `Note ${note} · ch ${channel} · vel ${vel}` });
-          for (const p of b.players.filter((p) => p.enabled)) {
-            const judge = b.judges.get(p.id);
-            if (!judge) continue;
-            const lane = p.type === "drums"
-              ? judge.lanes.findIndex((l) => l.notes?.includes(note))
-              : judge.lanes.findIndex((l) => l.pc === ((note % 12) + 12) % 12);
-            if (lane >= 0) hit(b, p, lane, `midi:${p.id}:${note}`, vel);
-          }
-        } else if (type === 0x80 || (type === 0x90 && !vel)) {
-          for (const p of b.players.filter((p) => p.enabled)) release(b, p, `midi:${p.id}:${note}`);
-        }
-      };
-      const wireInputs = () => {
-        access.inputs.forEach((input) => {
-          if (!inputs.includes(input)) {
-            input.onmidimessage = onMessage;
-            inputs.push(input);
-          }
-        });
-        if (bag.current) bag.current.midiInputs = inputs;
-        setMidi({
-          connected: inputs.length > 0,
-          last: inputs.length ? `${inputs.length} MIDI input${inputs.length === 1 ? "" : "s"} live.` : "MIDI on. No inputs yet.",
-        });
-      };
-      wireInputs();
-      // Pick up devices plugged in after connecting (hot-plug).
-      access.onstatechange = () => wireInputs();
-    } catch {
-      setToast("MIDI permission was denied. Computer keys still work.");
-    }
+  const midi = useStageMidi({
+    onNoteOn: (note, velocity, token) => {
+      const b = bag.current;
+      if (!b) return;
+      for (const p of b.players.filter((p) => p.enabled)) {
+        const judge = b.judges.get(p.id);
+        const lane = p.type === "drums"
+          ? judge?.lanes.findIndex((l) => l.notes?.includes(note)) ?? -1
+          : judge?.lanes.findIndex((l) => l.pc === ((note % 12) + 12) % 12) ?? -1;
+        if (lane >= 0) hit(b, p, lane, `${token}:${p.id}`, velocity, note);
+      }
+    },
+    onNoteOff: (token) => {
+      const b = bag.current;
+      if (b) for (const p of b.players.filter((p) => p.enabled)) release(b, p, `${token}:${p.id}`);
+    },
+    onDisconnect: () => pauseSession("MIDI disconnected. Reconnect your instrument or continue on keyboard."),
+  });
+
+  useEffect(() => { if (midi.error) setToast(midi.error); }, [midi.error]);
+
+  useEffect(() => {
+    const interrupt = () => {
+      const b = bag.current;
+      if (!b) return;
+      if (b.status === "starting") {
+        startTicket.current++;
+        b.audio.stop();
+        b.status = "paused";
+        setStatus("paused");
+        setOverlay(true);
+      } else pauseSession("Paused while you were away. Resume when ready.");
+      // Focus loss cannot deliver reliable key-up events. Release at the frozen
+      // song time so unattended notes never earn sustain bonuses on return.
+      for (const j of b.judges.values()) for (const token of [...j.held.keys()]) j.release(token, b.position);
+      for (const token of [...b.audio.monitorVoices.keys()]) b.audio.release(token);
+      b.canvasPtrs.clear();
+      b.pressed.clear();
+      b.sounding.clear();
+    };
+    const visibility = () => { if (document.hidden) interrupt(); };
+    window.addEventListener("blur", interrupt);
+    document.addEventListener("visibilitychange", visibility);
+    return () => {
+      window.removeEventListener("blur", interrupt);
+      document.removeEventListener("visibilitychange", visibility);
+      startTicket.current++;
+      bag.current?.audio.stop();
+    };
+  }, [pauseSession]);
+
+  useEffect(() => {
+    if (!feelOpen && !menu) return;
+    const panel = feelOpen ? panelRef.current : menuRef.current;
+    if (!panel) return;
+    const previous = document.activeElement as HTMLElement | null;
+    const focusable = () => [...panel.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), select:not(:disabled), [tabindex="0"]')].filter((el) => el.getClientRects().length);
+    focusable()[0]?.focus();
+    const trap = (e: KeyboardEvent) => {
+      if (e.key !== "Tab") return;
+      const items = focusable();
+      const first = items[0], last = items.at(-1);
+      if (e.shiftKey && (document.activeElement === first || !panel.contains(document.activeElement))) { e.preventDefault(); last?.focus(); }
+      else if (!e.shiftKey && (document.activeElement === last || !panel.contains(document.activeElement))) { e.preventDefault(); first?.focus(); }
+    };
+    document.addEventListener("keydown", trap);
+    return () => { document.removeEventListener("keydown", trap); previous?.focus({ preventScroll: true }); };
+  }, [feelOpen, menu]);
+
+  function openMenu() {
+    if (bag.current?.status === "starting") resetReady();
+    else pauseSession();
+    setFocusStage(false);
+    setMenu(true);
+  }
+
+  function quickStart() {
+    resetReady();
+    pendingRehearsal.current = true;
+    // Unlock audio in this click before the configured session renders.
+    void bag.current?.audio.init().catch(() => {});
+    setSongId("first-rehearsal");
+    setPlayers(defaultPlayers());
+    setDifficulty("chill");
+    setSpeed(0.75);
+    setGuide(true);
+    setMetronome(true);
+    setMenu(false);
+    setToast("First Rehearsal: solo keys, Chill, 75% tempo. Follow the guide and the click.");
   }
 
   function togglePlayer(id: Instrument) {
@@ -859,17 +923,17 @@ export function StageApp() {
   const busy = status === "playing" || status === "starting";
 
   return (
-    <div className="stage-shell flex min-h-dvh flex-col">
+    <div className={cn("stage-shell flex min-h-dvh flex-col", focusStage && "stage-focused")}>
       <header className="relative z-20 flex items-center justify-between gap-2 px-3 py-3 sm:gap-3 sm:px-4 md:px-6">
         <div className="flex items-center gap-3">
           <span className="eq-bars" aria-hidden="true">
             <i /><i /><i /><i />
           </span>
           <div>
-            <div className="font-display text-[1.35rem] font-semibold tracking-[-0.04em] leading-none">
+            <div className="font-display whitespace-nowrap text-lg sm:text-[1.35rem] font-semibold tracking-[-0.04em] leading-none">
               MIDI <span className="text-accent">/</span> STAGE
             </div>
-            <div className="mt-1 text-[10px] font-medium tracking-[0.18em] text-muted">REAL INSTRUMENTS. REAL PLAY.</div>
+            <div className="mt-1 hidden sm:block text-[10px] font-medium tracking-[0.18em] text-muted">REAL INSTRUMENTS. REAL PLAY.</div>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -877,26 +941,28 @@ export function StageApp() {
             <span className={cn("size-1.5 rounded-full", midi.connected ? "bg-accent" : "bg-tungsten")} />
             LOCAL SET
           </span>
-          <Button size="sm" variant="ghost" onClick={() => { setFeelTap(true); setFeelOpen(true); }}>
+          <Button size="sm" variant="ghost" aria-label="The room" onClick={() => { if (bag.current?.status === "starting") resetReady(); else pauseSession(); setFeelTap(true); setFeelOpen(true); }}>
             <Lamp className="size-3.5" />
             <span className="hidden sm:inline">The room</span>
           </Button>
-          <Button size="sm" variant="primary" onClick={() => void connectMidi()}>
+          <Button size="sm" variant="primary" onClick={() => void midi.connect()} disabled={midi.connecting} aria-label={midi.connecting ? "Connecting MIDI" : midi.connected ? "MIDI connected" : "Connect MIDI"}>
             <Radio className="size-3.5" />
-            Connect MIDI
+            <span className="hidden sm:inline">{midi.connecting ? "Connecting…" : midi.connected ? "MIDI connected" : "Connect MIDI"}</span><span className="sm:hidden">MIDI</span>
           </Button>
-          <Button size="icon" variant="ghost" className="lg:hidden size-11" aria-label="Open setlist" onClick={() => setMenu(true)}>
+          <Button size="icon" variant="ghost" className="lg:hidden size-11" aria-label="Open setlist" onClick={openMenu}>
             <Menu className="size-5" />
           </Button>
         </div>
       </header>
 
-      <div className="relative z-10 grid flex-1 grid-cols-1 lg:grid-cols-[240px_minmax(0,1fr)]">
+      <div className={cn("stage-layout relative grid flex-1 grid-cols-1 lg:grid-cols-[240px_minmax(0,1fr)]", menu ? "z-30" : "z-10")}>
         <aside
+          ref={menuRef}
+          aria-label="Setlist and lineup"
           className={cn(
             "z-30 flex flex-col gap-5 border-border bg-bg/95 p-4 lg:static lg:border-r lg:bg-transparent",
             "max-lg:fixed max-lg:inset-y-0 max-lg:left-0 max-lg:w-[min(320px,88vw)] max-lg:overflow-y-auto max-lg:shadow-[0_0_0_1px_rgba(239,232,220,0.08)]",
-            menu ? "max-lg:translate-x-0" : "max-lg:-translate-x-full",
+            menu ? "max-lg:translate-x-0" : "max-lg:-translate-x-full max-lg:invisible",
             "transition-transform duration-[250ms] ease-[cubic-bezier(0.22,1,0.36,1)]",
           )}
         >
@@ -929,6 +995,7 @@ export function StageApp() {
                   key={s.id}
                   type="button"
                   aria-pressed={s.id === song.id}
+                  disabled={busy}
                   onClick={() => {
                     setSongId(s.id);
                     setMenu(false);
@@ -962,6 +1029,7 @@ export function StageApp() {
                   key={p.id}
                   type="button"
                   aria-pressed={p.enabled}
+                  disabled={busy}
                   onClick={() => togglePlayer(p.id)}
                   className={cn(
                     "flex h-11 items-center justify-between rounded-xl px-3 text-[12px] font-medium shadow-[0_0_0_1px_rgba(239,232,220,0.1)]",
@@ -986,6 +1054,8 @@ export function StageApp() {
           <button
             type="button"
             onClick={() => {
+              if (bag.current?.status === "starting") resetReady();
+              else pauseSession();
               setFeelTap(true);
               setFeelOpen(true);
               setMenu(false);
@@ -1023,9 +1093,9 @@ export function StageApp() {
             </div>
             <div className="flex items-baseline gap-4 text-muted">
               <strong className="font-mono text-lg text-fg tabular-nums">
-                {song.bpm} <span className="text-[10px] tracking-[0.14em] text-muted">BPM</span>
+                {Math.round(song.bpm * speed)} <span className="text-[10px] tracking-[0.14em] text-muted">BPM</span>
               </strong>
-              <span className="font-mono text-sm tabular-nums">{formatTime(Math.ceil(song.duration))}</span>
+              <span className="font-mono text-sm tabular-nums">{formatTime(Math.ceil(song.duration / speed))}</span>
               <span className="hidden rounded-full px-2 py-1 text-[9px] tracking-[0.14em] text-accent shadow-[0_0_0_1px_rgba(143,212,196,0.3)] sm:inline">
                 NO-FAIL PRACTICE
               </span>
@@ -1033,7 +1103,34 @@ export function StageApp() {
           </div>
           <p className="mb-3 max-w-[70ch] text-[13px] text-pretty text-muted">{song.arrangementDescription}</p>
 
-          <div className="grid grid-cols-2 gap-3 rounded-t-2xl bg-surface px-4 py-3 shadow-[0_0_0_1px_rgba(239,232,220,0.08)] sm:grid-cols-4 lg:grid-cols-5">
+          <div className="stage-transport flex flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-wrap gap-2">
+              <Button onClick={() => void startSession(false)} disabled={!ready || busy}>
+                {status === "paused" ? (
+                  <>
+                    <Play className="size-4 translate-x-px" /> Resume
+                  </>
+                ) : (
+                  <>
+                    <Play className="size-4 translate-x-px" /> {status === "starting" ? "Starting…" : "Start set"}
+                  </>
+                )}
+              </Button>
+              <Button variant="secondary" onClick={() => pauseSession()} disabled={status !== "playing"}>
+                <Pause className="size-4" /> Pause
+              </Button>
+              <Button variant="ghost" size="icon" aria-label="Restart" onClick={resetReady}>
+                <RotateCcw className="size-4" />
+              </Button>
+            </div>
+            <Button variant="ghost" aria-pressed={focusStage} onClick={() => { if (focusStage && window.innerWidth < 1024) openMenu(); else setFocusStage((v) => !v); }}>
+              {focusStage ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
+              {focusStage ? "Show setlist" : "Focus stage"}
+            </Button>
+          </div>
+
+
+          <div className="stage-hud grid grid-cols-2 gap-3 rounded-t-2xl bg-surface px-4 py-3 shadow-[0_0_0_1px_rgba(239,232,220,0.08)] sm:grid-cols-4 lg:grid-cols-5">
             <div className={cn("hud-chip accent", hud.gain > 0 && "pop")}>
               <span>SCORE</span>
               <strong key={hud.pop}>
@@ -1061,7 +1158,7 @@ export function StageApp() {
                 <small className="text-[10px] text-subtle">%</small>
               </strong>
             </div>
-            <div className="hud-chip hidden lg:flex">
+            <div className="hud-chip hud-personal-best hidden lg:flex">
               <span>PERSONAL BEST</span>
               <strong className="text-muted">{best ? best.toLocaleString() : "—"}</strong>
             </div>
@@ -1077,7 +1174,7 @@ export function StageApp() {
             <span className="text-tungsten">{hud.section}</span>
           </div>
 
-          <div className="relative isolate min-h-[420px] flex-1 overflow-hidden rounded-b-2xl bg-[#07060a] shadow-[0_0_0_1px_rgba(239,232,220,0.08)] md:min-h-[520px]">
+          <div className="stage-viewport relative isolate min-h-[420px] flex-1 overflow-hidden rounded-b-2xl bg-[#07060a] shadow-[0_0_0_1px_rgba(239,232,220,0.08)] md:min-h-[520px]">
             <canvas
               ref={canvasRef}
               className="stage-canvas absolute inset-0 size-full"
@@ -1085,6 +1182,8 @@ export function StageApp() {
               onPointerDown={onCanvasPointerDown}
               onPointerUp={onCanvasPointerUp}
               onPointerCancel={onCanvasPointerUp}
+              onLostPointerCapture={onCanvasPointerUp}
+              tabIndex={-1}
               onPointerMove={onCanvasPointerMove}
             />
             {hud.countdown && status !== "ready" ? (
@@ -1097,56 +1196,24 @@ export function StageApp() {
             ) : null}
 
             {overlay && status !== "playing" && !feelOpen ? (
-              <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-[radial-gradient(ellipse_at_50%_48%,rgba(7,6,10,0.58),rgba(7,6,10,0.16)_62%,transparent)] px-6 text-center">
-                {results ? (
-                  <div className="overlay-enter max-w-md">
-                    <div className="text-[10px] tracking-[0.22em] text-muted">
-                      {results.demo ? "AUTOPLAY · NOT SAVED" : "SET COMPLETE"}
-                    </div>
-                    <div className="mt-2 font-display text-4xl font-semibold tracking-[-0.04em] md:text-5xl">
-                      {results.demo ? "Now make it yours." : results.accuracy >= 90 ? "You found the pocket." : "The house is warming up."}
-                    </div>
-                    <div className="mt-3 font-mono text-5xl font-semibold tabular-nums text-accent">{results.score.toLocaleString()}</div>
-                    <div className="mt-2 text-tungsten tracking-[0.2em]" aria-label={`${results.stars} of 5 stars`}>
-                      {"●".repeat(results.stars)}
-                      {"○".repeat(5 - results.stars)}
-                    </div>
-                    <p className="mt-3 text-[13px] text-muted">
-                      {Math.round(results.accuracy)}% accuracy · {results.perfect} perfect · {results.miss} missed · streak {results.combo}
-                    </p>
-                    <div className="mt-5 flex flex-wrap justify-center gap-2">
-                      <Button onClick={() => void startSession(false)} disabled={!ready || busy}>
-                        <Play className="size-4 translate-x-px" />
-                        Play again
-                      </Button>
-                      <Button variant="secondary" onClick={() => setResults(null)}>
-                        Back to house
-                      </Button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="overlay-enter max-w-md">
-                    <div className="text-[10px] tracking-[0.22em] text-muted">YOUR NEXT SESSION</div>
-                    <h3 className="mt-3 font-display text-5xl font-semibold tracking-[-0.05em] md:text-6xl">Take the stage.</h3>
-                    <p className="mt-4 max-w-[36ch] text-base leading-relaxed text-muted text-pretty md:text-lg">
-                      Gems roll toward the hot line. Hit the matching keys as they cross — or tap the strike line, pads, or piano.
-                      {song.harmony ? " Chords light the piano. Play the glowing keys together." : ""}
-                    </p>
-                    <div className="mt-5 flex flex-wrap justify-center gap-2">
-                      <Button onClick={() => void startSession(false)} disabled={!ready || busy}>
-                        <Play className="size-4 translate-x-px" />
-                        Start set
-                        <kbd className="ml-1 rounded-md bg-accent-fg/10 px-1.5 py-0.5 font-mono text-[10px]">ENTER</kbd>
-                      </Button>
-                      <Button variant="secondary" onClick={() => void startSession(true)} disabled={!ready || busy}>
-                        <Eye className="size-4" />
-                        Watch the house
-                      </Button>
-                    </div>
-                    <p className="mt-3 text-[11px] text-subtle">Solo by default. Add your band from the green room.</p>
-                  </div>
-                )}
-              </div>
+              <SessionOverlay
+                mode={results ? "results" : status === "paused" ? "paused" : "ready"}
+                songName={song.name}
+                busy={!ready || busy}
+                demo={bag.current?.demo ?? false}
+                results={results}
+                controls={enabled.map((p) => ({ label: p.label, keys: (bag.current?.judges.get(p.id)?.lanes || []).map((lane, i) => `${keyLabel(KEYS[p.id][i] || "")} · ${lane.short}`) }))}
+                onStart={() => void startSession(false)}
+                onDemo={() => void startSession(true)}
+                onRestart={() => { resetReady(); void startSession(false); }}
+                onQuickStart={quickStart}
+                onBack={resetReady}
+                nextSongName={songs[(songs.findIndex((s) => s.id === song.id) + 1) % songs.length]!.name}
+                onNext={() => {
+                  resetReady();
+                  setSongId(songs[(songs.findIndex((s) => s.id === song.id) + 1) % songs.length]!.id);
+                }}
+              />
             ) : null}
 
             <div className="pointer-events-none absolute inset-x-3 top-3 flex justify-between text-[9px] font-semibold tracking-[0.16em] text-muted">
@@ -1159,10 +1226,10 @@ export function StageApp() {
             </div>
           </div>
 
-          {song.harmony ? (
+          {song.harmony && enabled.some((p) => p.id === "keys") ? (
             <div className="mt-2 rounded-xl bg-surface px-3 py-2 shadow-[0_0_0_1px_rgba(239,232,220,0.08)]">
-              <div className="mb-2 flex items-center justify-between text-[10px] tracking-[0.14em] text-muted">
-                <span>TUNGSTEN: TARGET · SEA-GLASS: SOUNDING · ROSE: WRONG · TAP THE KEYS</span>
+              <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-[10px] tracking-[0.14em] text-muted">
+                <span>GOLD: TARGET · GREEN: HIT · ROSE: MISS · TAP TO PLAY</span>
                 <span className="font-mono text-accent">{hud.chord || "—"}</span>
               </div>
               <PianoGuide
@@ -1178,39 +1245,14 @@ export function StageApp() {
           ) : null}
 
           <div className="mt-3">
-            <div className="h-1 overflow-hidden rounded-full bg-elevated">
+            <div className="h-1 overflow-hidden rounded-full bg-elevated" role="progressbar" aria-label="Song progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(100 * hud.elapsed / song.duration)}>
               <div className="h-full bg-accent" style={{ width: `${song.duration ? (hud.elapsed / song.duration) * 100 : 0}%` }} />
             </div>
             <div className="mt-1 flex justify-between font-mono text-[10px] tabular-nums text-muted">
-              <span>{formatTime(hud.elapsed)}</span>
+              <span aria-label="Elapsed time">{formatTime(hud.elapsed / speed)}</span>
               <span>{status === "ready" ? "Ready when you are." : status === "paused" ? "Paused." : bag.current?.demo ? "Watching." : "Make it yours."}</span>
-              <span>{formatTime(hud.remaining)}</span>
+              <span aria-label="Remaining time">{formatTime(hud.remaining / speed)}</span>
             </div>
-          </div>
-
-          <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-            <div className="flex flex-wrap gap-2">
-              <Button onClick={() => void startSession(false)} disabled={!ready || busy}>
-                {status === "paused" ? (
-                  <>
-                    <Play className="size-4 translate-x-px" /> Resume
-                  </>
-                ) : (
-                  <>
-                    <Play className="size-4 translate-x-px" /> Start set
-                  </>
-                )}
-              </Button>
-              <Button variant="secondary" onClick={() => pauseSession()} disabled={status !== "playing"}>
-                <Pause className="size-4" /> Pause
-              </Button>
-              <Button variant="ghost" size="icon" aria-label="Restart" onClick={resetReady}>
-                <RotateCcw className="size-4" />
-              </Button>
-            </div>
-            <Button variant="ghost" onClick={() => void startSession(true)} disabled={!ready || busy}>
-              <Eye className="size-4" /> Watch the house
-            </Button>
           </div>
 
           <div className="mt-4 flex flex-wrap items-end gap-4">
@@ -1276,6 +1318,7 @@ export function StageApp() {
                     {lanes.map((lane, i) => (
                       <button
                         key={lane.short + i}
+                        aria-label={`${p.label} ${lane.name}, ${keyLabel(KEYS[p.id][i] || "")} key`}
                         type="button"
                         className={cn(
                           "pad",
@@ -1290,10 +1333,30 @@ export function StageApp() {
                         onPointerDown={(e) => {
                           e.preventDefault();
                           (e.currentTarget as HTMLButtonElement).setPointerCapture?.(e.pointerId);
-                          if (bag.current) hit(bag.current, p, i, `touch:${p.id}:${i}`);
+                          if (bag.current) hit(bag.current, p, i, `touch:${p.id}:${i}:${e.pointerId}`);
                         }}
-                        onPointerUp={() => bag.current && release(bag.current, p, `touch:${p.id}:${i}`)}
-                        onPointerCancel={() => bag.current && release(bag.current, p, `touch:${p.id}:${i}`)}
+                        onPointerUp={(e) => bag.current && release(bag.current, p, `touch:${p.id}:${i}:${e.pointerId}`)}
+                        onPointerCancel={(e) => bag.current && release(bag.current, p, `touch:${p.id}:${i}:${e.pointerId}`)}
+                        onLostPointerCapture={(e) => bag.current && release(bag.current, p, `touch:${p.id}:${i}:${e.pointerId}`)}
+                        onKeyDown={(e) => {
+                          if (e.key !== "Enter" && e.key !== " ") return;
+                          e.preventDefault();
+                          e.stopPropagation();
+                          if (!e.repeat && bag.current) hit(bag.current, p, i, `pad-key:${p.id}:${i}`);
+                        }}
+                        onKeyUp={(e) => {
+                          if (e.key !== "Enter" && e.key !== " ") return;
+                          e.preventDefault();
+                          e.stopPropagation();
+                          if (bag.current) release(bag.current, p, `pad-key:${p.id}:${i}`);
+                        }}
+                        onBlur={() => { if (bag.current) release(bag.current, p, `pad-key:${p.id}:${i}`); }}
+                        onClick={(e) => {
+                          if (e.detail === 0 && bag.current) {
+                            hit(bag.current, p, i, `pad-click:${p.id}:${i}`);
+                            release(bag.current, p, `pad-click:${p.id}:${i}`);
+                          }
+                        }}
                       >
                         <span>{lane.short}</span>
                         <kbd>{keyLabel(KEYS[p.id][i] || "")}</kbd>
@@ -1305,7 +1368,7 @@ export function StageApp() {
             })}
           </div>
           <p className="mt-3 text-[11px] text-subtle">
-            <kbd className="rounded bg-elevated px-1">ENTER</kbd> start / pause · <kbd className="rounded bg-elevated px-1">R</kbd> restart · Tap the strike line, pads, or piano. Hold melodic notes through their tails.
+            <kbd className="rounded bg-elevated px-1">ENTER</kbd> start / pause · <kbd className="rounded bg-elevated px-1">SHIFT + R</kbd> restart while paused · Tap the strike line, pads, or piano. Hold melodic notes through their tails.
           </p>
         </section>
       </div>
@@ -1319,6 +1382,7 @@ export function StageApp() {
             onClick={() => setFeelOpen(false)}
           />
           <div
+            ref={panelRef}
             role="dialog"
             aria-modal="true"
             aria-labelledby="room-title"
@@ -1348,7 +1412,7 @@ export function StageApp() {
       ) : null}
 
       {toast ? (
-        <div className="fixed bottom-5 left-1/2 z-50 max-w-[min(640px,90vw)] -translate-x-1/2 rounded-xl bg-elevated px-4 py-3 text-[13px] text-fg shadow-[0_0_0_1px_rgba(143,212,196,0.35)]">
+        <div role="status" aria-live="polite" className="fixed bottom-5 left-1/2 z-50 max-w-[min(640px,90vw)] -translate-x-1/2 rounded-xl bg-elevated px-4 py-3 text-[13px] text-fg shadow-[0_0_0_1px_rgba(143,212,196,0.35)]">
           {toast}
         </div>
       ) : null}
