@@ -86,6 +86,7 @@ describe("session preferences", () => {
       speed: 0.75,
       guide: true,
       metronome: true,
+      strumGuide: true,
       volume: 0,
       focusStage: true,
     };
@@ -106,5 +107,11 @@ describe("session preferences", () => {
     assert.equal(saveSessionPreferences(DEFAULT_SESSION_PREFERENCES, null), false);
     assert.deepEqual(loadSessionPreferences(songIds), DEFAULT_SESSION_PREFERENCES);
     assert.equal(saveSessionPreferences(DEFAULT_SESSION_PREFERENCES), false);
+  });
+
+  it("defaults old records to no strum guide and accepts only a boolean choice", () => {
+    assert.equal(parse({}).strumGuide, false);
+    assert.equal(parse({ strumGuide: "true" }).strumGuide, false);
+    assert.equal(parse({ strumGuide: true }).strumGuide, true);
   });
 });

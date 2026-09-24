@@ -16,6 +16,7 @@ export type SessionResults = {
   holds: number;
   previousBest: number;
   newBest: boolean;
+  bestSaved: boolean;
   demo: boolean;
 };
 
@@ -119,15 +120,18 @@ export function SessionOverlay({
             <h2 ref={resultsHeadingRef} id="session-heading" tabIndex={-1} aria-describedby="session-result-summary">
               {results.demo
                 ? "Now make it yours."
-                : results.newBest
-                  ? "Your best set yet."
-                  : results.accuracy >= 90
-                    ? "You found the pocket."
-                    : "One set further."}
+                : results.newBest && !results.bestSaved
+                  ? "Your set is complete."
+                  : results.newBest
+                    ? "Your best set yet."
+                    : results.accuracy >= 90
+                      ? "You found the pocket."
+                      : "One set further."}
             </h2>
             <p id="session-result-summary" className="sr-only">
               {songName}. {results.demo ? "Autoplay score" : "Your score"} {results.score.toLocaleString()}.
               {" "}Accuracy {Math.round(results.accuracy)} percent.
+              {results.newBest && !results.bestSaved ? " Could not save your personal best on this device. Your score is still shown here." : ""}
             </p>
             <p className="session-song">{songName}</p>
 
@@ -152,6 +156,13 @@ export function SessionOverlay({
               </div>
               {results.demo ? (
                 <span className="session-save-note">AUTOPLAY · NOT SAVED</span>
+              ) : results.newBest && !results.bestSaved ? (
+                <>
+                  <span className="session-save-note">Score not saved</span>
+                  <span className="session-save-note">
+                    Could not save your personal best on this device. Your score is still shown here.
+                  </span>
+                </>
               ) : results.newBest ? (
                 <span className="session-personal-best">
                   <Trophy size={14} aria-hidden="true" /> New personal best
