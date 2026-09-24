@@ -16,6 +16,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { FeelPanel } from "@/components/stage/feel-panel";
 import { SessionOverlay, type SessionResults } from "@/components/stage/session-overlay";
+import { PracticeControls } from "@/components/stage/practice-controls";
 import { loadAudioAsset, saveAudioAsset, deleteAudioAsset } from "@/lib/midi-stage/audio-assets";
 import type { AudioImportProgress } from "@/lib/midi-stage/audio-import";
 import { SongLibraryPanel } from "@/components/stage/song-library-panel";
@@ -42,6 +43,7 @@ import { catalog } from "@/lib/midi-stage/songs";
 import { StageRenderer, spawnHitJuice } from "@/lib/midi-stage/renderer";
 import { nextStrum } from "@/lib/midi-stage/strum-guide";
 import { summarizeTiming } from "@/lib/midi-stage/timing-summary";
+import { practiceSections, practiceSong, type PracticeSection } from "@/lib/midi-stage/practice";
 import type {
   Callout,
   Difficulty,
@@ -59,12 +61,16 @@ type Bag = {
   audio: AudioEngine;
   renderer: StageRenderer | null;
   song: Song;
+  fullSong: Song;
   players: Player[];
   judges: Map<Instrument, Judge>;
   status: Status;
   demo: boolean;
   speed: number;
   difficulty: Difficulty;
+  practice: PracticeSection | null;
+  practicePass: number;
+  repeatPractice: boolean;
   volume: number;
   guide: boolean;
   strumGuide: boolean;
@@ -155,6 +161,10 @@ export function StageApp() {
   const [status, setStatus] = useState<Status>("ready");
   const [difficulty, setDifficulty] = useState<Difficulty>("standard");
   const [speed, setSpeed] = useState(1);
+  const [practiceSelection, setPracticeSelection] = useState<{ songId: string; sectionId: string } | null>(null);
+  const [repeatPractice, setRepeatPractice] = useState(true);
+  const [practicePass, setPracticePass] = useState(1);
+  const [lastPracticeTake, setLastPracticeTake] = useState<{ accuracy: number; score: number } | null>(null);
   const [guide, setGuide] = useState(false);
   const [strumGuide, setStrumGuide] = useState(false);
   const [metronome, setMetronome] = useState(false);
@@ -202,6 +212,11 @@ export function StageApp() {
   // Editing a different saved song must not rebuild a paused take.
   const song = useMemo(() => builtInSongs.find((entry) => entry.id === songId)
     ?? (importedSelection ? songFromSavedChart(importedSelection) : builtInSongs[0]!), [builtInSongs, songId, importedSelection]);
+  const passages = useMemo(() => practiceSections(song), [song]);
+  const practice = practiceSelection?.songId === song.id
+    ? passages.find((section) => section.id === practiceSelection.sectionId) ?? null
+    : null;
+  const stageSong = useMemo(() => practice ? practiceSong(song, practice) : song, [song, practice]);
 
   const initBag = useCallback(() => {
     startTicket.current++;
@@ -211,13 +226,17 @@ export function StageApp() {
     const b: Bag = {
       audio,
       renderer: bag.current?.renderer || null,
-      song,
+      song: stageSong,
+      fullSong: song,
       players: players.map((p) => ({ ...p })),
       judges: new Map(),
       status: "ready",
       demo: false,
       speed,
       difficulty,
+      practice,
+      practicePass: 1,
+      repeatPractice: true,
       volume: audio.volume,
       guide: bag.current?.guide ?? false,
       strumGuide: bag.current?.strumGuide ?? false,
@@ -243,12 +262,19 @@ export function StageApp() {
     };
     bag.current = b;
     rebuild(b);
-  }, [song, players, speed, difficulty]);
+  }, [song, stageSong, practice, players, speed, difficulty]);
 
   function rebuild(b: Bag) {
     b.judges.clear();
     for (const p of b.players.filter((p) => p.enabled)) {
-      const chart = makeChart(b.song, p);
+      // Keep the full song's lanes/keyboard mapping while narrowing targets.
+      const chart = b.practice
+        ? makeChart(b.fullSong, p, b.practice.start, b.practice.end)
+        : makeChart(b.song, p);
+      if (b.practice) {
+        const start = b.practice.start;
+        chart.notes = chart.notes.map((note) => ({ ...note, time: note.time - start }));
+      }
       b.judges.set(
         p.id,
         new Judge(chart, {
@@ -474,14 +500,25 @@ export function StageApp() {
     return decoded;
   }
 
-  const startSession = useCallback(async (demo = false) => {
+  const startSession = useCallback(async (demo = false, repeating = false) => {
     const b = bag.current;
     if (!b || b.libraryOpen || b.status === "playing" || b.status === "starting") return;
+    if (b.practice && ![...b.judges.values()].some((judge) => judge.notes.length > 0)) {
+      setToast("This passage has no notes for your lineup. Choose another passage or instrument.");
+      return;
+    }
     const ticket = ++startTicket.current;
     const resuming = b.status === "paused" && !demo;
     if (!resuming) {
+      if (!repeating) {
+        b.practicePass = 1;
+        setPracticePass(1);
+        setLastPracticeTake(null);
+      }
       b.demo = demo;
-      b.position = 0;
+      // If audio setup is interrupted before a practice take starts, Resume
+      // still owes the player its count-in rather than jumping to the notes.
+      b.position = b.practice ? -(4 * 60 / b.song.bpm) : 0;
       b.particles = [];
       b.callouts = [];
       b.flashes = [];
@@ -490,6 +527,9 @@ export function StageApp() {
       b.pressed.clear();
       b.padFlash.clear();
       b.canvasPtrs.clear();
+      b.sounding.clear();
+      b.wrong.clear();
+      midiOwners.current.clear();
       rebuild(b);
       setResults(null);
     }
@@ -520,7 +560,7 @@ export function StageApp() {
       setOverlay(false);
       setSoundcheckOpen(false);
       setMenu(false);
-      canvasRef.current?.focus({ preventScroll: true });
+      if (!repeating) canvasRef.current?.focus({ preventScroll: true });
     } catch (e) {
       if (ticket !== startTicket.current || bag.current !== b) return;
       b.status = resuming ? "paused" : "ready";
@@ -548,6 +588,7 @@ export function StageApp() {
     b.audio.stop();
     b.status = "ready";
     b.demo = false;
+    b.practicePass = 1;
     b.position = 0;
     b.particles = [];
     b.callouts = [];
@@ -555,13 +596,18 @@ export function StageApp() {
     b.pressed.clear();
     b.padFlash.clear();
     b.canvasPtrs.clear();
+    b.sounding.clear();
+    b.wrong.clear();
+    midiOwners.current.clear();
     rebuild(b);
     setStatus("ready");
     setOverlay(true);
     setResults(null);
+    setPracticePass(1);
+    setLastPracticeTake(null);
   }, []);
 
-  function finish(b: Bag) {
+  const finish = useCallback((b: Bag) => {
     b.audio.stop();
     b.status = "ready";
     setStatus("ready");
@@ -592,11 +638,11 @@ export function StageApp() {
     }
     const accuracy = n ? (100 * weight) / n : 100;
     const key = bestKey(b.song, b.difficulty, b.speed, b.players);
-    const previousBest = loadBest(key);
-    const newBest = !b.demo && score > previousBest;
+    const previousBest = b.practice ? 0 : loadBest(key);
+    const newBest = !b.demo && !b.practice && score > previousBest;
     const bestSaved = !newBest || saveBest(key, score);
     if (newBest && bestSaved) setBest(score);
-    setResults({
+    const completed: SessionResults = {
       score,
       accuracy,
       perfect,
@@ -619,10 +665,19 @@ export function StageApp() {
         label: player.label,
         timing: summarizeTiming(b.judges.get(player.id)?.stats.offsets ?? []),
       })),
-    });
+      practice: b.practice ? { ...b.practice, pass: b.practicePass } : undefined,
+    };
+    if (b.practice && b.repeatPractice && !b.demo) {
+      setLastPracticeTake({ accuracy, score });
+      b.practicePass++;
+      setPracticePass(b.practicePass);
+      void startSession(false, true);
+      return;
+    }
+    setResults(completed);
     b.position = b.song.duration;
     setOverlay(true);
-  }
+  }, [startSession]);
 
   // Restore after hydration; never write the server-rendered defaults over a saved setup.
   useLayoutEffect(() => {
@@ -661,7 +716,9 @@ export function StageApp() {
     setResults(null);
     setOverlay(true);
     setReady(preferencesHydrated);
-    setBest(loadBest(bestKey(song, difficulty, speed, players)));
+    setBest(practice ? 0 : loadBest(bestKey(song, difficulty, speed, players)));
+    setPracticePass(1);
+    setLastPracticeTake(null);
     if (pendingRehearsal.current) {
       pendingRehearsal.current = false;
       // Configuration has just rebuilt the bag; apply the promised listening
@@ -669,7 +726,11 @@ export function StageApp() {
       if (bag.current) { bag.current.guide = true; bag.current.metronome = true; }
       void startSession(false);
     }
-  }, [initBag, song, difficulty, speed, players, startSession, preferencesHydrated]);
+  }, [initBag, song, practice, difficulty, speed, players, startSession, preferencesHydrated]);
+
+  useLayoutEffect(() => {
+    if (bag.current) bag.current.repeatPractice = repeatPractice;
+  }, [repeatPractice, initBag]);
 
   // Listening controls belong to the live session. Rebuilding here would erase
   // scores and holds while the audio clock continued playing.
@@ -754,7 +815,10 @@ export function StageApp() {
             if (b.demo) j.advanceDemo(t, p.id);
             j.tick(t);
           }
-          if (t >= b.song.duration + 0.35 * b.speed) finish(b);
+          if (t >= b.song.duration + 0.35 * b.speed) {
+            finish(b);
+            t = b.position;
+          }
         }
       }
       b.trauma = Math.max(0, b.trauma - dt * 3.2);
@@ -898,7 +962,7 @@ export function StageApp() {
       cancelAnimationFrame(raf);
       ro.disconnect();
     };
-  }, [pauseSession]);
+  }, [finish, pauseSession]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -1075,6 +1139,7 @@ export function StageApp() {
 
   function quickStart() {
     resetReady();
+    setPracticeSelection(null);
     pendingRehearsal.current = true;
     // Unlock audio in this click before the configured session renders.
     void bag.current?.audio.init().catch(() => {});
@@ -1128,6 +1193,7 @@ export function StageApp() {
 
   function selectSong(next: Song) {
     resetReady();
+    setPracticeSelection(null);
     setPlayers((current) => lineupForSong(next, current));
     setSongId(next.id);
     setMenu(false);
@@ -1233,7 +1299,7 @@ export function StageApp() {
     volatileAudioIds.current.delete(id);
     audioBuffers.current.delete(id);
     sessionAudioFiles.current.delete(id);
-    if (songId === id) { resetReady(); setSongId("open-stage"); }
+    if (songId === id) { resetReady(); setPracticeSelection(null); setSongId("open-stage"); }
     setToast(stored.warning ?? "Song removed from your setlist.");
   }
 
@@ -1425,7 +1491,7 @@ export function StageApp() {
               <strong className="font-mono text-lg text-fg tabular-nums">
                 {Math.round(song.bpm * speed)} <span className="text-[10px] tracking-[0.14em] text-muted">BPM</span>
               </strong>
-              <span className="font-mono text-sm tabular-nums">{formatTime(Math.ceil(song.duration / speed))}</span>
+              <span className="font-mono text-sm tabular-nums">{formatTime(Math.ceil(stageSong.duration / speed))}</span>
               <span className="hidden rounded-full px-2 py-1 text-[9px] tracking-[0.14em] text-accent shadow-[0_0_0_1px_rgba(143,212,196,0.3)] sm:inline">
                 NO-FAIL PRACTICE
               </span>
@@ -1484,6 +1550,21 @@ export function StageApp() {
             />
           ) : null}
 
+          <PracticeControls
+            sections={passages}
+            selectedId={practice?.id ?? ""}
+            loop={repeatPractice}
+            pass={practicePass}
+            lastTake={lastPracticeTake}
+            busy={status === "starting" || readingImport || savingImport}
+            onSelect={(sectionId) => {
+              resetReady();
+              setPracticeSelection(sectionId ? { songId: song.id, sectionId } : null);
+            }}
+            onLoopChange={setRepeatPractice}
+            onExit={() => { resetReady(); setPracticeSelection(null); }}
+          />
+
           <div className="stage-hud grid grid-cols-2 gap-3 rounded-t-2xl bg-surface px-4 py-3 shadow-[0_0_0_1px_rgba(239,232,220,0.08)] sm:grid-cols-4 lg:grid-cols-5">
             <div className={cn("hud-chip accent", hud.gain > 0 && "pop")}>
               <span>SCORE</span>
@@ -1513,8 +1594,8 @@ export function StageApp() {
               </strong>
             </div>
             <div className="hud-chip hud-personal-best hidden lg:flex">
-              <span>PERSONAL BEST</span>
-              <strong className="text-muted">{best ? best.toLocaleString() : "—"}</strong>
+              <span>{practice ? "PRACTICE" : "PERSONAL BEST"}</span>
+              <strong className="text-muted">{practice ? "Not saved" : best ? best.toLocaleString() : "—"}</strong>
             </div>
           </div>
 
@@ -1561,12 +1642,13 @@ export function StageApp() {
                 busy={!ready || busy}
                 demo={bag.current?.demo ?? false}
                 results={results}
+                practice={practice ? { ...practice, pass: practicePass } : undefined}
                 controls={enabled.map((p) => ({ label: rhythm ? "Rhythm" : p.label, keys: (bag.current?.judges.get(p.id)?.lanes || []).map((lane, i) => `${keyLabel(KEYS[p.id][i] || "")}${spaceToHit && KEYS[p.id][i] !== "Space" ? " / SPACE" : ""} · ${lane.short}`) }))}
                 onStart={() => void startSession(false)}
                 onDemo={() => void startSession(true)}
                 onRestart={() => { resetReady(); void startSession(false); }}
                 onQuickStart={quickStart}
-                onBack={resetReady}
+                onBack={() => { resetReady(); if (practice) setPracticeSelection(null); }}
                 nextSongName={songs[(songs.findIndex((s) => s.id === song.id) + 1) % songs.length]!.name}
                 onNext={() => selectSong(songs[(songs.findIndex((s) => s.id === song.id) + 1) % songs.length]!)}
               />
@@ -1601,8 +1683,8 @@ export function StageApp() {
           ) : null}
 
           <div className="mt-3">
-            <div className="h-1 overflow-hidden rounded-full bg-elevated" role="progressbar" aria-label="Song progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(100 * hud.elapsed / song.duration)}>
-              <div className="h-full bg-accent" style={{ width: `${song.duration ? (hud.elapsed / song.duration) * 100 : 0}%` }} />
+            <div className="h-1 overflow-hidden rounded-full bg-elevated" role="progressbar" aria-label={practice ? "Passage progress" : "Song progress"} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(100 * hud.elapsed / stageSong.duration)}>
+              <div className="h-full bg-accent" style={{ width: `${stageSong.duration ? (hud.elapsed / stageSong.duration) * 100 : 0}%` }} />
             </div>
             <div className="mt-1 flex justify-between font-mono text-[10px] tabular-nums text-muted">
               <span aria-label="Elapsed time">{formatTime(hud.elapsed / speed)}</span>

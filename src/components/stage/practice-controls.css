@@ -1,0 +1,112 @@
+.practice-controls {
+  --practice-space-xs: 4px;
+  --practice-space-sm: 8px;
+  --practice-space-md: 12px;
+  --practice-space-lg: 16px;
+  --practice-text-sm: 0.75rem;
+  padding: var(--practice-space-md) var(--practice-space-lg);
+  color: var(--color-fg);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+}
+
+.practice-controls-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--practice-space-sm) var(--practice-space-md);
+}
+
+.practice-section-field {
+  flex: 1 1 16rem;
+  min-width: 0;
+}
+
+.practice-section-field > label {
+  display: flex;
+  align-items: center;
+  gap: var(--practice-space-sm);
+  margin-bottom: var(--practice-space-xs);
+  color: var(--color-muted);
+  font-size: var(--practice-text-sm);
+}
+
+.practice-section-field select {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  padding: var(--practice-space-sm) var(--practice-space-md);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--color-fg);
+  background: var(--color-elevated);
+  color-scheme: dark;
+  font-size: 0.875rem;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.practice-section-field select:focus-visible,
+.practice-repeat input:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 3px;
+}
+
+.practice-section-field select:disabled,
+.practice-repeat:has(input:disabled) {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.practice-repeat {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--practice-space-sm);
+  min-height: 44px;
+  font-size: var(--practice-text-sm);
+  cursor: pointer;
+}
+
+.practice-repeat input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--color-accent);
+}
+
+.practice-exit {
+  margin-left: auto;
+}
+
+.practice-help,
+.practice-status {
+  margin: var(--practice-space-sm) 0 0;
+  color: var(--color-muted);
+  font-size: var(--practice-text-sm);
+  line-height: 1.5;
+}
+
+.practice-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--practice-space-xs) var(--practice-space-lg);
+  font-variant-numeric: tabular-nums;
+}
+
+.practice-status > span:first-child {
+  color: var(--color-tungsten);
+}
+
+.practice-status:empty {
+  margin: 0;
+}
+
+@media (max-width: 540px) {
+  .practice-controls {
+    padding: var(--practice-space-md);
+  }
+
+  .practice-section-field {
+    flex-basis: 100%;
+  }
+}
