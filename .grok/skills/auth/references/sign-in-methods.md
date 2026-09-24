@@ -31,7 +31,7 @@ Use **only** these three — no other method is supported:
 
   If sign-up/sign-in returns **"Invalid origin"**, do **not** disable CSRF and
   do **not** edit `server.ts`. The template's `trustedOrigins` already covers
-  `*.grok-sandbox.com` and local loopback on port 8080 (`localhost` /
+  `*.grok-sandbox.com` and local loopback on port 8082 (`localhost` /
   `127.0.0.1` / `[::1]`). Open the app at one of those origins (not a random
   host/port).
 

@@ -14,7 +14,7 @@ This is the surrounding lifecycle behaviour.
 - **Reboot / recreate** — may wipe app files back to the template. Re-scaffold
   and **restore `startup.sh`** before verifying the preview.
 
-A revive with no `startup.sh` leaves nothing listening on `:8080`, so the user
+A revive with no `startup.sh` leaves nothing listening on `:8082`, so the user
 sees an empty preview pane.
 
 ## A `startup.sh` that satisfies the rules
@@ -26,7 +26,7 @@ cd /workspace
 # :8081 is QA-only — a revive must never inherit a stale built-output preview.
 # Called directly, not via npm: no node_modules needed, so nothing to wait for.
 node scripts/preview.mjs stop || true
-if curl -sf -o /dev/null --max-time 2 http://127.0.0.1:8080/; then
+if curl -sf -o /dev/null --max-time 2 http://127.0.0.1:8082/; then
   exit 0
 fi
 npm run dev >>/tmp/app-startup.log 2>&1 &

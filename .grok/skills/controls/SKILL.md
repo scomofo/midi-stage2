@@ -217,7 +217,7 @@ failing step and exits non-zero.
 
 ```bash
 agent-browser batch --bail <<'JSON'   # find's label is case-sensitive: copy it from `snapshot -i`
-[["open","http://127.0.0.1:8080/"],
+[["open","http://127.0.0.1:8082/"],
  ["find","text","Start","click"],
  ["eval","if (!window.__controlsTest?.setKeys) throw Error('no §5b probe: add setKeys')"],
  ["eval","__controlsTest.setKeys(['KeyW'])"],

@@ -3,19 +3,19 @@
 `AGENTS.md` § "Execution loop" states the mandatory pass. This is the menu of
 capabilities and the depth judgment around it.
 
-Everything here runs **in the sandbox** against `http://127.0.0.1:8080` — it is
+Everything here runs **in the sandbox** against `http://127.0.0.1:8082` — it is
 **not** the user's Grok chat tab. Use whatever browser capability you have
 **yourself**, so quality beats curl-only.
 
 1. **Grok browser / computer-use / MCP browser tools**, if listed — open
-   `http://127.0.0.1:8080`, glance at the UI, screenshot if supported.
+   `http://127.0.0.1:8082`, glance at the UI, screenshot if supported.
 2. **`web_fetch`** on that URL for an HTML-only check.
 3. **Playwright helper (preinstalled)** — one run loads desktop **and** mobile,
    screenshots both, and prints a JSON verdict.
 
 ```bash
 mkdir -p /workspace/screenshots
-node scripts/browser-smoke.mjs http://127.0.0.1:8080/ /workspace/screenshots/app-builder-preview.png
+node scripts/browser-smoke.mjs http://127.0.0.1:8082/ /workspace/screenshots/app-builder-preview.png
 # Writes app-builder-preview.png (desktop), -mobile.png, and .json (verdict).
 # Then Read BOTH PNGs in one batched read if you have an image tool, and iterate if either looks wrong.
 ```
@@ -51,7 +51,7 @@ an earlier build both fails a plain start and keeps serving stale output.
 ## Interactive QA — `agent-browser`
 
 ```bash
-agent-browser open http://127.0.0.1:8080/
+agent-browser open http://127.0.0.1:8082/
 agent-browser snapshot -i                        # a11y tree with @e1 refs
 agent-browser click @e1                          # or: find text "Start" click
 agent-browser fill "#email" you@example.com      # type <text> for keystrokes
@@ -71,7 +71,7 @@ sidesteps the shell quoting a flow with quotes in its `eval` would need:
 
 ```bash
 agent-browser batch --bail <<'JSON'
-[["open","http://127.0.0.1:8080/"],
+[["open","http://127.0.0.1:8082/"],
  ["find","text","Add note","click"],
  ["fill","#title","Grocery list"],
  ["press","Enter"],

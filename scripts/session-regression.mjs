@@ -4,7 +4,7 @@
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
 
-const url = process.argv[2] || 'http://127.0.0.1:8080';
+const url = process.argv[2] || 'http://127.0.0.1:8082';
 const browser = await chromium.launch({ headless: true, args: ['--no-sandbox'] });
 try {
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });

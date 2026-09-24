@@ -103,7 +103,7 @@ test("looksLikePreviewProcess spares the sibling scripts and re-used pids", () =
   const thumbnail = cmdline(
     "node",
     "/opt/app-template/scripts/preview-thumbnail.mjs",
-    "http://127.0.0.1:8080/",
+    "http://127.0.0.1:8082/",
     "/tmp/preview-thumbnail.png",
   );
   assert.equal(looksLikePreviewProcess(thumbnail), false);

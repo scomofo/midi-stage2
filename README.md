@@ -25,14 +25,14 @@ Requires **Node 22+**.
 
 ```sh
 npm ci
-npm run dev   # serves the app on http://0.0.0.0:8080
+npm run dev   # serves the app on http://0.0.0.0:8082
 ```
 
 ## Scripts
 
 | Script              | What it does                                                          |
 |---------------------|-----------------------------------------------------------------------|
-| `npm run dev`       | Dev server on `0.0.0.0:8080`                                          |
+| `npm run dev`       | Dev server on `0.0.0.0:8082`                                          |
 | `npm run build`     | Production build (plus DB migration)                                  |
 | `npm run typecheck` | `tsc --noEmit`                                                        |
 | `npm run lint`      | `eslint .`                                                            |
