@@ -10,6 +10,7 @@ import {
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { AudioSourcePreview } from "./audio-source-preview";
 import { formatTime } from "@/lib/midi-stage/engine";
 import { LABELS } from "@/lib/midi-stage/songs";
 import { INSTRUMENTS, type Instrument } from "@/lib/midi-stage/types";
@@ -18,6 +19,7 @@ import { cn } from "@/lib/utils";
 type SongLibraryPanelProps = {
   candidate: {
     kind?: "audio" | "midi" | "chart";
+    audioFile?: File;
     name: string;
     fileName: string;
     bpm: number;
@@ -282,6 +284,9 @@ export function SongLibraryPanel({
                 ),
               )}
             </dl>
+            {candidate.kind === "audio" && candidate.audioFile ? (
+              <AudioSourcePreview file={candidate.audioFile} disabled={busy} />
+            ) : null}
             {candidate.warnings.length > 0 ? (
               <ul
                 aria-label="Import notes"

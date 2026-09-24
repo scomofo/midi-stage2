@@ -254,8 +254,47 @@ try {
     'canceled imports must stay unanalysed after a subsequent valid import finishes');
   assert.equal(await page.evaluate(() => window.audioImportProbe.beginCalls), 0, 'preview must not autoplay');
   assert.equal(await page.evaluate(() => window.audioMidi.requests), 0, 'audio analysis must not request MIDI permission');
+  const sourcePreview = dialog.locator('audio');
+  await sourcePreview.waitFor();
+  assert.equal(await sourcePreview.getAttribute('preload'), 'none');
+  assert.equal(await sourcePreview.evaluate((audio) => audio.paused), true, 'source audition must never autoplay');
+  await page.evaluate(() => {
+    const revoke = URL.revokeObjectURL;
+    window.revokedSourcePreviews = [];
+    URL.revokeObjectURL = function (url) { window.revokedSourcePreviews.push(url); return revoke.call(this, url); };
+  });
+  const playPreview = async () => {
+    await sourcePreview.evaluate(async (audio) => {
+      window.lastSourcePreview = { audio, url: audio.src };
+      await audio.play();
+    });
+    await page.waitForFunction(() => window.lastSourcePreview.audio.currentTime > 0.05);
+    await frames();
+    assert.equal(await sourcePreview.evaluate((audio) => audio.src === window.lastSourcePreview.url), true,
+      'HUD updates must not reset the preview source');
+  };
+  const assertPreviewReleased = () => page.evaluate(() => {
+    const { audio, url } = window.lastSourcePreview;
+    if (!audio.paused || audio.hasAttribute('src') || !window.revokedSourcePreviews.includes(url))
+      throw Error('Leaving or replacing the preview must stop media and revoke its local URL');
+  });
+  await playPreview();
+  assert.equal(await page.evaluate(() => window.audioImportProbe.beginCalls), 0, 'audition must not start the game');
+  await dialog.getByRole('button', { name: 'Close song library', exact: true }).click();
+  await dialog.waitFor({ state: 'hidden' });
+  await assertPreviewReleased();
+  await openLibrary();
+  await upload(fixtures.wav);
+  await sourcePreview.waitFor();
+  await playPreview();
+  await upload(fixtures.wav);
+  await assertPreviewReleased();
+  await sourcePreview.waitFor();
+  assert.equal(await sourcePreview.evaluate((audio) => audio.paused), true, 'replacement preview must stay paused');
+  await playPreview();
   await screenshot('audio-import-preview-desktop.png');
   await add('WAV Rehearsal');
+  await assertPreviewReleased();
   assert.equal(await page.locator('.pad').count(), 1, 'audio rhythm must offer one clear hit lane');
   await assertRhythmControls();
   await page.getByRole('checkbox', { name: 'Strum arrows', exact: true }).check();

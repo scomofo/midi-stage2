@@ -98,8 +98,9 @@ function loadBest(key: string) {
 function saveBest(key: string, n: number) {
   try {
     localStorage.setItem(key, String(n));
+    return true;
   } catch {
-    /* ignore */
+    return false;
   }
 }
 
@@ -592,12 +593,8 @@ export function StageApp() {
     const key = bestKey(b.song, b.difficulty, b.speed, b.players);
     const previousBest = loadBest(key);
     const newBest = !b.demo && score > previousBest;
-    if (!b.demo) {
-      if (newBest) {
-        saveBest(key, score);
-        setBest(score);
-      }
-    }
+    const bestSaved = !newBest || saveBest(key, score);
+    if (newBest && bestSaved) setBest(score);
     setResults({
       score,
       accuracy,
@@ -608,6 +605,7 @@ export function StageApp() {
       holdBreaks,
       previousBest,
       newBest,
+      bestSaved,
       miss,
       extra,
       combo,
@@ -1742,6 +1740,7 @@ export function StageApp() {
             <SongLibraryPanel
               candidate={importCandidate ? {
                 kind: importCandidate.kind,
+                audioFile: importCandidate.audioFile,
                 name: importCandidate.entry.chart.title,
                 fileName: importCandidate.entry.fileName,
                 bpm: importCandidate.entry.chart.bpm,
