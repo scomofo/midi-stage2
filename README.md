@@ -151,3 +151,7 @@ The Playwright session regression enforces this with a controlled song clock:
 a scored hold through four volume changes, pause, listening-option changes,
 resume, release, song completion and saved score — plus a check that a tempo
 change while paused creates a fresh session.
+
+Audio import shows decoding and rhythm-analysis progress. **Cancel import** stops
+the pending import while keeping the library open and returns focus to file
+selection. Cancelling discards late results and preserves the selected song.

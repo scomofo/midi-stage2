@@ -1081,6 +1081,17 @@ export function StageApp() {
     setToast("First Rehearsal: solo keys, Chill, 75% tempo. Follow the guide and the click.");
   }
 
+  function cancelSongImport() {
+    importTicket.current++;
+    importController.current?.abort();
+    importController.current = null;
+    setReadingImport(false);
+    setImportProgress(null);
+    setImportCandidate(null);
+    setImportError(null);
+    setToast("Import cancelled. Choose another song whenever you’re ready.");
+  }
+
   function closeSongLibrary() {
     importTicket.current++;
     importController.current?.abort();
@@ -1500,14 +1511,14 @@ export function StageApp() {
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center justify-between gap-2 bg-elevated px-4 py-2 text-[10px] tracking-[0.12em] text-muted">
+          <div className="stage-energy-strip flex flex-wrap items-center justify-between gap-2 bg-elevated px-4 py-2 text-[10px] tracking-[0.12em] text-muted">
             <label className="flex items-center gap-2">
               STAGE ENERGY
               <meter className={cn("energy-meter", hud.energy > 70 && "hot")} min={0} max={100} value={hud.energy} />
               <span className="font-mono tabular-nums text-fg">{hud.energy}%</span>
             </label>
             {strumGuide && (rhythm || enabled.some((p) => p.type === "guitar")) ? (
-              <span aria-label="Next suggested strum" aria-describedby="strum-guide-help" className="font-mono font-semibold text-accent">
+              <span aria-label="Next suggested strum" aria-describedby="strum-guide-help" className="stage-strum-cue font-mono font-semibold text-accent">
                 {hud.nextStrum ? `NEXT STRUM ${hud.nextStrum}` : "STRUM GUIDE"}
               </span>
             ) : <span>{enabled.length === 1 ? "SOLO · FIND YOUR GROOVE" : `${enabled.length}-PLAYER BAND`}</span>}
@@ -1741,8 +1752,10 @@ export function StageApp() {
               reading={readingImport}
               readingLabel={importProgress?.phase === "checking" ? "Checking song…"
                 : importProgress?.phase === "decoding" ? "Decoding audio…"
-                : importProgress?.phase === "analyzing" ? `Finding rhythm hits… ${Math.round((importProgress.progress ?? 0) * 100)}%`
+                : importProgress?.phase === "analyzing" ? "Finding rhythm hits…"
                 : undefined}
+              readingProgress={importProgress?.phase === "analyzing" ? importProgress.progress : undefined}
+              onCancel={cancelSongImport}
               saving={savingImport}
               error={importError}
               libraryWarning={libraryWarning}

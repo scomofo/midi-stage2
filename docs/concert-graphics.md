@@ -43,7 +43,8 @@ during playback without resetting the score, held notes, or audio clock.
   picking patterns may need a different practice pattern.
 
 A **NEXT STRUM ↓ DOWN / ↑ UP** cue above the highway previews the next unplayed
-note for the first eligible player, including on narrow screens. It skips
+note for the first eligible player. On phones it gets a dedicated row beneath
+the energy meter; score bonuses stay on the highway to keep the HUD readable. It skips
 judged and held notes without changing scoring.
 
 The arrows follow chart time, so pause, resume, replay and tempo changes retain
