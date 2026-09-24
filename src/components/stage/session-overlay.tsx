@@ -1,6 +1,8 @@
 import { useEffect, useRef } from "react";
 import { ArrowRight, Eye, Keyboard, Pause, Play, RotateCcw, Star, Trophy } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import type { Difficulty, Instrument } from "@/lib/midi-stage/types";
+import { TIMING_CENTER_MS, type TimingSummary } from "@/lib/midi-stage/timing-summary";
 
 export type SessionResults = {
   score: number;
@@ -18,7 +20,51 @@ export type SessionResults = {
   newBest: boolean;
   bestSaved: boolean;
   demo: boolean;
+  difficulty: Difficulty;
+  speed: number;
+  parts: { id: Instrument; label: string; timing: TimingSummary }[];
 };
+
+const DIFFICULTY_LABELS: Record<Difficulty, string> = {
+  chill: "Chill",
+  standard: "Standard",
+  expert: "Expert",
+};
+
+const TIMING_COPY: Record<TimingSummary["tendency"], { title: string; tip: string }> = {
+  early: { title: "Mostly early", tip: "Let the gem reach the strike line before you press." },
+  centered: { title: "Near the centre", tip: "Keep that pulse going on your next take." },
+  late: { title: "Mostly late", tip: "Look a little farther up the highway so you can prepare the next press." },
+  mixed: { title: "Mixed timing", tip: "Try the click and a slower tempo to find a steadier pulse." },
+  insufficient: { title: "Not enough hits yet", tip: "Land a few more hits before reviewing your timing." },
+};
+
+function RecentTiming({ parts }: Pick<SessionResults, "parts">) {
+  return (
+    <section className="session-timing" aria-label="Recent hit timing">
+      <h3>Recent hit timing</h3>
+      <p className="session-timing-description">
+        Up to the last 200 successful hits per part. Near centre means within {TIMING_CENTER_MS} ms of the strike line.
+      </p>
+      <ul>
+        {parts.map(({ id, label, timing }) => (
+          <li className="session-timing-part" data-part={id} key={id}>
+            <div className="session-timing-heading">
+              <h4>{label}</h4>
+              <strong>{TIMING_COPY[timing.tendency].title}</strong>
+            </div>
+            <p className="session-timing-counts">
+              {timing.count === 0
+                ? "No successful hits to review."
+                : `${timing.count} recent ${timing.count === 1 ? "hit" : "hits"} · ${timing.early} early · ${timing.centered} near centre · ${timing.late} late`}
+            </p>
+            <p className="session-timing-tip">{TIMING_COPY[timing.tendency].tip}</p>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
 
 type SessionOverlayProps = {
   mode: "ready" | "paused" | "results";
@@ -45,6 +91,8 @@ function practiceTip(results: SessionResults, rhythm: boolean) {
   if (!rhythm && results.holdBreaks > 0)
     return "Follow the whole tail. Keep each long note held until its tail passes the strike line.";
   const hits = results.perfect + results.great + results.good;
+  if (hits === 0)
+    return "Start with a slower tempo and aim to land one gem at a time.";
   if (results.miss > hits)
     return "Give yourself more time: lower the tempo below the stage and focus on one lane first.";
   if (results.extra > Math.max(3, hits / 4))
@@ -53,6 +101,8 @@ function practiceTip(results: SessionResults, rhythm: boolean) {
     return "Keep your eyes just above the strike line. Spot the next gem before the current one arrives.";
   if (results.great + results.good > 0)
     return "Aim for the centre of the strike line. Try the metronome to settle into a steady pulse.";
+  if (results.parts.some((part) => part.timing.tendency !== "centered"))
+    return "Every note earned Perfect. Keep this setup and use the timing notes above for your next take.";
   return "Every note landed perfectly. Try the next song, or raise the difficulty for a fresh challenge.";
 }
 
@@ -96,6 +146,9 @@ export function SessionOverlay({
   const isResults = mode === "results" && results;
   const isPaused = mode === "paused";
   const resultsVisible = Boolean(isResults);
+  const runContext = results
+    ? `${DIFFICULTY_LABELS[results.difficulty]} · ${Math.round(results.speed * 100)}% tempo · ${results.parts.map((part) => part.label).join(" + ")}`
+    : "";
   const resultsHeadingRef = useRef<HTMLHeadingElement>(null);
 
   useEffect(() => {
@@ -131,9 +184,11 @@ export function SessionOverlay({
             <p id="session-result-summary" className="sr-only">
               {songName}. {results.demo ? "Autoplay score" : "Your score"} {results.score.toLocaleString()}.
               {" "}Accuracy {Math.round(results.accuracy)} percent.
+              {" "}{runContext}.
               {results.newBest && !results.bestSaved ? " Could not save your personal best on this device. Your score is still shown here." : ""}
             </p>
             <p className="session-song">{songName}</p>
+            <p className="session-run-context">{runContext}</p>
 
             <div className="session-score-block">
               <span className="session-score-label">
@@ -217,6 +272,7 @@ export function SessionOverlay({
                 ? ` · ${results.holds} holds completed · ${results.holdBreaks} broken`
                 : ""}
             </p>
+            {!results.demo ? <RecentTiming parts={results.parts} /> : null}
             <div className="session-practice-tip">
               <span>{results.demo ? "STEP INTO THE SPOTLIGHT" : "FOR YOUR NEXT SET"}</span>
               <p>{practiceTip(results, rhythm)}</p>

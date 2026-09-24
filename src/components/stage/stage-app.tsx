@@ -41,6 +41,7 @@ import { loadFeel, saveFeel, FEEL_COPY, withPreset, type Feel } from "@/lib/midi
 import { catalog } from "@/lib/midi-stage/songs";
 import { StageRenderer, spawnHitJuice } from "@/lib/midi-stage/renderer";
 import { nextStrum } from "@/lib/midi-stage/strum-guide";
+import { summarizeTiming } from "@/lib/midi-stage/timing-summary";
 import type {
   Callout,
   Difficulty,
@@ -611,6 +612,13 @@ export function StageApp() {
       combo,
       stars: stars(accuracy),
       demo: b.demo,
+      difficulty: b.difficulty,
+      speed: b.speed,
+      parts: b.players.filter((player) => player.enabled).map((player) => ({
+        id: player.id,
+        label: player.label,
+        timing: summarizeTiming(b.judges.get(player.id)?.stats.offsets ?? []),
+      })),
     });
     b.position = b.song.duration;
     setOverlay(true);
