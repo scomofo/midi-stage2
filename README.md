@@ -38,6 +38,7 @@ npm run dev   # serves the app on http://0.0.0.0:8082
 | `npm run lint`      | `eslint .`                                                            |
 | `npm test`          | Script tests (`node --test`) plus platform unit tests                 |
 | `npm run test:session` | Playwright session regression — needs Chromium and `npm run dev` running |
+| `npm run test:setup` | Soundcheck, MIDI routing and saved-setup browser regression |
 
 ## Player experience
 
@@ -45,6 +46,17 @@ Playback controls stay above the highway. **Focus stage** expands the playfield;
 **Try beginner rehearsal** starts solo keys at 75% tempo with Chill timing, guide
 and click enabled. Results show the judgement breakdown, sustained notes, a
 personal best and a practice tip, with replay and next-song actions.
+
+**Soundcheck** enables audio before a set so you can try mapped keys, pads, or MIDI
+without scoring. Choose a device and channel for each part; automatic routing
+sends channel 10 to drums and other channels to the first available melodic part.
+Each MIDI note plays one part. Explicit channel assignments take priority over
+all-channel assignments, followed by automatic routing; ties follow lineup order.
+
+Your song, lineup, difficulty, tempo, guide, click, volume, focus view and MIDI
+assignments are remembered on this browser. Returning always opens a fresh ready
+set. MIDI permission and sound still require a click, and a missing assigned
+device stays marked disconnected until you reconnect or choose another input.
 
 Leaving the window, hiding the tab, disconnecting a MIDI input, or opening a
 settings panel pauses the set. Resume is deliberate. The game bundles its fonts
@@ -75,6 +87,15 @@ npm run test:session
 - **MIDI** — hit *Connect MIDI* (no sysex). Note-on hits the lane, note-off
   releases the hold; devices plugged in after connecting are picked up
   automatically.
+
+## Imported songs
+
+Stage 2 currently plays the built-in setlist. The shared `.midistage.json`
+parser can convert supported workshop charts into playable note data, but an
+in-game file picker and custom-song catalog are not connected yet. Raw MIDI/audio
+import and backing-track playback from the original Song Workshop have not been
+ported. Rhythm-only charts and variable tempo are also unsupported. See
+`docs/chart-format.md` for the implemented format and remaining work.
 
 ## The room
 

@@ -20,7 +20,7 @@ jobs:
       - run: npm run lint
       - run: npm run build
       - run: npx playwright install --with-deps chromium
-      - name: Session regression
+      - name: Session and setup regressions
         run: |
           npm run dev > /tmp/midi-stage-dev.log 2>&1 &
           ready=false
@@ -37,3 +37,4 @@ jobs:
             exit 1
           fi
           npm run test:session
+          npm run test:setup

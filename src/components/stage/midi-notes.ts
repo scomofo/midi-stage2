@@ -1,5 +1,7 @@
+import type { MidiSource } from "@/lib/midi-stage/midi-routing";
+
 export type MidiNoteCallbacks = {
-  onNoteOn: (note: number, velocity: number, token: string) => void;
+  onNoteOn: (note: number, velocity: number, token: string, source: MidiSource) => void;
   onNoteOff: (token: string) => void;
 };
 
@@ -24,7 +26,7 @@ export class MidiNotes {
       // A second strike can arrive without a release from drum controllers.
       if (held.has(token)) callbacks.onNoteOff(token);
       held.set(token, channel);
-      callbacks.onNoteOn(note, velocity, token);
+      callbacks.onNoteOn(note, velocity, token, { inputId, channel: channel + 1 });
       return { note, channel: channel + 1, velocity };
     }
 
