@@ -10,6 +10,7 @@ import {
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { AudioSourcePreview } from "./audio-source-preview";
 import { formatTime } from "@/lib/midi-stage/engine";
 import { LABELS } from "@/lib/midi-stage/songs";
 import { INSTRUMENTS, type Instrument } from "@/lib/midi-stage/types";
@@ -18,6 +19,7 @@ import { cn } from "@/lib/utils";
 type SongLibraryPanelProps = {
   candidate: {
     kind?: "audio" | "midi" | "chart";
+    audioFile?: File;
     name: string;
     fileName: string;
     bpm: number;
@@ -27,6 +29,8 @@ type SongLibraryPanelProps = {
   } | null;
   reading: boolean;
   readingLabel?: string;
+  readingProgress?: number;
+  onCancel: () => void;
   saving?: boolean;
   error: string | null;
   libraryWarning: string | null;
@@ -42,6 +46,8 @@ export function SongLibraryPanel({
   candidate,
   reading,
   readingLabel = "Reading your song…",
+  readingProgress,
+  onCancel,
   saving = false,
   error,
   libraryWarning,
@@ -56,6 +62,8 @@ export function SongLibraryPanel({
   const [fileNotice, setFileNotice] = useState("");
   const [removing, setRemoving] = useState<string | null>(null);
   const dragDepth = useRef(0);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const returnToFile = useRef(false);
   const previewRef = useRef<HTMLElement>(null);
   const previewTitleRef = useRef<HTMLHeadingElement>(null);
   const errorRef = useRef<HTMLParagraphElement>(null);
@@ -78,6 +86,13 @@ export function SongLibraryPanel({
     errorRef.current?.focus({ preventScroll: true });
     errorRef.current?.scrollIntoView({ block: "nearest", behavior: "auto" });
   }, [notice]);
+
+  useEffect(() => {
+    if (!reading && returnToFile.current) {
+      returnToFile.current = false;
+      fileRef.current?.focus();
+    }
+  }, [reading]);
 
   function chooseFile(files: FileList | null) {
     if (busy || !files?.length) return;
@@ -148,6 +163,7 @@ export function SongLibraryPanel({
             }}
           >
             <input
+              ref={fileRef}
               type="file"
               accept=".mp3,.wav,.flac,.ogg,.m4a,.aac,.webm,.mid,.midi,.json,audio/*"
               aria-label="Choose song file"
@@ -175,13 +191,32 @@ export function SongLibraryPanel({
             synthesized instruments. Up to 4 MB; tempo changes aren’t supported for these files.
           </p>
           {reading ? (
-            <p role="status" className="mt-3 flex items-center gap-2 text-sm text-accent">
-              <LoaderCircle
-                className="size-4 animate-spin motion-reduce:animate-none"
-                aria-hidden="true"
+            <div className="mt-3 rounded-xl border border-accent/25 bg-surface p-3">
+              <div className="flex items-center justify-between gap-3">
+                <p role="status" className="flex items-center gap-2 text-sm text-accent">
+                  <LoaderCircle className="size-4 shrink-0 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                  {readingLabel}
+                </p>
+                <Button type="button" variant="ghost" className="shrink-0" onClick={() => {
+                  returnToFile.current = true;
+                  setFileNotice("");
+                  onCancel();
+                }}>
+                  Cancel import
+                </Button>
+              </div>
+              <progress
+                className="song-import-progress mt-3 block h-1.5 w-full"
+                aria-label={readingProgress === undefined ? readingLabel : "Rhythm analysis progress"}
+                max={1}
+                value={readingProgress}
               />
-              {readingLabel}
-            </p>
+              {readingProgress !== undefined ? (
+                <p className="mt-2 text-right font-mono text-xs tabular-nums text-muted" aria-hidden="true">
+                  {Math.round(readingProgress * 100)}%
+                </p>
+              ) : null}
+            </div>
           ) : null}
           {notice ? (
             <p
@@ -249,6 +284,9 @@ export function SongLibraryPanel({
                 ),
               )}
             </dl>
+            {candidate.kind === "audio" && candidate.audioFile ? (
+              <AudioSourcePreview file={candidate.audioFile} disabled={busy} />
+            ) : null}
             {candidate.warnings.length > 0 ? (
               <ul
                 aria-label="Import notes"

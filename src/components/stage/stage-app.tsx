@@ -40,6 +40,7 @@ import {
 import { loadFeel, saveFeel, FEEL_COPY, withPreset, type Feel } from "@/lib/midi-stage/feel";
 import { catalog } from "@/lib/midi-stage/songs";
 import { StageRenderer, spawnHitJuice } from "@/lib/midi-stage/renderer";
+import { nextStrum } from "@/lib/midi-stage/strum-guide";
 import type {
   Callout,
   Difficulty,
@@ -65,6 +66,7 @@ type Bag = {
   difficulty: Difficulty;
   volume: number;
   guide: boolean;
+  strumGuide: boolean;
   metronome: boolean;
   particles: Particle[];
   flashes: Flash[];
@@ -96,8 +98,9 @@ function loadBest(key: string) {
 function saveBest(key: string, n: number) {
   try {
     localStorage.setItem(key, String(n));
+    return true;
   } catch {
-    /* ignore */
+    return false;
   }
 }
 
@@ -152,6 +155,7 @@ export function StageApp() {
   const [difficulty, setDifficulty] = useState<Difficulty>("standard");
   const [speed, setSpeed] = useState(1);
   const [guide, setGuide] = useState(false);
+  const [strumGuide, setStrumGuide] = useState(false);
   const [metronome, setMetronome] = useState(false);
   const [volume, setVolume] = useState(55);
   const [hud, setHud] = useState({
@@ -169,6 +173,7 @@ export function StageApp() {
     pop: 0,
     bloom: 0,
     trauma: 0,
+    nextStrum: "",
   });
   const [overlay, setOverlay] = useState(true);
   const [results, setResults] = useState<SessionResults | null>(null);
@@ -214,6 +219,7 @@ export function StageApp() {
       difficulty,
       volume: audio.volume,
       guide: bag.current?.guide ?? false,
+      strumGuide: bag.current?.strumGuide ?? false,
       metronome: bag.current?.metronome ?? false,
       particles: [],
       flashes: [],
@@ -587,12 +593,8 @@ export function StageApp() {
     const key = bestKey(b.song, b.difficulty, b.speed, b.players);
     const previousBest = loadBest(key);
     const newBest = !b.demo && score > previousBest;
-    if (!b.demo) {
-      if (newBest) {
-        saveBest(key, score);
-        setBest(score);
-      }
-    }
+    const bestSaved = !newBest || saveBest(key, score);
+    if (newBest && bestSaved) setBest(score);
     setResults({
       score,
       accuracy,
@@ -603,6 +605,7 @@ export function StageApp() {
       holdBreaks,
       previousBest,
       newBest,
+      bestSaved,
       miss,
       extra,
       combo,
@@ -626,6 +629,7 @@ export function StageApp() {
     setDifficulty(saved.difficulty);
     setSpeed(saved.speed);
     setGuide(saved.guide);
+    setStrumGuide(saved.strumGuide);
     setMetronome(saved.metronome);
     setVolume(saved.volume);
     setFocusStage(saved.focusStage);
@@ -635,8 +639,8 @@ export function StageApp() {
 
   useEffect(() => {
     if (!preferencesHydrated) return;
-    saveSessionPreferences({ songId, enabledPlayers: players.filter((p) => p.enabled).map((p) => p.id), difficulty, speed, guide, metronome, volume, focusStage });
-  }, [preferencesHydrated, songId, players, difficulty, speed, guide, metronome, volume, focusStage]);
+    saveSessionPreferences({ songId, enabledPlayers: players.filter((p) => p.enabled).map((p) => p.id), difficulty, speed, guide, strumGuide, metronome, volume, focusStage });
+  }, [preferencesHydrated, songId, players, difficulty, speed, guide, strumGuide, metronome, volume, focusStage]);
 
   useEffect(() => {
     if (preferencesHydrated) saveMidiRoutes(midiRoutes);
@@ -669,6 +673,10 @@ export function StageApp() {
     b.metronome = metronome;
     b.audio.setVolume(b.volume);
   }, [volume, guide, metronome, initBag]);
+
+  useLayoutEffect(() => {
+    if (bag.current) bag.current.strumGuide = strumGuide;
+  }, [strumGuide, initBag]);
 
   useEffect(() => {
     setFeel(loadFeel());
@@ -790,6 +798,9 @@ export function StageApp() {
         pressed: b.pressed,
         reduced: b.reduced,
         feel: b.feel,
+        strumGuide: b.strumGuide,
+        music: b.status === "playing" && !b.reduced && b.feel.preset !== "calm" && b.feel.lights > 0
+          ? b.audio.readStageEnergy() : undefined,
       });
       const shell = canvas.closest(".stage-shell") as HTMLElement | null;
       shell?.style.setProperty("--energy", String(b.energy));
@@ -818,6 +829,9 @@ export function StageApp() {
           countdown = String(Math.max(1, Math.min(4, count)));
         } else if (b.status === "paused") countdown = "PAUSED";
         const harm = b.song.harmony?.filter((h) => h.time <= Math.max(0, sessionTime)).at(-1);
+        const strumPlayer = b.strumGuide ? b.players.find((p) => p.enabled && (p.type === "guitar" || b.song.matching === "rhythm")) : undefined;
+        const strumJudge = strumPlayer ? b.judges.get(strumPlayer.id) : undefined;
+        const strum = strumJudge ? nextStrum(b.song, strumJudge.notes, Math.max(0, sessionTime), strumJudge.windows[2]!) : null;
         setHud((prev) => ({
           score,
           combo,
@@ -833,6 +847,7 @@ export function StageApp() {
           pop: score > prev.score ? stamp : prev.pop,
           bloom: b.bloom,
           trauma: b.trauma,
+          nextStrum: strum === "down" ? "↓ DOWN" : strum === "up" ? "↑ UP" : "",
         }));
         const expected = new Set<number>();
         const approaching = new Set<number>();
@@ -1063,6 +1078,17 @@ export function StageApp() {
     setMetronome(true);
     setMenu(false);
     setToast("First Rehearsal: solo keys, Chill, 75% tempo. Follow the guide and the click.");
+  }
+
+  function cancelSongImport() {
+    importTicket.current++;
+    importController.current?.abort();
+    importController.current = null;
+    setReadingImport(false);
+    setImportProgress(null);
+    setImportCandidate(null);
+    setImportError(null);
+    setToast("Import cancelled. Choose another song whenever you’re ready.");
   }
 
   function closeSongLibrary() {
@@ -1484,13 +1510,17 @@ export function StageApp() {
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center justify-between gap-2 bg-elevated px-4 py-2 text-[10px] tracking-[0.12em] text-muted">
+          <div className="stage-energy-strip flex flex-wrap items-center justify-between gap-2 bg-elevated px-4 py-2 text-[10px] tracking-[0.12em] text-muted">
             <label className="flex items-center gap-2">
               STAGE ENERGY
               <meter className={cn("energy-meter", hud.energy > 70 && "hot")} min={0} max={100} value={hud.energy} />
               <span className="font-mono tabular-nums text-fg">{hud.energy}%</span>
             </label>
-            <span>{enabled.length === 1 ? "SOLO · FIND YOUR GROOVE" : `${enabled.length}-PLAYER BAND`}</span>
+            {strumGuide && (rhythm || enabled.some((p) => p.type === "guitar")) ? (
+              <span aria-label="Next suggested strum" aria-describedby="strum-guide-help" className="stage-strum-cue font-mono font-semibold text-accent">
+                {hud.nextStrum ? `NEXT STRUM ${hud.nextStrum}` : "STRUM GUIDE"}
+              </span>
+            ) : <span>{enabled.length === 1 ? "SOLO · FIND YOUR GROOVE" : `${enabled.length}-PLAYER BAND`}</span>}
             <span className="text-tungsten">{hud.section}</span>
           </div>
 
@@ -1609,6 +1639,12 @@ export function StageApp() {
               <input type="checkbox" checked={metronome} disabled={busy} onChange={(e) => setMetronome(e.target.checked)} suppressHydrationWarning />
               Click
             </label>
+            {(rhythm || enabled.some((p) => p.type === "guitar")) && (
+              <label className="flex h-11 items-center gap-2 text-[12px] text-muted">
+                <input type="checkbox" checked={strumGuide} onChange={(e) => setStrumGuide(e.target.checked)} aria-describedby="strum-guide-help" suppressHydrationWarning />
+                Strum arrows
+              </label>
+            )}
             <label className="ml-auto flex items-center gap-2 text-[9px] tracking-[0.14em] text-muted">
               <Volume2 className="size-4" />
               <input
@@ -1625,6 +1661,12 @@ export function StageApp() {
               />
             </label>
           </div>
+
+          {(rhythm || enabled.some((p) => p.type === "guitar")) && (
+            <p id="strum-guide-help" className="mt-3 text-xs text-muted">
+              ↓ Downstrum · ↑ Upstrum. Suggested eighth-note pattern; direction is not scored{song.audioAssetId ? " or detected from the recording" : ""}.
+            </p>
+          )}
 
           <div className="mt-4 flex flex-col gap-2">
             {enabled.map((p) => {
@@ -1699,6 +1741,7 @@ export function StageApp() {
             <SongLibraryPanel
               candidate={importCandidate ? {
                 kind: importCandidate.kind,
+                audioFile: importCandidate.audioFile,
                 name: importCandidate.entry.chart.title,
                 fileName: importCandidate.entry.fileName,
                 bpm: importCandidate.entry.chart.bpm,
@@ -1709,8 +1752,10 @@ export function StageApp() {
               reading={readingImport}
               readingLabel={importProgress?.phase === "checking" ? "Checking song…"
                 : importProgress?.phase === "decoding" ? "Decoding audio…"
-                : importProgress?.phase === "analyzing" ? `Finding rhythm hits… ${Math.round((importProgress.progress ?? 0) * 100)}%`
+                : importProgress?.phase === "analyzing" ? "Finding rhythm hits…"
                 : undefined}
+              readingProgress={importProgress?.phase === "analyzing" ? importProgress.progress : undefined}
+              onCancel={cancelSongImport}
               saving={savingImport}
               error={importError}
               libraryWarning={libraryWarning}

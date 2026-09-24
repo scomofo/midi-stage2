@@ -41,6 +41,7 @@ npm run dev   # serves the app on http://0.0.0.0:8082
 | `npm run test:setup` | Soundcheck, MIDI routing and saved-setup browser regression |
 | `npm run test:imports` | Chart/MIDI import, playback, saved songs and mobile regression |
 | `npm run test:audio` | Real WAV/MP3/FLAC import, backing playback, storage and rhythm-input regression |
+| `npm run test:graphics` | Concert rendering, lane targets, reduced motion and saved/live strum arrows |
 
 ## Player experience
 
@@ -64,6 +65,12 @@ Leaving the window, hiding the tab, disconnecting a MIDI input, or opening a
 settings panel pauses the set. Resume is deliberate. The game bundles its fonts
 locally, and the keyboard/piano controls support focus and touch cancellation.
 See `docs/player-polish.md` for the acceptance boundary.
+
+The [concert graphics pass](docs/concert-graphics.md) adds richer highways and
+club scenery, song-synced lighting, section color fades and backing-audio response.
+A next-strum cue stays readable above the highway. **Strum arrows** offers an optional, saved ↓ down / ↑ up practice
+pattern on guitar and rhythm charts. These are beat-grid suggestions, not
+directions detected from imported recordings or an additional scoring rule.
 
 The full acceptance loop from `docs/session-stability.md`:
 
@@ -144,3 +151,7 @@ The Playwright session regression enforces this with a controlled song clock:
 a scored hold through four volume changes, pause, listening-option changes,
 resume, release, song completion and saved score — plus a check that a tempo
 change while paused creates a fresh session.
+
+Audio import shows decoding and rhythm-analysis progress. **Cancel import** stops
+the pending import while keeping the library open and returns focus to file
+selection. Cancelling discards late results and preserves the selected song.

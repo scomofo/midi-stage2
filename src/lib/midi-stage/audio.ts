@@ -1,5 +1,6 @@
 import type { Instrument, Song, Player } from "./types";
 import { sourceForSafe } from "./audio-helpers";
+import type { MusicEnergy } from "./concert-cues";
 
 type Voice = { source: AudioScheduledSourceNode; gain: GainNode; stopped: boolean; stop: () => void };
 
@@ -33,6 +34,10 @@ export class AudioEngine {
   generation = 0;
   song: Song | null = null;
   backingSource: AudioBufferSourceNode | null = null;
+  stageAnalyser: AnalyserNode | null = null;
+  private stageWaveform = new Uint8Array(0);
+  private stageSpectrum = new Uint8Array(0);
+  private stageEnergy: MusicEnergy = { level: 0, bass: 0 };
 
   async init() {
     if (!this.ctx) {
@@ -49,10 +54,18 @@ export class AudioEngine {
       limiter.release.value = 0.15;
       this.master.connect(limiter);
       limiter.connect(this.ctx.destination);
+      // Side-chain analysis only: the existing audible route stays untouched.
+      // It reads backing audio, never the microphone, monitor, or metronome.
+      this.stageAnalyser = this.ctx.createAnalyser();
+      this.stageAnalyser.fftSize = 1024;
+      this.stageAnalyser.smoothingTimeConstant = 0.65;
+      this.stageWaveform = new Uint8Array(this.stageAnalyser.fftSize);
+      this.stageSpectrum = new Uint8Array(this.stageAnalyser.frequencyBinCount);
       for (const name of ["backing", "monitor", "guide"]) {
         const bus = this.ctx.createGain();
         bus.gain.value = name === "monitor" ? 0.9 : 1;
         bus.connect(this.master);
+        if (name === "backing") bus.connect(this.stageAnalyser);
         this.buses[name] = bus;
       }
       if (this.ctx.createPeriodicWave) {
@@ -80,6 +93,26 @@ export class AudioEngine {
   setVolume(v: number) {
     this.volume = v;
     if (this.master && this.ctx) this.master.gain.setTargetAtTime(v * 0.5, this.ctx.currentTime, 0.02);
+  }
+
+  /** Reuses FFT buffers and the result object. Level is pre-master-volume. */
+  readStageEnergy(): MusicEnergy {
+    const result = this.stageEnergy;
+    result.level = 0;
+    result.bass = 0;
+    if (!this.running || this.ctx?.state !== "running" || !this.stageAnalyser) return result;
+    this.stageAnalyser.getByteTimeDomainData(this.stageWaveform);
+    this.stageAnalyser.getByteFrequencyData(this.stageSpectrum);
+    let sum = 0;
+    for (const sample of this.stageWaveform) sum += ((sample - 128) / 128) ** 2;
+    result.level = Math.min(1, Math.sqrt(sum / this.stageWaveform.length) * 4);
+    // 40–250 Hz, using the actual context sample rate rather than fixed bins.
+    const binHz = this.ctx.sampleRate / this.stageAnalyser.fftSize;
+    const first = Math.max(1, Math.ceil(40 / binHz));
+    const last = Math.min(this.stageSpectrum.length - 1, Math.floor(250 / binHz));
+    for (let i = first; i <= last; i++) result.bass += this.stageSpectrum[i]! / 255;
+    result.bass = last >= first ? result.bass / (last - first + 1) * result.level : 0;
+    return result;
   }
 
   contextAt(stamp = performance.now()) {
