@@ -246,6 +246,8 @@ try {
   await add('WAV Rehearsal');
   assert.equal(await page.locator('.pad').count(), 1, 'audio rhythm must offer one clear hit lane');
   await assertRhythmControls();
+  await page.getByRole('checkbox', { name: 'Strum arrows', exact: true }).check();
+  assert.match(await page.locator('#strum-guide-help').innerText(), /not scored or detected from the recording/);
   await beginBacking('WAV Rehearsal');
   await page.waitForFunction(() => window.audioImportProbe.judge?.notes.length > 1);
   await page.evaluate(() => {

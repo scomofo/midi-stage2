@@ -65,6 +65,7 @@ type Bag = {
   difficulty: Difficulty;
   volume: number;
   guide: boolean;
+  strumGuide: boolean;
   metronome: boolean;
   particles: Particle[];
   flashes: Flash[];
@@ -152,6 +153,7 @@ export function StageApp() {
   const [difficulty, setDifficulty] = useState<Difficulty>("standard");
   const [speed, setSpeed] = useState(1);
   const [guide, setGuide] = useState(false);
+  const [strumGuide, setStrumGuide] = useState(false);
   const [metronome, setMetronome] = useState(false);
   const [volume, setVolume] = useState(55);
   const [hud, setHud] = useState({
@@ -214,6 +216,7 @@ export function StageApp() {
       difficulty,
       volume: audio.volume,
       guide: bag.current?.guide ?? false,
+      strumGuide: bag.current?.strumGuide ?? false,
       metronome: bag.current?.metronome ?? false,
       particles: [],
       flashes: [],
@@ -626,6 +629,7 @@ export function StageApp() {
     setDifficulty(saved.difficulty);
     setSpeed(saved.speed);
     setGuide(saved.guide);
+    setStrumGuide(saved.strumGuide);
     setMetronome(saved.metronome);
     setVolume(saved.volume);
     setFocusStage(saved.focusStage);
@@ -635,8 +639,8 @@ export function StageApp() {
 
   useEffect(() => {
     if (!preferencesHydrated) return;
-    saveSessionPreferences({ songId, enabledPlayers: players.filter((p) => p.enabled).map((p) => p.id), difficulty, speed, guide, metronome, volume, focusStage });
-  }, [preferencesHydrated, songId, players, difficulty, speed, guide, metronome, volume, focusStage]);
+    saveSessionPreferences({ songId, enabledPlayers: players.filter((p) => p.enabled).map((p) => p.id), difficulty, speed, guide, strumGuide, metronome, volume, focusStage });
+  }, [preferencesHydrated, songId, players, difficulty, speed, guide, strumGuide, metronome, volume, focusStage]);
 
   useEffect(() => {
     if (preferencesHydrated) saveMidiRoutes(midiRoutes);
@@ -669,6 +673,10 @@ export function StageApp() {
     b.metronome = metronome;
     b.audio.setVolume(b.volume);
   }, [volume, guide, metronome, initBag]);
+
+  useLayoutEffect(() => {
+    if (bag.current) bag.current.strumGuide = strumGuide;
+  }, [strumGuide, initBag]);
 
   useEffect(() => {
     setFeel(loadFeel());
@@ -790,6 +798,7 @@ export function StageApp() {
         pressed: b.pressed,
         reduced: b.reduced,
         feel: b.feel,
+        strumGuide: b.strumGuide,
       });
       const shell = canvas.closest(".stage-shell") as HTMLElement | null;
       shell?.style.setProperty("--energy", String(b.energy));
@@ -1609,6 +1618,12 @@ export function StageApp() {
               <input type="checkbox" checked={metronome} disabled={busy} onChange={(e) => setMetronome(e.target.checked)} suppressHydrationWarning />
               Click
             </label>
+            {(rhythm || enabled.some((p) => p.type === "guitar")) && (
+              <label className="flex h-11 items-center gap-2 text-[12px] text-muted">
+                <input type="checkbox" checked={strumGuide} onChange={(e) => setStrumGuide(e.target.checked)} aria-describedby="strum-guide-help" suppressHydrationWarning />
+                Strum arrows
+              </label>
+            )}
             <label className="ml-auto flex items-center gap-2 text-[9px] tracking-[0.14em] text-muted">
               <Volume2 className="size-4" />
               <input
@@ -1625,6 +1640,12 @@ export function StageApp() {
               />
             </label>
           </div>
+
+          {(rhythm || enabled.some((p) => p.type === "guitar")) && (
+            <p id="strum-guide-help" className="mt-3 text-xs text-muted">
+              ↓ Downstrum · ↑ Upstrum. Suggested eighth-note pattern; direction is not scored{song.audioAssetId ? " or detected from the recording" : ""}.
+            </p>
+          )}
 
           <div className="mt-4 flex flex-col gap-2">
             {enabled.map((p) => {

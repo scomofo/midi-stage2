@@ -40,3 +40,4 @@ jobs:
           npm run test:setup
           npm run test:imports
           npm run test:audio
+          npm run test:graphics

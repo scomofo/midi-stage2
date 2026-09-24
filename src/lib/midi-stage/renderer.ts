@@ -1,6 +1,8 @@
 import type { Callout, ChartNote, Flash, Grade, Instrument, Particle, Player, Song } from "./types";
 import { Judge, clamp, currentHarmony, keyLabel, KEYS } from "./engine";
 import type { Feel, GoboMotion, GoboPattern, HeadCue } from "./feel";
+import { createClubArt, createNoteArt, createPerformerArt } from "./concert-art";
+import { suggestedStrum } from "./strum-guide";
 
 const GRADE_COLOR: Record<Grade, string> = {
   perfect: "#8fd4c4",
@@ -21,7 +23,10 @@ const GRADE_LABEL: Record<Grade, string> = {
 };
 
 type Geom = {
-  point: (lane: number, progress: number) => { x: number; y: number; width: number; scale: number; railW: number };
+  point: (
+    lane: number,
+    progress: number,
+  ) => { x: number; y: number; width: number; scale: number; railW: number };
   n: number;
   hit: number;
   cx: number;
@@ -47,6 +52,7 @@ export type DrawState = {
   pressed: Map<string, number>;
   reduced: boolean;
   feel: Feel;
+  strumGuide?: boolean;
 };
 
 function hexA(hex: string, a: number) {
@@ -128,6 +134,9 @@ export class StageRenderer {
   crowd: { x: number; y: number; s: number; phase: number }[] = [];
   geom = new Map<Instrument, Geom>();
   active: Player[] = [];
+  private clubArt: HTMLCanvasElement | null = null;
+  private noteArt = new Map<string, HTMLCanvasElement>();
+  private performerArt = new Map<Instrument, HTMLCanvasElement>();
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -144,7 +153,11 @@ export class StageRenderer {
       const side = Math.random() < 0.72;
       const left = Math.random() < 0.5;
       this.crowd.push({
-        x: side ? (left ? Math.random() * 0.2 : 0.8 + Math.random() * 0.2) : 0.18 + Math.random() * 0.64,
+        x: side
+          ? left
+            ? Math.random() * 0.2
+            : 0.8 + Math.random() * 0.2
+          : 0.18 + Math.random() * 0.64,
         y: side ? 0.78 + Math.random() * 0.2 : 0.88 + Math.random() * 0.1,
         s: 0.55 + Math.random() * 1.5,
         phase: Math.random() * Math.PI * 2,
@@ -163,11 +176,14 @@ export class StageRenderer {
 
   resize() {
     const rect = this.canvas.getBoundingClientRect();
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    if (this.w === rect.width && this.h === rect.height && this.dpr === dpr) return;
     this.w = rect.width;
     this.h = rect.height;
-    this.dpr = Math.min(2, window.devicePixelRatio || 1);
+    this.dpr = dpr;
     this.canvas.width = Math.round(this.w * this.dpr);
     this.canvas.height = Math.round(this.h * this.dpr);
+    this.clubArt = this.w > 0 && this.h > 0 ? createClubArt(this.w, this.h, this.dpr) : null;
   }
 
   hitTest(x: number, y: number): { player: Player; lane: number } | null {
@@ -204,9 +220,9 @@ export class StageRenderer {
     this.paintSpots(state);
     this.paintCrowd(state);
     this.paintTruss(state);
+    this.paintBand(state);
     const geom = this.paintHighways(state);
     this.paintParticles(state, geom);
-    this.paintBand(state);
     this.paintCallouts(state, geom);
     this.paintVignette(state);
 
@@ -222,14 +238,21 @@ export class StageRenderer {
 
     const loft = ctx.createLinearGradient(0, 0, 0, h);
     loft.addColorStop(0, "#07050a");
-    loft.addColorStop(0.16, `rgb(${10 + e * 8 * lights},${7 + e * 4 * lights},${14 + e * 7 * lights})`);
+    loft.addColorStop(
+      0.16,
+      `rgb(${10 + e * 8 * lights},${7 + e * 4 * lights},${14 + e * 7 * lights})`,
+    );
     loft.addColorStop(0.5, "#09080c");
     loft.addColorStop(1, "#050407");
     ctx.fillStyle = loft;
     ctx.fillRect(0, 0, w, h);
 
-    ctx.fillStyle = "#0c090f";
-    ctx.fillRect(w * 0.18, h * 0.07, w * 0.64, h * 0.26);
+    if (this.clubArt) {
+      ctx.globalAlpha = 0.38 + lights * 0.48;
+      ctx.drawImage(this.clubArt, 0, 0, w, h);
+      ctx.globalAlpha = 1;
+    }
+
     ctx.strokeStyle = "rgba(239,232,220,0.05)";
     ctx.lineWidth = 1;
     for (let i = 0; i < 5; i++) {
@@ -247,8 +270,14 @@ export class StageRenderer {
     ctx.ellipse(cycX, cycY, w * 0.36, h * 0.155, 0, 0, Math.PI * 2);
     ctx.clip();
     const cyc = ctx.createRadialGradient(cycX, cycY, 4, cycX, cycY, w * 0.38);
-    cyc.addColorStop(0, hexA(hot ? "#efe8dc" : "#e2c9a4", (0.26 + e * 0.18 + bloom * 0.3) * lights));
-    cyc.addColorStop(0.32, hexA(hot ? "#c4a882" : "#8fd4c4", (0.14 + e * 0.12 + bloom * 0.16) * lights));
+    cyc.addColorStop(
+      0,
+      hexA(hot ? "#efe8dc" : "#e2c9a4", (0.26 + e * 0.18 + bloom * 0.3) * lights),
+    );
+    cyc.addColorStop(
+      0.32,
+      hexA(hot ? "#c4a882" : "#8fd4c4", (0.14 + e * 0.12 + bloom * 0.16) * lights),
+    );
     cyc.addColorStop(0.7, hexA("#6a7a8a", (0.05 + e * 0.05) * lights));
     cyc.addColorStop(1, "rgba(0,0,0,0)");
     ctx.fillStyle = cyc;
@@ -413,10 +442,17 @@ export class StageRenderer {
     const lights = state.feel.lights;
     if (lights < 0.03) return;
     const e = state.energy;
-    const t = state.now;
+    const t = state.reduced ? 0 : state.now;
     const beat = (state.song.bpm / 60) * Math.PI;
     const cue = state.feel.heads ?? "fan";
-    const cone = (ox: number, ax: number, ly: number, half: number, alpha: number, tint: string) => {
+    const cone = (
+      ox: number,
+      ax: number,
+      ly: number,
+      half: number,
+      alpha: number,
+      tint: string,
+    ) => {
       const grd = ctx.createLinearGradient(ox, 28, ax, ly);
       grd.addColorStop(0, hexA(tint, alpha * 0.85));
       grd.addColorStop(0.38, hexA(tint, alpha * 0.28));
@@ -445,7 +481,21 @@ export class StageRenderer {
       const gobo = state.feel.gobo ?? "breakup";
       const motion = state.feel.goboMotion ?? "drift";
       const phase = t + c.i * 0.37;
-      this.paintGobo(ctx, gobo, motion, aimX, landY, half * 0.82, 13 + state.bloom * 7, c.tint, a, phase, beat, state.reduced, 1);
+      this.paintGobo(
+        ctx,
+        gobo,
+        motion,
+        aimX,
+        landY,
+        half * 0.82,
+        13 + state.bloom * 7,
+        c.tint,
+        a,
+        phase,
+        beat,
+        state.reduced,
+        1,
+      );
       if (gobo !== "open") {
         this.paintGobo(
           ctx,
@@ -479,7 +529,21 @@ export class StageRenderer {
         );
       }
       if (c.i === 4 && gobo !== "open") {
-        this.paintGobo(ctx, gobo, motion, w * 0.5, h * 0.175, w * 0.15, h * 0.07, c.tint, a * 0.32, t * 0.45, beat, state.reduced, 1);
+        this.paintGobo(
+          ctx,
+          gobo,
+          motion,
+          w * 0.5,
+          h * 0.175,
+          w * 0.15,
+          h * 0.07,
+          c.tint,
+          a * 0.32,
+          t * 0.45,
+          beat,
+          state.reduced,
+          1,
+        );
       }
 
       if (!state.reduced) {
@@ -620,11 +684,44 @@ export class StageRenderer {
     const lift = 1 + state.bloom * 0.65;
     for (const c of this.crowd) {
       const gallery = c.y < 0.55;
-      const twinkle = 0.32 + 0.68 * (0.5 + 0.5 * Math.sin(state.now * (gallery ? 1.7 : 2.4) + c.phase));
+      const twinkle = state.reduced
+        ? 0.7
+        : 0.32 + 0.68 * (0.5 + 0.5 * Math.sin(state.now * (gallery ? 1.7 : 2.4) + c.phase));
+      // Foreground silhouettes stay in the wings, behind the opaque highway.
+      if (!gallery && (c.x < 0.19 || c.x > 0.81)) {
+        const sway =
+          state.reduced || state.feel.preset === "calm"
+            ? 0
+            : Math.sin(state.now * 1.4 + c.phase) * 2;
+        const x = c.x * w + sway;
+        const y = c.y * h;
+        const s = c.s * Math.min(1, w / 600);
+        ctx.globalAlpha = crowd * 0.8;
+        ctx.fillStyle = "#080c12";
+        ctx.strokeStyle = hexA(c.phase > 3 ? "#c4a882" : "#8fd4c4", 0.18 + e * 0.2);
+        ctx.lineWidth = 0.8;
+        ctx.beginPath();
+        ctx.arc(x, y - s * 14, s * 3.8, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(x - s * 8, y + s * 10);
+        ctx.quadraticCurveTo(x - s * 9, y - s * 10, x, y - s * 9);
+        ctx.quadraticCurveTo(x + s * 9, y - s * 10, x + s * 8, y + s * 10);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+      }
       ctx.globalAlpha = (0.06 + e * 0.3) * twinkle * pulse * lift * crowd * (gallery ? 0.7 : 1);
       ctx.fillStyle = c.phase > 3.2 ? "#efe8dc" : c.phase > 1.6 ? "#c4a882" : "#8fd4c4";
       ctx.beginPath();
-      ctx.arc(c.x * w, c.y * h - state.bloom * (gallery ? 2 : 4), c.s * (1 + state.bloom * 0.24), 0, Math.PI * 2);
+      ctx.arc(
+        c.x * w,
+        c.y * h - state.bloom * (gallery ? 2 : 4),
+        c.s * (1 + state.bloom * 0.24),
+        0,
+        Math.PI * 2,
+      );
       ctx.fill();
     }
     ctx.globalAlpha = 1;
@@ -644,10 +741,14 @@ export class StageRenderer {
 
     const beat = (state.song.bpm / 60) * Math.PI;
     const cue = state.feel.heads ?? "fan";
-    const movers = new Map<number, (typeof MOVING_HEADS)[number]>(MOVING_HEADS.map((c) => [c.i, c]));
+    const movers = new Map<number, (typeof MOVING_HEADS)[number]>(
+      MOVING_HEADS.map((c) => [c.i, c]),
+    );
     for (let i = 0; i < 9; i++) {
       const x = w * ((i + 0.5) / 9);
-      const lit = 0.28 + 0.72 * Math.abs(Math.sin(state.now * beat + i * 0.55));
+      const lit = state.reduced
+        ? 0.65
+        : 0.28 + 0.72 * Math.abs(Math.sin(state.now * beat + i * 0.55));
       const mover = movers.get(i);
       const tint = mover?.tint ?? (i % 3 === 1 ? "#8fd4c4" : i % 3 === 2 ? "#8aa4c4" : "#c4a882");
       const glow = (0.22 + lit * 0.55) * (0.32 + state.energy * 0.4 + state.bloom * 0.45) * lights;
@@ -706,55 +807,33 @@ export class StageRenderer {
 
   private paintBand(state: DrawState) {
     const { ctx, w, h } = this;
-    const y = h * 0.145;
-    const cx = w * 0.5;
-    const figures: { id: Instrument; dx: number }[] = [
-      { id: "drums", dx: -46 },
-      { id: "keys", dx: -16 },
-      { id: "guitar", dx: 16 },
-      { id: "bass", dx: 46 },
+    const size = Math.min(76, w * 0.14, h * 0.17);
+    const figures: { id: Instrument; x: number }[] = [
+      { id: "keys", x: 0.35 },
+      { id: "drums", x: 0.45 },
+      { id: "guitar", x: 0.58 },
+      { id: "bass", x: 0.68 },
     ];
-    const bob = Math.sin(state.now * (state.song.bpm / 60) * Math.PI) * 1.6;
-    ctx.save();
-    ctx.fillStyle = "rgba(4,3,6,0.55)";
-    ctx.beginPath();
-    ctx.ellipse(cx, y + 26, 78, 11, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = hexA("#c4a882", 0.18 + state.feel.lights * 0.16);
-    ctx.lineWidth = 1;
-    ctx.stroke();
-    ctx.restore();
+    const animated = !state.reduced && state.feel.preset !== "calm";
     for (const f of figures) {
-      const on = state.players.find((p) => p.id === f.id)?.enabled;
-      const struck = state.flashes.some((fl) => fl.player === f.id && fl.until > state.now);
-      const jump = struck ? 5 : 0;
-      const x = cx + f.dx;
-      ctx.globalAlpha = on ? 0.9 : 0.28;
-      ctx.fillStyle = on ? (struck ? "#3a3228" : "#2a241c") : "#16141a";
-      ctx.beginPath();
-      ctx.ellipse(x, y + 20 + (on ? bob : 0) - jump, 12 + (struck ? 1.4 : 0), 8, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.beginPath();
-      ctx.arc(x, y + (on ? bob : 0) - jump, 7, 0, Math.PI * 2);
-      ctx.fill();
-      if (on) {
-        ctx.strokeStyle = hexA(struck ? "#8fd4c4" : "#c4a882", struck ? 0.9 : 0.45 + state.feel.lights * 0.25);
-        ctx.lineWidth = struck ? 1.8 : 1.1;
-        ctx.beginPath();
-        ctx.ellipse(x, y + 18 + bob - jump, 11, 7, 0, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.strokeStyle = hexA("#efe8dc", 0.12 + state.feel.lights * 0.12 + state.bloom * 0.15);
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.arc(x - 2, y - 2 + (on ? bob : 0) - jump, 5.2, -2.4, -0.4);
-        ctx.stroke();
+      let art = this.performerArt.get(f.id);
+      if (!art) {
+        art = createPerformerArt(f.id);
+        this.performerArt.set(f.id, art);
       }
+      const on = state.players.some((p) => p.id === f.id && p.enabled);
+      const struck = on && state.flashes.some((fl) => fl.player === f.id && fl.until > state.now);
+      const bob = animated && on ? Math.sin(((state.t * state.song.bpm) / 60) * Math.PI) * 1.2 : 0;
+      ctx.globalAlpha = on ? 0.95 : 0.55;
+      ctx.drawImage(
+        art,
+        w * f.x - size / 2,
+        h * 0.065 + bob - (animated && struck ? 2 : 0),
+        size,
+        size,
+      );
     }
     ctx.globalAlpha = 1;
-    ctx.fillStyle = "rgba(239,232,220,0.35)";
-    ctx.font = "600 9px 'IBM Plex Sans', system-ui, sans-serif";
-    ctx.textAlign = "center";
-    ctx.fillText(state.demo ? "WATCHING THE HOUSE" : "THE BAND", cx, y - 16);
   }
 
   private paintHighways(state: DrawState) {
@@ -774,7 +853,10 @@ export class StageRenderer {
       const lanes = judge.lanes;
       const laneCount = lanes.length;
       const cx = pw * (pi + 0.5);
-      const bw = Math.min(active.length === 1 ? w * 0.72 : pw * 0.9, active.length === 1 ? 720 : 520);
+      const bw = Math.min(
+        active.length === 1 ? w * 0.72 : pw * 0.9,
+        active.length === 1 ? 720 : 520,
+      );
       const tw = bw * 0.28;
       const point = (lane: number, progress: number) => {
         const f = clamp(progress, -0.08, 1.18);
@@ -804,9 +886,9 @@ export class StageRenderer {
 
       const hot = state.combo >= 20;
       const track = ctx.createLinearGradient(0, far, 0, hit);
-      track.addColorStop(0, "rgba(24,22,28,0.92)");
-      track.addColorStop(0.45, "rgba(16,16,20,0.96)");
-      track.addColorStop(1, "rgba(10,12,16,0.98)");
+      track.addColorStop(0, "#24343d");
+      track.addColorStop(0.3, "#101c26");
+      track.addColorStop(1, "#070d16");
       this.poly(
         [
           [tl.x, tl.y],
@@ -819,6 +901,27 @@ export class StageRenderer {
         1.6,
       );
 
+      // Machined rail edges have physical width without moving the hit line.
+      for (const side of [0, 1]) {
+        const near = rail(side, 1.14);
+        const distant = rail(side, 0);
+        const out = side === 0 ? -1 : 1;
+        const metal = ctx.createLinearGradient(distant.x, distant.y, near.x, near.y);
+        metal.addColorStop(0, "#53696d");
+        metal.addColorStop(0.5, "#1c303c");
+        metal.addColorStop(0.85, "#8aafa9");
+        metal.addColorStop(1, "#243943");
+        this.poly(
+          [
+            [distant.x, distant.y],
+            [distant.x + out * 3, distant.y],
+            [near.x + out * 9, near.y + 4],
+            [near.x, near.y],
+          ],
+          metal,
+        );
+      }
+
       ctx.strokeStyle = hexA(hot ? "#c4a882" : "#8fd4c4", 0.55 + state.bloom * 0.3);
       ctx.lineWidth = 2.2;
       ctx.beginPath();
@@ -830,7 +933,8 @@ export class StageRenderer {
 
       const nextAt = Array.from({ length: laneCount }, () => Infinity);
       for (const n of judge.notes) {
-        if (n.state === 0 && n.time >= t - 0.08 && n.time < nextAt[n.lane]!) nextAt[n.lane] = n.time;
+        if (n.state === 0 && n.time >= t - 0.08 && n.time < nextAt[n.lane]!)
+          nextAt[n.lane] = n.time;
       }
       const heldLanes = new Set<number>();
       for (const n of judge.activeHolds) heldLanes.add(n.lane);
@@ -850,7 +954,9 @@ export class StageRenderer {
           i % 2 ? "rgba(143,212,196,0.07)" : "rgba(0,0,0,0.18)",
         );
 
-        const flash = state.flashes.find((f) => f.player === p.id && f.lane === i && f.until > state.now);
+        const flash = state.flashes.find(
+          (f) => f.player === p.id && f.lane === i && f.until > state.now,
+        );
         const pressing = (state.pressed.get(`${p.id}:${i}`) || 0) > state.now || heldLanes.has(i);
         const soon = Number.isFinite(nextAt[i]) ? progress(nextAt[i]!) : -1;
         if (soon > 0.55 && soon < 1.08) {
@@ -889,13 +995,21 @@ export class StageRenderer {
         ctx.beginPath();
         ctx.moveTo(a.x, a.y);
         ctx.lineTo(b.x, b.y);
-        ctx.strokeStyle = i === 0 || i === laneCount ? "rgba(239,232,220,0.32)" : "rgba(239,232,220,0.1)";
+        ctx.strokeStyle =
+          i === 0 || i === laneCount ? "rgba(239,232,220,0.32)" : "rgba(239,232,220,0.1)";
         ctx.lineWidth = i === 0 || i === laneCount ? 1.8 : 0.9;
         ctx.stroke();
       }
 
-      const first = Math.max(0, state.song.beats.findIndex((b) => b.time >= t - 0.2));
-      for (let bi = first; bi < state.song.beats.length && state.song.beats[bi]!.time < t + look; bi++) {
+      const first = Math.max(
+        0,
+        state.song.beats.findIndex((b) => b.time >= t - 0.2),
+      );
+      for (
+        let bi = first;
+        bi < state.song.beats.length && state.song.beats[bi]!.time < t + look;
+        bi++
+      ) {
         const beat = state.song.beats[bi]!;
         const pr = progress(beat.time);
         if (pr < 0 || pr > 1.14) continue;
@@ -913,7 +1027,8 @@ export class StageRenderer {
       const b = rail(1, 1);
       ctx.save();
       ctx.shadowColor = hot ? "#c4a882" : "#8fd4c4";
-      ctx.shadowBlur = (28 + state.energy * 22 + state.bloom * 36) * (0.25 + 0.75 * state.feel.trails);
+      ctx.shadowBlur =
+        (28 + state.energy * 22 + state.bloom * 36) * (0.25 + 0.75 * state.feel.trails);
       ctx.beginPath();
       ctx.moveTo(a.x, a.y);
       ctx.lineTo(b.x, b.y);
@@ -927,16 +1042,30 @@ export class StageRenderer {
       for (let lane = 0; lane < laneCount; lane++) {
         const mid = point(lane + 0.5, 1);
         const lw = strikeW / laneCount;
-        const rx = Math.min(lw * 0.34, 28);
-        const flash = state.flashes.find((f) => f.player === p.id && f.lane === lane && f.until > state.now);
-        const pressing = (state.pressed.get(`${p.id}:${lane}`) || 0) > state.now || heldLanes.has(lane);
+        const rx = Math.min(lw * 0.36, laneCount === 1 ? 64 : 32);
+        const flash = state.flashes.find(
+          (f) => f.player === p.id && f.lane === lane && f.until > state.now,
+        );
+        const pressing =
+          (state.pressed.get(`${p.id}:${lane}`) || 0) > state.now || heldLanes.has(lane);
         const soon = Number.isFinite(nextAt[lane]) ? progress(nextAt[lane]!) : -1;
         const live = Boolean(flash || pressing);
         const squash = live ? 1.28 : soon > 0.88 ? 1.1 : 1 + beatPulse * 0.04;
         const tint = flash?.kind === "miss" ? "#d36a6a" : lanes[lane]!.color;
         ctx.beginPath();
+        ctx.ellipse(mid.x, hit + 4, rx + 5, 12, 0, 0, Math.PI * 2);
+        ctx.fillStyle = "#05090e";
+        ctx.fill();
+        ctx.strokeStyle = "#647777";
+        ctx.lineWidth = 1.2;
+        ctx.stroke();
+        ctx.beginPath();
         ctx.ellipse(mid.x, hit, rx * squash, 8 / squash, 0, 0, Math.PI * 2);
-        ctx.fillStyle = live ? hexA(tint, 0.62) : soon > 0.82 ? hexA(tint, 0.22) : "rgba(8,10,14,0.92)";
+        ctx.fillStyle = live
+          ? hexA(tint, 0.62)
+          : soon > 0.82
+            ? hexA(tint, 0.22)
+            : "rgba(8,10,14,0.92)";
         ctx.fill();
         ctx.strokeStyle = hexA(tint, live ? 1 : soon > 0.7 ? 0.9 : 0.75);
         ctx.lineWidth = live ? 2.6 : 1.5;
@@ -951,7 +1080,14 @@ export class StageRenderer {
           ctx.fill();
           ctx.restore();
         }
-        this.text(lanes[lane]!.short, mid.x, hit + 22, active.length > 2 ? 8 : 10, lanes[lane]!.color, "700");
+        this.text(
+          lanes[lane]!.short,
+          mid.x,
+          hit + 22,
+          active.length > 2 ? 8 : 10,
+          lanes[lane]!.color,
+          "700",
+        );
         if (active.length < 3) {
           const code = KEYS[p.id][lane];
           if (code) this.text(keyLabel(code), mid.x, hit + 36, 8, "rgba(239,232,220,0.45)", "500");
@@ -987,9 +1123,25 @@ export class StageRenderer {
           ctx.beginPath();
           ctx.moveTo(tail.x, tail.y);
           ctx.lineTo(pos.x, pos.y);
-          ctx.strokeStyle = hexA(color, n.state === 2 ? 0.12 : isHeld ? 0.78 + 0.2 * Math.sin(state.now * 14) : 0.38);
+          ctx.strokeStyle = hexA(
+            color,
+            n.state === 2
+              ? 0.12
+              : isHeld
+                ? state.reduced
+                  ? 0.88
+                  : 0.78 + 0.2 * Math.sin(state.now * 14)
+                : 0.38,
+          );
           ctx.lineWidth = Math.max(3, lw * 0.16);
           ctx.lineCap = "round";
+          ctx.stroke();
+          // A bright core gives the sustain a readable ribbon at every distance.
+          ctx.beginPath();
+          ctx.moveTo(tail.x, tail.y);
+          ctx.lineTo(pos.x, pos.y);
+          ctx.strokeStyle = hexA("#e8fff4", n.state === 2 ? 0.06 : isHeld ? 0.9 : 0.52);
+          ctx.lineWidth = Math.max(1, lw * 0.035);
           ctx.stroke();
         }
 
@@ -1018,30 +1170,29 @@ export class StageRenderer {
 
         const alpha = n.state === 2 ? 0.22 : isPop ? 0.95 * (1 - popK) : 0.95;
         const grow = isPop ? 1 + popK * 0.55 : pr > 0.82 && n.state === 0 ? 1.06 : 1;
-        const rw = Math.min(lw * 0.42, Math.max(4.5, lw * 0.3)) * pos.scale * grow;
-        const rh = Math.max(4, 7.5 * pos.scale + pr * 3.2) * grow;
+        const rw = Math.min(laneCount === 1 ? 70 : 42, Math.max(4.5, lw * 0.37)) * pos.scale * grow;
+        const strum =
+          state.strumGuide && (p.type === "guitar" || state.song.matching === "rhythm")
+            ? suggestedStrum(state.song, n.time)
+            : undefined;
+        const rh = Math.max(4, (strum ? 15 : 10) * pos.scale + pr * 3.2) * grow;
         ctx.save();
-        if (n.state !== 2 && !state.reduced) {
-          ctx.shadowColor = color;
-          ctx.shadowBlur = (6 + (pr > 0.8 ? 6 : 0)) * pos.scale * state.feel.trails;
+        const artKey = `${color}:${p.type === "drums"}:${strum ?? "none"}`;
+        let art = this.noteArt.get(artKey);
+        if (!art) {
+          art = createNoteArt(color, p.type === "drums", strum);
+          this.noteArt.set(artKey, art);
         }
-        ctx.beginPath();
-        ctx.ellipse(pos.x, pos.y, rw, rh, 0, 0, Math.PI * 2);
-        ctx.fillStyle = hexA(color, alpha);
-        ctx.fill();
-        ctx.shadowBlur = 0;
-        ctx.strokeStyle = hexA("#efe8dc", n.state === 2 ? 0.15 : isPop ? 0.9 * (1 - popK) : 0.55);
-        ctx.lineWidth = isPop ? 2 : 1;
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.ellipse(pos.x - rw * 0.28, pos.y - rh * 0.35, rw * 0.35, rh * 0.28, -0.4, 0, Math.PI * 2);
-        ctx.fillStyle = hexA("#efe8dc", n.state === 2 ? 0.08 : 0.35);
-        ctx.fill();
+        ctx.globalAlpha = alpha;
+        ctx.drawImage(art, pos.x - rw * 1.2, pos.y - rh * 1.4, rw * 2.4, rh * 2.8);
         ctx.restore();
       };
 
       const notes = judge.notes;
-      const lo = Math.max(0, notes.findIndex((n) => n.time >= t - 0.5 * state.speed));
+      const lo = Math.max(
+        0,
+        notes.findIndex((n) => n.time >= t - 0.5 * state.speed),
+      );
       const hi = notes.length;
       let drawn = 0;
       ctx.save();
@@ -1089,10 +1240,15 @@ export class StageRenderer {
           ctx.globalAlpha = fade;
           this.text(p.text || "", hx, hy - 28 - life * 36, p.size, p.color, "800");
         } else if (p.kind === "burst") {
-          ctx.fillStyle = hexA(p.color, 0.28 * fade);
+          ctx.fillStyle = hexA(p.color, 0.2 * fade);
           ctx.beginPath();
           ctx.ellipse(hx, hy, 8 + life * 42, 5 + life * 16, 0, 0, Math.PI * 2);
           ctx.fill();
+          // Compact white impact core disappears before the spreading ring.
+          if (life < 0.35) {
+            ctx.fillStyle = hexA("#f4fff5", (1 - life / 0.35) * 0.9);
+            ctx.fillRect(hx - 15, hy - 2, 30, 4);
+          }
         } else {
           ctx.strokeStyle = p.color;
           ctx.lineWidth = p.kind === "shock" ? 3.2 * (1 - life) : 2;
@@ -1102,10 +1258,12 @@ export class StageRenderer {
           ctx.stroke();
         }
       } else {
-        ctx.fillStyle = p.color;
+        ctx.strokeStyle = p.color;
+        ctx.lineWidth = Math.max(0.7, p.size * (1 - life) * 0.65);
         ctx.beginPath();
-        ctx.arc(p.x, p.y, p.size * (1 - life * 0.4), 0, Math.PI * 2);
-        ctx.fill();
+        ctx.moveTo(p.x, p.y);
+        ctx.lineTo(p.x - p.vx * 0.025, p.y - p.vy * 0.025);
+        ctx.stroke();
       }
     }
     ctx.globalAlpha = 1;
@@ -1114,24 +1272,53 @@ export class StageRenderer {
   private paintCallouts(state: DrawState, geom: Map<Instrument, Geom>) {
     const { ctx, h } = this;
     if (!state.feel.callouts) return;
+    // Chords can emit several judgments in one frame. Keep one grade and one
+    // milestone per player instead of stacking labels over incoming notes.
+    const latest = new Map<Instrument, Callout>();
+    const milestones = new Map<Instrument, Callout>();
     for (const c of state.callouts) {
-      if (c.until < state.now) continue;
+      if (c.until <= state.now) continue;
+      (c.text && c.text !== c.grade ? milestones : latest).set(c.player, c);
+    }
+    for (const [player, c] of latest) {
       const g = geom.get(c.player);
       if (!g) continue;
       const k = clamp((c.until - state.now) / 0.7, 0, 1);
-      const pop = 0.92 + 0.08 * (1 - (1 - k) * (1 - k));
+      const pop = state.reduced ? 1 : 0.92 + 0.08 * (1 - (1 - k) * (1 - k));
       ctx.globalAlpha = k;
-      const y = h * 0.42 - (1 - k) * 14;
-      const label = c.text && c.text !== c.grade ? c.text : GRADE_LABEL[c.grade];
+      const y = h * 0.42;
+      const size = Math.min(22, Math.max(10, this.w / Math.max(1, geom.size) / 9));
       ctx.save();
       ctx.translate(g.cx, y);
       ctx.scale(pop, pop);
-      this.text(label, 0, 0, c.text && c.text !== c.grade ? 18 : 22, GRADE_COLOR[c.grade], "800");
+      this.text(GRADE_LABEL[c.grade], 0, 0, size, GRADE_COLOR[c.grade], "800");
       ctx.restore();
       if (c.grade === "perfect" || c.grade === "great" || c.grade === "good") {
-        const late = Math.abs(c.delta) < 5 ? "RIGHT ON TIME" : `${Math.abs(Math.round(c.delta))} ms ${c.delta < 0 ? "early" : "late"}`;
-        this.text(late, g.cx, y + 20, 10, "rgba(239,232,220,0.55)", "500");
+        const late =
+          Math.abs(c.delta) < 5
+            ? "RIGHT ON TIME"
+            : `${Math.abs(Math.round(c.delta))} ms ${c.delta < 0 ? "early" : "late"}`;
+        this.text(late, g.cx, y + 18, Math.min(10, size * 0.48), "rgba(239,232,220,0.7)", "500");
       }
+      const milestone = milestones.get(player);
+      if (milestone) {
+        ctx.globalAlpha = clamp((milestone.until - state.now) / 0.3, 0, 1);
+        this.text(milestone.text!, g.cx, y - 24, size * 0.66, "#e0b27a", "700");
+        milestones.delete(player);
+      }
+    }
+    for (const [player, c] of milestones) {
+      const g = geom.get(player);
+      if (!g) continue;
+      ctx.globalAlpha = clamp((c.until - state.now) / 0.3, 0, 1);
+      this.text(
+        c.text!,
+        g.cx,
+        h * 0.42 - 24,
+        Math.min(14, this.w / Math.max(1, geom.size) / 13),
+        "#e0b27a",
+        "700",
+      );
     }
     ctx.globalAlpha = 1;
   }
@@ -1165,7 +1352,9 @@ export class StageRenderer {
     ctx.fillStyle = bottom;
     ctx.fillRect(0, 0, w, h);
 
-    const miss = state.callouts.find((c) => (c.grade === "miss" || c.grade === "extra") && c.until > state.now);
+    const miss = state.callouts.find(
+      (c) => (c.grade === "miss" || c.grade === "extra") && c.until > state.now,
+    );
     if (miss) {
       const k = clamp((miss.until - state.now) / 0.7, 0, 1);
       ctx.fillStyle = `rgba(211,106,106,${0.1 * k})`;
@@ -1222,7 +1411,17 @@ export function spawnHitJuice(
 ) {
   if (reduced) return;
   const amp = Math.max(0, juice);
-  const count = Math.round((grade === "perfect" ? 22 : grade === "great" ? 14 : grade === "good" ? 8 : grade === "miss" || grade === "extra" ? 6 : 0) * amp);
+  const count = Math.round(
+    (grade === "perfect"
+      ? 22
+      : grade === "great"
+        ? 14
+        : grade === "good"
+          ? 8
+          : grade === "miss" || grade === "extra"
+            ? 6
+            : 0) * amp,
+  );
   if (count <= 0 && amp < 0.08) return;
   const sparkColor = grade === "miss" || grade === "extra" ? "#d36a6a" : color;
   for (let i = 0; i < count; i++) {
