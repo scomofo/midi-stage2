@@ -229,6 +229,7 @@ try {
   assert.deepEqual(errors, []);
   console.log('PASS: sound-enable gesture; unscored keyboard/MIDI warmup; per-device/channel routing; route-edit release; disconnect/reconnect; keyboard fallback; session/routing preferences survive reload; no auto MIDI permission; corrupt storage recovery; mobile soundcheck');
 } catch (error) {
+  console.error('Setup regression failed:', error);
   console.error('Setup regression state:', await page.evaluate(() => ({
     url: location.href,
     soundcheckPresent: Boolean(document.querySelector('#soundcheck-panel')),
@@ -240,10 +241,9 @@ try {
       disabled: element.disabled,
     })),
   })).catch(() => 'Page unavailable'));
-  const failureDir = screenshotDir || '/workspace/screenshots';
-  await mkdir(failureDir, { recursive: true });
-  await page.screenshot({ path: join(failureDir, 'setup-failure.png'), fullPage: true }).catch(() => {});
+  if (screenshotDir) await page.screenshot({ path: join(screenshotDir, 'setup-failure.png'), fullPage: true })
+    .catch((diagnosticError) => console.error('Setup failure screenshot unavailable:', diagnosticError));
   throw error;
 } finally {
-  await browser.close();
+  await browser.close().catch((cleanupError) => console.error('Browser cleanup failed:', cleanupError));
 }

@@ -279,11 +279,11 @@ try {
   assert.deepEqual(errors, []);
   console.log('PASS: real WAV/MP3/FLAC decoding; onset preview; original backing/count-in; keyboard and any-pitch MIDI scoring; pause/seek/resume; backing tempo; duplicate reimport under quota; IndexedDB reload; missing audio recovery; silence/corruption errors; mobile reimport');
 } catch (error) {
+  console.error('Audio import regression failed:', error);
   console.error('Audio import regression state:', await page.locator('body').innerText().catch(() => 'Page unavailable'), { errors, navigations });
-  const failureDir = screenshotDir || '/workspace/screenshots';
-  await mkdir(failureDir, { recursive: true });
-  await page.screenshot({ path: join(failureDir, 'audio-import-failure.png'), fullPage: true }).catch(() => {});
+  if (screenshotDir) await page.screenshot({ path: join(screenshotDir, 'audio-import-failure.png'), fullPage: true })
+    .catch((diagnosticError) => console.error('Audio import failure screenshot unavailable:', diagnosticError));
   throw error;
 } finally {
-  await browser.close();
+  await browser.close().catch((cleanupError) => console.error('Browser cleanup failed:', cleanupError));
 }

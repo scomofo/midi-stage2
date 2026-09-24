@@ -58,7 +58,12 @@ function midiFile(name, keys = true) {
 const browser = await chromium.launch({ headless: true, args: ['--no-sandbox'] });
 const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
 const errors = [];
+const navigations = [];
+let phase = 'initializing browser';
 page.on('pageerror', (error) => errors.push(error.message));
+page.on('framenavigated', (frame) => {
+  if (frame === page.mainFrame()) navigations.push({ url: frame.url(), at: Date.now() });
+});
 page.setDefaultTimeout(10000);
 try {
   await page.addInitScript(() => {
@@ -99,6 +104,7 @@ try {
   const dialog = page.getByRole('dialog', { name: 'Your songs', exact: true });
   const start = page.getByRole('button', { name: 'Start set', exact: true });
   const openLibrary = async (keyboard = false) => {
+    phase = 'opening song library';
     const button = page.getByRole('button', { name: 'Import songs', exact: true });
     if (!await button.isVisible()) await page.getByRole('button', { name: 'Open setlist', exact: true }).click();
     if (keyboard) {
@@ -108,13 +114,18 @@ try {
     await dialog.waitFor();
   };
   const upload = async (file) => {
+    phase = `reading ${file.name}`;
     await dialog.getByLabel('Choose song file', { exact: true }).setInputFiles(file);
     await frames();
   };
   const add = async (title) => {
+    phase = `adding ${title}: clicking Add to setlist`;
     await dialog.getByRole('button', { name: 'Add to setlist', exact: true }).click();
+    phase = `adding ${title}: waiting for library to close`;
     await dialog.waitFor({ state: 'hidden' });
+    phase = `adding ${title}: waiting for selected heading`;
     await page.getByRole('heading', { level: 2, name: title, exact: true }).waitFor();
+    phase = `adding ${title}: checking ready state`;
     await frames();
     assert.equal(await start.isEnabled(), true, 'import selection must be ready, without autoplay');
   };
@@ -127,6 +138,7 @@ try {
     if (screenshotDir) await page.screenshot({ path: join(screenshotDir, name), fullPage: true });
   };
 
+  phase = 'loading stage';
   await page.goto(url, { waitUntil: 'domcontentloaded' });
   await hydrated();
   await installProbe();
@@ -155,9 +167,13 @@ try {
   assert.match(await dialog.innerText(), /Keys/);
   await screenshot('import-preview-desktop.png');
   await add('Imported Rehearsal');
+  phase = 'selecting Expert difficulty for imported chart';
   await page.getByRole('combobox', { name: /DIFFICULTY/ }).selectOption('expert');
+  phase = 'starting Imported Rehearsal';
   await start.click();
+  phase = 'waiting for imported chart playback';
   await page.waitForFunction(() => window.importProbe.audio?.running && window.importProbe.judge);
+  phase = 'scoring imported chart note and sustain';
   await page.evaluate(() => {
     const probe = window.importProbe;
     if (probe.lastOptions.song.name !== 'Imported Rehearsal') throw new Error('Playback did not receive the imported song');
@@ -290,11 +306,26 @@ try {
   assert.deepEqual(errors, []);
   console.log('PASS: JSON/MIDI preview and import; invalid/unsupported file isolation; keyboard scoring and sustain; difficulty-safe chart data; duplicate prevention; reload persistence; populated part selection; safe removal; unrelated removal preserves paused take; Escape; local import without MIDI permission; mobile dialog');
 } catch (error) {
-  console.error('Import regression state:', await page.locator('body').innerText().catch(() => 'Page unavailable'), errors);
-  const failureDir = screenshotDir || '/workspace/screenshots';
-  await mkdir(failureDir, { recursive: true });
-  await page.screenshot({ path: join(failureDir, 'import-failure.png'), fullPage: true }).catch(() => {});
+  // Print the original exception before attempting optional diagnostics. CI may
+  // not have /workspace, and an unavailable screenshot must never replace it.
+  console.error(`Import regression failed during ${phase}:`, error);
+  console.error('Import regression state:', await page.locator('body').innerText().catch(() => 'Page unavailable'), { errors, navigations });
+  console.error('Import regression probe:', await page.evaluate(() => ({
+    url: location.href,
+    focusedControl: document.activeElement?.getAttribute('aria-label') || document.activeElement?.textContent?.trim(),
+    transport: [...document.querySelectorAll('.stage-transport button')].map((button) => ({
+      label: button.getAttribute('aria-label') || button.textContent.trim(), disabled: button.disabled,
+    })),
+    selectedOptions: [...document.querySelectorAll('select')].map((select) => select.value),
+    beginCalls: window.importProbe?.beginCalls,
+    song: window.importProbe?.lastOptions?.song?.name,
+    running: window.importProbe?.audio?.running,
+    audioState: window.importProbe?.audio?.ctx?.state,
+    judge: window.importProbe?.judge?.stats,
+  })).catch(() => 'Probe unavailable'));
+  if (screenshotDir) await page.screenshot({ path: join(screenshotDir, 'import-failure.png'), fullPage: true })
+    .catch((diagnosticError) => console.error('Import failure screenshot unavailable:', diagnosticError));
   throw error;
 } finally {
-  await browser.close();
+  await browser.close().catch((cleanupError) => console.error('Browser cleanup failed:', cleanupError));
 }
