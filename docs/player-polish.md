@@ -41,6 +41,36 @@ exercise completed takes, independent band parts, sparse samples, autoplay and
 desktop/mobile layouts. Unit checks cover the coaching boundaries and actual
 Judge offsets at each supported playback speed.
 
+## Section practice
+
+Choose **Practice section** above the stage, then use the existing tempo control
+to slow the passage down. Authored section markers take priority. Songs with only
+one generic marker, including audio imports, get passages of 32 beats (eight bars
+in the stage's four-beat meter), plus a final partial passage. These labels do not
+claim to detect verses or choruses in a recording.
+
+Each take starts with a four-beat count-in. **Repeat section** keeps playing fresh
+takes with a new count-in and score; turn it off to finish the current take and
+review its results. The practice panel shows the take number and previous take's
+score and accuracy. Pause/resume keeps the current take. Reset starts again at
+take one; **Full song** stops practice and restores the full chart. Changing the
+section, lineup, difficulty or tempo resets the take. Practice selections are not
+restored automatically on a later visit.
+
+Only notes beginning inside the selected passage are targets. Earlier sustains
+do not turn into extra notes, and sustains crossing the end stop at the boundary.
+The full song's lane/key mapping stays in place. Original backing recordings use
+the matching source offset and stop at the passage end, including on loops and
+resume. Strum suggestions keep the original beat phase.
+
+Practice scores never read or replace full-song personal bests. Autoplay plays the
+passage once, remains unsaved, and does not show personal timing coaching. Empty
+passages explain that the lineup has no notes instead of starting a silent loop.
+
+`npm run test:practice` checks section boundaries, loops/count-ins, score and input
+cleanup, pause/resume, cancelled starts, imported backing audio, isolated records,
+and desktop/mobile controls. `practice.test.ts` covers the pure section/slice rules.
+
 ## Soundcheck and saved setup
 
 Open **Soundcheck** before a set and choose **Enable sound**. Mapped keyboard,

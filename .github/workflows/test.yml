@@ -37,6 +37,7 @@ jobs:
             exit 1
           fi
           npm run test:session
+          npm run test:practice
           npm run test:setup
           npm run test:imports
           npm run test:audio

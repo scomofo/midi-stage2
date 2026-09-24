@@ -270,6 +270,15 @@
   line-height: 1.5;
   text-wrap: balance;
 }
+.session-practice-context {
+  margin: var(--session-space-sm) 0 0;
+  color: var(--color-tungsten);
+  font-size: var(--session-text-sm);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  text-wrap: balance;
+}
 .session-timing {
   margin-top: var(--session-space-lg);
   padding-block: var(--session-space-md);

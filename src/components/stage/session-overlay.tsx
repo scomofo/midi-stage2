@@ -3,6 +3,9 @@ import { ArrowRight, Eye, Keyboard, Pause, Play, RotateCcw, Star, Trophy } from 
 import { Button } from "@/components/ui/button";
 import type { Difficulty, Instrument } from "@/lib/midi-stage/types";
 import { TIMING_CENTER_MS, type TimingSummary } from "@/lib/midi-stage/timing-summary";
+import { formatTime } from "@/lib/midi-stage/engine";
+
+export type PracticeContext = { name: string; start: number; end: number; pass: number };
 
 export type SessionResults = {
   score: number;
@@ -23,6 +26,7 @@ export type SessionResults = {
   difficulty: Difficulty;
   speed: number;
   parts: { id: Instrument; label: string; timing: TimingSummary }[];
+  practice?: PracticeContext;
 };
 
 const DIFFICULTY_LABELS: Record<Difficulty, string> = {
@@ -73,6 +77,7 @@ type SessionOverlayProps = {
   busy: boolean;
   demo: boolean;
   rhythm?: boolean;
+  practice?: PracticeContext;
   results?: SessionResults | null;
   controls: { label: string; keys: string[] }[];
   onStart: () => void;
@@ -103,7 +108,17 @@ function practiceTip(results: SessionResults, rhythm: boolean) {
     return "Aim for the centre of the strike line. Try the metronome to settle into a steady pulse.";
   if (results.parts.some((part) => part.timing.tendency !== "centered"))
     return "Every note earned Perfect. Keep this setup and use the timing notes above for your next take.";
+  if (results.practice)
+    return "Every note landed perfectly. Repeat to make it feel natural, or return to the full song.";
   return "Every note landed perfectly. Try the next song, or raise the difficulty for a fresh challenge.";
+}
+
+function PracticeSummary({ practice }: { practice: PracticeContext }) {
+  return (
+    <p className="session-practice-context">
+      {practice.name} · {formatTime(practice.start)}–{formatTime(practice.end)} · Take {practice.pass}
+    </p>
+  );
 }
 
 function KeyGuide({ controls, rhythm }: Pick<SessionOverlayProps, "controls" | "rhythm">) {
@@ -134,6 +149,7 @@ export function SessionOverlay({
   busy,
   demo,
   rhythm = false,
+  practice,
   results,
   controls,
   onStart,
@@ -169,30 +185,36 @@ export function SessionOverlay({
       >
         {isResults ? (
           <>
-            <div className="session-eyebrow">SET COMPLETE{results.demo ? " · AUTOPLAY" : ""}</div>
+            <div className="session-eyebrow">
+              {results.practice ? "PRACTICE COMPLETE" : "SET COMPLETE"}{results.demo ? " · AUTOPLAY" : ""}
+            </div>
             <h2 ref={resultsHeadingRef} id="session-heading" tabIndex={-1} aria-describedby="session-result-summary">
               {results.demo
                 ? "Now make it yours."
-                : results.newBest && !results.bestSaved
-                  ? "Your set is complete."
-                  : results.newBest
-                    ? "Your best set yet."
-                    : results.accuracy >= 90
-                      ? "You found the pocket."
-                      : "One set further."}
+                : results.practice
+                  ? "One passage stronger."
+                  : results.newBest && !results.bestSaved
+                    ? "Your set is complete."
+                    : results.newBest
+                      ? "Your best set yet."
+                      : results.accuracy >= 90
+                        ? "You found the pocket."
+                        : "One set further."}
             </h2>
             <p id="session-result-summary" className="sr-only">
-              {songName}. {results.demo ? "Autoplay score" : "Your score"} {results.score.toLocaleString()}.
+              {songName}. {results.demo ? "Autoplay score" : results.practice ? "Practice score" : "Your score"} {results.score.toLocaleString()}.
               {" "}Accuracy {Math.round(results.accuracy)} percent.
               {" "}{runContext}.
-              {results.newBest && !results.bestSaved ? " Could not save your personal best on this device. Your score is still shown here." : ""}
+              {results.practice ? ` ${results.practice.name}, take ${results.practice.pass}. Practice score not saved.` : ""}
+              {!results.practice && results.newBest && !results.bestSaved ? " Could not save your personal best on this device. Your score is still shown here." : ""}
             </p>
             <p className="session-song">{songName}</p>
             <p className="session-run-context">{runContext}</p>
+            {results.practice ? <PracticeSummary practice={results.practice} /> : null}
 
             <div className="session-score-block">
               <span className="session-score-label">
-                {results.demo ? "Autoplay score" : "Your score"}
+                {results.demo ? "Autoplay score" : results.practice ? "Practice score" : "Your score"}
               </span>
               <strong className="session-score">{results.score.toLocaleString()}</strong>
               <div
@@ -211,6 +233,8 @@ export function SessionOverlay({
               </div>
               {results.demo ? (
                 <span className="session-save-note">AUTOPLAY · NOT SAVED</span>
+              ) : results.practice ? (
+                <span className="session-save-note">PRACTICE · NOT SAVED</span>
               ) : results.newBest && !results.bestSaved ? (
                 <>
                   <span className="session-save-note">Score not saved</span>
@@ -274,7 +298,7 @@ export function SessionOverlay({
             </p>
             {!results.demo ? <RecentTiming parts={results.parts} /> : null}
             <div className="session-practice-tip">
-              <span>{results.demo ? "STEP INTO THE SPOTLIGHT" : "FOR YOUR NEXT SET"}</span>
+              <span>{results.demo ? "STEP INTO THE SPOTLIGHT" : results.practice ? "FOR YOUR NEXT TAKE" : "FOR YOUR NEXT SET"}</span>
               <p>{practiceTip(results, rhythm)}</p>
             </div>
             <div className="session-actions">
@@ -301,16 +325,17 @@ export function SessionOverlay({
               disabled={busy}
               className="session-back"
             >
-              Back to house
+              {results.practice ? "Back to full song" : "Back to house"}
             </Button>
           </>
         ) : isPaused ? (
           <>
             <div className="session-eyebrow">
-              <Pause size={14} aria-hidden="true" /> SET PAUSED{demo ? " · AUTOPLAY" : ""}
+              <Pause size={14} aria-hidden="true" /> {practice ? "PRACTICE PAUSED" : "SET PAUSED"}{demo ? " · AUTOPLAY" : ""}
             </div>
             <h2 id="session-heading">Take a breath.</h2>
             <p className="session-song">{songName}</p>
+            {practice ? <PracticeSummary practice={practice} /> : null}
             <p className="session-description">
               Your place is saved. Pick up the groove when you’re ready.
             </p>
@@ -326,13 +351,18 @@ export function SessionOverlay({
                 Restart set
               </Button>
             </div>
-            <p className="session-footnote">Resume keeps your score. Restart begins a fresh set.</p>
+            <p className="session-footnote">
+              {practice
+                ? "Resume keeps this take. Restart begins the section again with a count-in and a fresh score. Practice scores aren’t saved."
+                : "Resume keeps your score. Restart begins a fresh set."}
+            </p>
           </>
         ) : (
           <>
-            <div className="session-eyebrow">YOUR NEXT SESSION</div>
+            <div className="session-eyebrow">{practice ? "SECTION PRACTICE" : "YOUR NEXT SESSION"}</div>
             <h2 id="session-heading">Take the stage.</h2>
             <p className="session-song">{songName}</p>
+            {practice ? <PracticeSummary practice={practice} /> : null}
             <p className="session-description">
               {rhythm
                 ? "Tap once per gem as it crosses the strike line. Use your mapped key, tap the HIT pad, or play any MIDI note. No holds needed."
@@ -357,7 +387,11 @@ export function SessionOverlay({
                 <ArrowRight size={14} aria-hidden="true" />
               </Button>
             </div>
-            <p className="session-footnote">Solo by default. Add your band from the green room.</p>
+            <p className="session-footnote">
+              {practice
+                ? "Start with a count-in. Repeat section gives you a fresh score on every take. Practice scores aren’t saved."
+                : "Solo by default. Add your band from the green room."}
+            </p>
           </>
         )}
       </section>
