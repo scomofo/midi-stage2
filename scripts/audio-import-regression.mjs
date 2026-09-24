@@ -194,10 +194,21 @@ try {
       await dialog.getByRole('status').filter({ hasText: 'Decoding audio…' }).waitFor();
       assert.equal(await dialog.getByLabel('Choose song file', { exact: true }).isDisabled(), true,
         'file selection must show that an import is in progress');
-      if (method === 'Escape') await page.keyboard.press('Escape');
-      else await dialog.getByRole('button', { name: 'Close song library', exact: true }).click();
-      await dialog.waitFor({ state: 'hidden' });
-      await openLibrary();
+      assert.equal(await dialog.getByRole('progressbar').count(), 1);
+      if (method === 'Cancel') {
+        await screenshot('audio-import-progress.png');
+        await dialog.getByRole('button', { name: 'Cancel import', exact: true }).click();
+        assert.equal(await dialog.isVisible(), true, 'Cancel must keep the library open');
+        await dialog.getByLabel('Choose song file', { exact: true }).evaluate((input) => {
+          if (document.activeElement !== input) throw Error('Cancel must return focus to file selection');
+        });
+        assert.equal(await dialog.getByRole('progressbar').count(), 0);
+      } else {
+        if (method === 'Escape') await page.keyboard.press('Escape');
+        else await dialog.getByRole('button', { name: 'Close song library', exact: true }).click();
+        await dialog.waitFor({ state: 'hidden' });
+        await openLibrary();
+      }
       assert.equal(await dialog.getByLabel('Choose song file', { exact: true }).isEnabled(), true,
         'reopening the library must allow a fresh import');
       await page.evaluate(() => window.pendingAudioDecode.release());
@@ -224,6 +235,7 @@ try {
   await openLibrary();
   await cancelDuringDecode('Close');
   await cancelDuringDecode('Escape');
+  await cancelDuringDecode('Cancel');
   await upload(silenceFile());
   await dialog.getByRole('alert').waitFor();
   assert.match(await dialog.getByRole('alert').innerText(), /silent|silence|quiet|beat|rhythm|onset/i,
@@ -238,7 +250,7 @@ try {
   await dialog.getByRole('button', { name: 'Add to setlist', exact: true }).waitFor();
   const notes = await dialog.locator('dl dd').allTextContents();
   assert.ok(notes.some((text) => Number.parseInt(text, 10) >= 8), 'the transient fixture must produce a useful playable rhythm');
-  assert.deepEqual(await page.evaluate(() => window.cancelledAudioDecodes.map((gate) => gate.sampleReads)), [0, 0],
+  assert.deepEqual(await page.evaluate(() => window.cancelledAudioDecodes.map((gate) => gate.sampleReads)), [0, 0, 0],
     'canceled imports must stay unanalysed after a subsequent valid import finishes');
   assert.equal(await page.evaluate(() => window.audioImportProbe.beginCalls), 0, 'preview must not autoplay');
   assert.equal(await page.evaluate(() => window.audioMidi.requests), 0, 'audio analysis must not request MIDI permission');
@@ -246,6 +258,8 @@ try {
   await add('WAV Rehearsal');
   assert.equal(await page.locator('.pad').count(), 1, 'audio rhythm must offer one clear hit lane');
   await assertRhythmControls();
+  await page.getByRole('checkbox', { name: 'Strum arrows', exact: true }).check();
+  assert.match(await page.locator('#strum-guide-help').innerText(), /not scored or detected from the recording/);
   await beginBacking('WAV Rehearsal');
   await page.waitForFunction(() => window.audioImportProbe.judge?.notes.length > 1);
   await page.evaluate(() => {

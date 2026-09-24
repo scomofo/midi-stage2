@@ -6,6 +6,7 @@ export type SessionPreferences = {
   difficulty: Difficulty;
   speed: number;
   guide: boolean;
+  strumGuide: boolean;
   metronome: boolean;
   volume: number;
   focusStage: boolean;
@@ -19,6 +20,7 @@ export const DEFAULT_SESSION_PREFERENCES: SessionPreferences = {
   difficulty: "standard",
   speed: 1,
   guide: false,
+  strumGuide: false,
   metronome: false,
   volume: 55,
   focusStage: false,
@@ -60,6 +62,7 @@ export function parseSessionPreferences(raw: string | null, songIds: readonly st
   }
   if (typeof saved.speed === "number" && [0.5, 0.75, 1, 1.25].includes(saved.speed)) result.speed = saved.speed;
   if (typeof saved.guide === "boolean") result.guide = saved.guide;
+  if (typeof saved.strumGuide === "boolean") result.strumGuide = saved.strumGuide;
   if (typeof saved.metronome === "boolean") result.metronome = saved.metronome;
   if (typeof saved.focusStage === "boolean") result.focusStage = saved.focusStage;
   if (typeof saved.volume === "number" && Number.isFinite(saved.volume)) {

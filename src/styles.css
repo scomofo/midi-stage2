@@ -569,3 +569,32 @@ button:disabled { opacity: 0.5; }
   .stage-hud .hud-chip span { font-size: 8px; letter-spacing: 0.05em; }
   .stage-hud .hud-chip strong > small { display: none; }
 }
+
+/* Keep the mobile score readable and give strum guidance its own quiet row. */
+@media (max-width: 639px) {
+  .stage-hud { grid-template-columns: 1.4fr 1fr 1fr 1fr; }
+  .stage-hud .hud-chip .gain { display: none; }
+  .stage-hud .hud-chip.pop strong { animation: none; }
+  .stage-energy-strip { column-gap: 12px; }
+  .stage-strum-cue {
+    order: 1;
+    flex-basis: 100%;
+    border-top: 1px solid var(--color-border);
+    padding-top: 6px;
+    text-align: center;
+    font-size: 11px;
+  }
+}
+
+.song-import-progress {
+  appearance: none;
+  overflow: hidden;
+  border: 0;
+  border-radius: 999px;
+  background: var(--color-elevated);
+  accent-color: var(--color-accent);
+}
+.song-import-progress::-webkit-progress-bar { background: var(--color-elevated); }
+.song-import-progress::-webkit-progress-value { background: var(--color-accent); border-radius: 999px; }
+.song-import-progress::-moz-progress-bar { background: var(--color-accent); border-radius: 999px; }
+.song-import-progress:indeterminate { opacity: 0.45; }
