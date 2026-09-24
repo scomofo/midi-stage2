@@ -267,6 +267,43 @@ try {
   });
   assert.ok(result.score > 0 && result.saved.includes(result.score), 'completed score must persist');
   await screenshot('session-results.png');
+  // A genuine scored replay must still finish when durable best storage fails.
+  await page.evaluate(() => {
+    window.sessionProbe.time = 0;
+    window.savedBeforeQuota = Object.keys(localStorage).filter((key) => key.startsWith('midi-stage-best/'))
+      .sort().map((key) => [key, localStorage.getItem(key)]);
+    const original = Storage.prototype.setItem;
+    window.restoreBestStorage = () => { Storage.prototype.setItem = original; };
+    Storage.prototype.setItem = function (key, value) {
+      if (key.startsWith('midi-stage-best/')) throw new DOMException('Fixture quota exhausted', 'QuotaExceededError');
+      return original.call(this, key, value);
+    };
+  });
+  try {
+    await page.getByRole('button', { name: 'Play again', exact: true }).click();
+    await page.waitForFunction(() => window.sessionProbe.audio.running);
+    await page.evaluate(() => {
+      const p = window.sessionProbe;
+      for (const note of p.judge.notes.slice(0, 24)) {
+        if (note.state !== 0) continue;
+        p.time = note.time;
+        document.body.dispatchEvent(new KeyboardEvent('keydown', { code: p.keys[note.lane], bubbles: true }));
+        document.body.dispatchEvent(new KeyboardEvent('keyup', { code: p.keys[note.lane], bubbles: true }));
+      }
+      if (p.judge.stats.score <= p.finalScore) throw Error('Quota check must earn a higher score');
+      p.time = p.audio.song.duration + 2;
+    });
+    await page.getByText('Score not saved', { exact: true }).waitFor();
+    assert.match(await page.locator('[data-session-overlay="results"]').innerText(), /Could not save your personal best/);
+    assert.equal(await page.getByText('New personal best', { exact: false }).count(), 0);
+    assert.equal(await page.getByRole('button', { name: 'Play again', exact: true }).isEnabled(), true);
+    const unchanged = await page.evaluate(() => JSON.stringify(window.savedBeforeQuota) === JSON.stringify(
+      Object.keys(localStorage).filter((key) => key.startsWith('midi-stage-best/')).sort().map((key) => [key, localStorage.getItem(key)])));
+    assert.equal(unchanged, true, 'failed best save must preserve existing records');
+    await screenshot('session-score-not-saved.png');
+  } finally {
+    await page.evaluate(() => window.restoreBestStorage());
+  }
   await page.evaluate(() => { window.sessionProbe.time = 0; });
   await start.click();
   await page.waitForFunction(() => window.sessionProbe.audio.running);

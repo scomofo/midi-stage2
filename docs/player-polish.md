@@ -14,7 +14,9 @@ the normal first-note timing window still permits an early hit. Resuming during
 the count-in plays its remaining clicks without restarting the take.
 
 Completed results move focus to the result heading and into view. Subsequent
-HUD updates leave focus alone, so Tab continues to the next action.
+HUD updates leave focus alone, so Tab continues to the next action. If a personal
+best cannot be saved because browser storage is blocked or full, results clearly
+say **Score not saved**, preserve existing records, and keep replay available.
 
 ## Soundcheck and saved setup
 
@@ -41,6 +43,9 @@ Missing assigned devices remain explicit rather than silently changing routes.
 **Import songs** opens a preview without starting audio or changing the selected
 song. Validated chart JSON, constant-tempo MIDI files, and decoded audio files
 can be added to the setlist. Failed imports leave the current selection intact.
+Audio previews include **Listen to your track**, a local player for the original
+recording. It never starts automatically or advances the game. Closing, replacing
+or adding the preview stops audition playback and releases its temporary URL.
 Only populated parts can be enabled; a suitable part is selected automatically.
 Identical imports reuse their entry, and removing the selected import returns
 to a fresh built-in set. Removing another entry preserves a paused take.
