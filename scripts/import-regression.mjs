@@ -136,6 +136,7 @@ try {
     assert.equal(await start.isEnabled(), true, 'import selection must be ready, without autoplay');
   };
   const assertReady = async () => {
+    await page.waitForFunction(() => document.querySelector('[aria-label="Elapsed time"]')?.textContent?.trim() === '00:00');
     assert.equal(await start.isEnabled(), true);
     assert.equal(await page.getByLabel('Elapsed time', { exact: true }).innerText(), '00:00');
     assert.equal(await page.evaluate(() => window.importProbe.audio?.running ?? false), false);
