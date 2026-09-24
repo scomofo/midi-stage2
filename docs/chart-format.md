@@ -1,7 +1,8 @@
 # Shared Chart Format — MIDI Stage ↔ MIDI Stage 2
 
 **Status:** v1 contract (this document). Implemented by `src/lib/midi-stage/chart-format.ts`
-(parser/validator → `Song`). No UI import yet — parsing only.
+(parser/validator → `Song`), playable through **Import songs**. Audio-file and
+MIDI-file importers also generate canonical charts for this pipeline.
 
 ## 1. Purpose
 
@@ -24,9 +25,10 @@ mapping decision where the two engines differ.
   compatibility for zero benefit.)
 - `version` is `1`, `2`, or `3`:
   - **1** — plain chart (the common case).
-  - **2** — rhythm-only chart (`"matching": "rhythm"`): the whole band plays on
-    a single "any note" lane. **Not supported by stage2** (it has no
-    rhythm-only lane mode); the parser rejects these with `UNSUPPORTED_MATCHING`.
+  - **2** — rhythm-only chart (explicit `"matching": "rhythm"` required): each
+    enabled nonempty part has a single HIT lane accepting any MIDI pitch.
+    Simultaneous events collapse to one short tap target; detection durations
+    do not become sustain notes.
   - **3** — chart carries `chordHighways` for keys/guitar. Supported: stage2
     folds them into `Song.harmony` (display-only chord names), see §6.
 - A version-1 file that *contains* `chordHighways` is normalized to version 3
@@ -45,8 +47,8 @@ All times and durations are **seconds** (floats). Pitches are MIDI note numbers.
 | `bpm` | number | 20–400. The song's nominal tempo. |
 | `duration` | number | 0.25–3600 s. |
 | `firstBeat` | number | Default `0`. 0–`duration`. Offset of beat 1; used when beat markers must be generated. |
-| `audioOffset` | number | Default `0`. −120–120 s. Backing-track alignment; preserved by stage2, not yet used (all stage2 audio is synthesized). |
-| `audioName` | string | Default `""`. Backing audio file name; preserved, not yet used. |
+| `audioOffset` | number | Default `0`. −120–120 s. Chart time where backing audio sample zero occurs. Used when an actual backing buffer is attached; JSON alone cannot attach audio. |
+| `audioName` | string | Default `""`. Backing audio file name. Local audio imports save the original separately; a name in JSON does not grant an attachment. |
 | `origin` | string | Default `"manual"`. Workshop values: `midi`, `practice`, `manual`, `audio-rhythm`. Preserved as-is. |
 | `parts` | array | Exactly 4 entries, one per instrument `drums`/`keys`/`guitar`/`bass` (any order; normalized to that order). Each: `{ "type", "notes": [...] }`. |
 | `parts[].notes[]` | object | `{ "time", "duration", "pitch", "velocity"? }`. See note rules below. |
@@ -100,8 +102,9 @@ All times and durations are **seconds** (floats). Pitches are MIDI note numbers.
 
 ## 5. Lanes are derived, never stored
 
-Neither engine stores lanes in the chart. Both derive them deterministically at
-`makeChart` time from pitches:
+Neither engine stores lanes in the chart. Pitch charts derive them at
+`makeChart` time from pitches. Rhythm charts use one any-note HIT lane per
+populated part instead:
 
 - **Drums** — 6 fixed lanes from pitch groups (identical table in both repos):
   KICK {35,36} · SNARE {37,38,39,40} · HI-HAT {42,44,46} · TOMS
@@ -117,10 +120,10 @@ same lanes in both games. Authors write pitches; players see lanes.
 | Concept | Decision |
 |---|---|
 | Variable tempo maps | **Rejected** (`VARIABLE_TEMPO_UNSUPPORTED`). Both stage2 engines (audio clock, metronome, renderer) assume constant `bpm`. A multi-entry map with a single repeated bpm is accepted and collapsed. Supporting true tempo changes is future work. |
-| Rhythm-only charts (v2, `matching:"rhythm"`) | **Rejected** (`UNSUPPORTED_MATCHING`). stage2 has no single "any note" lane mode. |
+| Rhythm-only charts (v2, `matching:"rhythm"`) | Accepted with explicit rhythm matching. Each populated part gets one any-note HIT lane; same-time targets are deduplicated into short taps. |
 | `chordHighways` (v3) | Accepted. Entries are converted to `Song.harmony` (`{time, duration, name, roman}`) — display-only chord labels that stage2's own chord grouping consults for roman numerals. The highway *targets* themselves are not a gameplay concept in stage2: stage2 auto-groups simultaneous keys/guitar notes into named chords in `makeChart`. |
 | `firstBeat` | Only used to generate `beats` when the chart omits them. Note times are absolute in both engines; nothing is shifted. |
-| `audioOffset` / `audioName` | Preserved on `Song` (new optional fields) for future import-UI/backing-track work; the engine ignores them today. |
+| `audioOffset` / `audioName` | Preserved on `Song`. Original-file imports attach local audio via a separate saved-entry flag and IndexedDB asset, and playback honors the offset. JSON imports alone use stage sounds and show an attachment warning. |
 | Chart `id` format | Lenient (non-empty ≤160 chars). The workshop's `chart-` prefix rule is a workshop authoring convention, not a playback requirement; stage2's own songs use ids like `open-stage`. |
 | `subtitle` / `tag` / `art` | Not in the wire format (the workshop generates display text itself). Parser sets `subtitle: ""`, `tag: "IMPORT"`, `art: "open"` (an existing renderer theme). |
 | `original` | `false` — mirrors the workshop, where workshop songs are never "original". |
@@ -154,19 +157,24 @@ same lanes in both games. Authors write pitches; players see lanes.
 - The canonical serializer (`serializeSharedChart`) always emits the normalized
   form the validator accepts, so `parse(serialize(parse(x)))` is stable.
 
-## 9. Open questions / follow-ups
+## 9. Import flow and remaining work
 
-1. **Workshop → stage2 exporter:** a one-click "Export for Stage 2" in the
-   workshop (or a script) producing this exact JSON.
-2. **In-game import UI:** file picker → `parseSharedChart` → add to song
-   catalog. Needs UX for validation errors.
-3. **Variable tempo:** requires audio-clock and renderer work in stage2
-   (tempo-aware `songAt()`, beat grid, note approach speed).
-4. **Rhythm-only mode:** port midi-stage's single-lane `any` mode if
-   audio-rhythm charts should be playable.
-5. **Round-trip fidelity:** `Song` → shared JSON export from stage2 (the
-   serializer covers canonical charts; a `songToSharedChart` for procedural
-   songs is still missing).
-6. **Drum lane table sync:** the 6-group table is duplicated in three places
-   (midi-stage `core.js`, stage2 `engine.ts`, stage2 `chart-format.ts`
-   validator). A shared package or codegen would remove the drift risk.
+The in-game importer now previews validated JSON, raw MIDI and audio files before
+adding them to a persistent local setlist. Content identities keep different
+charts with the same authored ID separate, while identical imports are reused.
+Audio files produce version 2 rhythm charts from detected energy attacks; notes
+are not invented from the estimated beat grid. MP3/WAV/FLAC decode and original
+backing playback are checked in the browser regression.
+
+Remaining work:
+
+1. **Variable-tempo MIDI/chart maps:** the importer still rejects changing maps;
+   the metronome and count-in use a constant BPM. Audio rhythm onsets themselves
+   retain their detected absolute times even when a recording's tempo drifts.
+2. **Audio chart editing / musical acceptance:** automatic onset detection is not
+   instrument transcription; dense arrangements and expressive recordings need
+   listening review and may need hand correction.
+3. **Round-trip authoring:** the canonical serializer exists, but no in-game
+   export/editor or procedural-song-to-shared-chart authoring flow is exposed.
+4. **Drum lane table sync:** pitch-chart drum groups remain duplicated between
+   the original workshop and this game.

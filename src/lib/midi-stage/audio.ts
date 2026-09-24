@@ -32,6 +32,7 @@ export class AudioEngine {
   noise: AudioBuffer | null = null;
   generation = 0;
   song: Song | null = null;
+  backingSource: AudioBufferSourceNode | null = null;
 
   async init() {
     if (!this.ctx) {
@@ -250,6 +251,7 @@ export class AudioEngine {
     guide?: boolean;
     demo?: boolean;
     metronome?: boolean;
+    backingBuffer?: AudioBuffer;
   }) {
     this.stop();
     const ticket = this.generation;
@@ -269,9 +271,50 @@ export class AudioEngine {
     if (opts.metronome) {
       for (const b of song.beats) if (b.time >= seek && b.time < end) this.events.push({ time: b.time, click: true, accent: b.bar });
     }
+    if (opts.backingBuffer) {
+      const buffer = opts.backingBuffer;
+      // audioOffset is where buffer sample zero sits on the chart timeline.
+      // Buffer offsets/durations stay in source seconds; playbackRate handles speed.
+      const audioOffset = song.audioOffset ?? 0;
+      const chartStart = Math.max(0, seek, audioOffset);
+      const offset = chartStart - audioOffset;
+      const duration = Math.min(buffer.duration - offset, end - chartStart);
+      if (duration > 0) {
+        const source = this.ctx!.createBufferSource();
+        const gain = this.ctx!.createGain();
+        source.buffer = buffer;
+        source.playbackRate.value = speed;
+        gain.gain.value = 1;
+        source.connect(gain);
+        gain.connect(this.buses.backing!);
+        this.track(source, gain);
+        this.backingSource = source;
+        const ended = source.onended;
+        source.onended = (event) => {
+          if (this.backingSource === source) this.backingSource = null;
+          ended?.call(source, event);
+        };
+        source.start(this.origin + chartStart / speed, offset, duration);
+      }
+    }
     const enabled = new Set(players.filter((p) => p.enabled).map((p) => sourceForSafe(song, p).id));
+    const guideOnsets = new Set<number>();
     for (const part of song.parts) {
       const selected = enabled.has(part.id);
+      if (opts.backingBuffer || song.matching === "rhythm") {
+        // A recording already contains the full arrangement. Rhythm placeholder
+        // pitches must never become a synthesized melody over that recording.
+        if (selected && (opts.guide || opts.demo)) {
+          for (const n of part.notes) {
+            if (n.time >= seek - 1e-6 && n.time < end && !guideOnsets.has(n.time)) {
+              guideOnsets.add(n.time);
+              this.events.push({ time: n.time, type: "drums", pitch: 42, velocity: 65, duration: 0.06,
+                level: 0.24, destination: this.buses.guide });
+            }
+          }
+        }
+        continue;
+      }
       if (selected && !opts.guide && !opts.demo) continue;
       const player = players.find((p) => p.enabled && sourceForSafe(song, p).id === part.id);
       const type = (player?.type || part.type) as Instrument;
@@ -315,6 +358,7 @@ export class AudioEngine {
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
     for (const n of [...this.nodes]) n.stop();
+    this.backingSource = null;
     this.monitorVoices.clear();
   }
 

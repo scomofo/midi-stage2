@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { defaultPlayers, Judge, makeChart } from "./engine.ts";
+import { approachingPitches, defaultPlayers, expectedPitches, Judge, laneForPitch, makeChart } from "./engine.ts";
 import { makeOpenStage } from "./songs.ts";
 import type { Instrument, Note, Player, Song } from "./types.ts";
 
@@ -14,6 +14,63 @@ function fixture(notes: Note[], type: Instrument = "keys"): Song {
 function note(time: number, pitch: number, duration = 1, velocity = 80): Note {
   return { time, pitch, duration, velocity };
 }
+
+describe("rhythm-only charts", () => {
+  for (const type of ["drums", "keys", "guitar", "bass"] as const) {
+    it(`accepts any MIDI note on the ${type} rhythm lane without requiring a hold`, () => {
+      const song: Song = { ...fixture([note(1, 60, 2)], type), matching: "rhythm" };
+      const chart = makeChart(song, player(type));
+      assert.equal(chart.lanes.length, 1);
+      assert.equal(chart.lanes[0]!.short, "HIT");
+      assert.equal(chart.lanes[0]!.any, true);
+      for (let pitch = 0; pitch <= 127; pitch++) {
+        const lane = laneForPitch(pitch, player(type), chart.lanes);
+        assert.equal(lane, 0);
+        const judge = new Judge(chart, { difficulty: "expert", speed: 0.5, drums: type === "drums", onJudge: () => {} });
+        judge.hit(1, lane, `midi:${pitch}`, pitch);
+        judge.release(`midi:${pitch}`, 1.001);
+        const result = judge.finish(4);
+        assert.equal(result.perfect, 1);
+        assert.equal(result.miss, 0);
+        assert.equal(result.holds, 0);
+        assert.equal(result.holdBreaks, 0);
+      }
+    });
+  }
+
+  it("grades simultaneous source pitches once while retaining separate later onsets", () => {
+    const song: Song = { ...fixture([note(1, 60), note(1, 64, 2, 100), note(2, 67)]), matching: "rhythm" };
+    const original = structuredClone(song);
+    const chart = makeChart(song, player("keys"));
+    assert.deepEqual(chart.notes.map((n) => [n.time, n.duration, n.lane]), [[1, 0.06, 0], [2, 0.06, 0]]);
+    assert.equal(chart.notes[0]!.velocity, 100);
+    assert.equal(chart.notes[0]!.chord, undefined);
+    const judge = new Judge(chart, { difficulty: "standard", speed: 1, drums: false, onJudge: () => {} });
+    judge.hit(1, 0, "first", 42);
+    judge.hit(2, 0, "second", 83);
+    const result = judge.finish(4);
+    assert.equal(result.perfect, 2);
+    assert.equal(result.score, 200);
+    assert.equal(result.miss, 0);
+    assert.deepEqual(song, original);
+  });
+
+  it("does not invent a pitch target or playable lane for an empty rhythm part", () => {
+    const song: Song = { ...fixture([]), matching: "rhythm" };
+    assert.deepEqual(makeChart(song, player("keys")), { lanes: [], notes: [] });
+    const populated = { ...fixture([note(1, 60)]), matching: "rhythm" as const };
+    assert.deepEqual(expectedPitches(populated, 1, player("keys")), []);
+    assert.deepEqual(approachingPitches(populated, 0.8, player("keys")), []);
+  });
+
+  it("keeps tap timing within a cropped section", () => {
+    const song: Song = { ...fixture([note(0, 60), note(1, 64), note(2, 67)]), matching: "rhythm" };
+    const chart = makeChart(song, player("keys"), 1, 1.03);
+    assert.equal(chart.notes.length, 1);
+    assert.equal(chart.notes[0]!.time, 1);
+    assert.ok(Math.abs(chart.notes[0]!.duration - 0.03) < 1e-8);
+  });
+});
 
 describe("playable melodic charts", () => {
   it("scores every visible lane of the expert opening chord without hidden octave misses", () => {

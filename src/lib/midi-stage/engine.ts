@@ -100,6 +100,11 @@ function sourceFor(song: Song, player: Player) {
 }
 
 export function lanesFor(song: Song, player: Player): Lane[] {
+  if (song.matching === "rhythm") {
+    return sourceFor(song, player).notes.length
+      ? [{ name: "RHYTHM HIT", short: "HIT", pitch: 60, pc: 0, color: LANE_COLORS[2]!, any: true }]
+      : [];
+  }
   if (player.type === "drums") return DRUMS.map((d) => ({ ...d, notes: [...(d.notes || [])] }));
   const part = sourceFor(song, player);
   const pitches = [...new Set(part.notes.map((n) => pc(n.pitch)))].sort((a, b) => a - b);
@@ -111,6 +116,8 @@ export function lanesFor(song: Song, player: Player): Lane[] {
 }
 
 export function laneForPitch(pitch: number, player: Player, lanes: Lane[]) {
+  const any = lanes.findIndex((lane) => lane.any);
+  if (any >= 0) return any;
   if (player.type === "drums") return lanes.findIndex((l) => l.notes?.includes(pitch));
   return lanes.findIndex((l) => l.pc === pc(pitch));
 }
@@ -155,6 +162,18 @@ export function makeChart(song: Song, player: Player, start = 0, end = song.dura
     }))
     .filter((n) => n.lane >= 0)
     .sort((a, b) => a.time - b.time || a.pitch - b.pitch);
+
+  if (song.matching === "rhythm") {
+    // One onset is one target, regardless of how many source pitches formed it.
+    // Detection durations are not authored sustains, so rhythm targets are taps.
+    const taps = new Map<number, ChartNote>();
+    for (const note of notes) {
+      const existing = taps.get(note.time);
+      if (existing) existing.velocity = Math.max(existing.velocity, note.velocity);
+      else taps.set(note.time, { ...note, duration: Math.min(0.06, end - note.time) });
+    }
+    return { lanes, notes: [...taps.values()] };
+  }
 
   if (player.type === "keys" || player.type === "guitar") {
     const grouped = new Map<number, ChartNote[]>();
@@ -400,12 +419,14 @@ export function formatTime(t: number) {
 }
 
 export function expectedPitches(song: Song, t: number, player: Player): number[] {
+  if (song.matching === "rhythm") return [];
   const part = sourceFor(song, player);
   const window = 0.12;
   return part.notes.filter((n) => t >= n.time - 0.04 && t <= n.time + Math.max(n.duration, window)).map((n) => n.pitch);
 }
 
 export function approachingPitches(song: Song, t: number, player: Player, look = 0.55): number[] {
+  if (song.matching === "rhythm") return [];
   const part = sourceFor(song, player);
   return part.notes.filter((n) => n.time > t + 0.04 && n.time <= t + look).map((n) => n.pitch);
 }

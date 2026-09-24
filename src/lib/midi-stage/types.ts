@@ -40,9 +40,13 @@ export type Song = {
   arrangement?: string;
   arrangementDescription?: string;
   key?: string;
-  /** Backing-track offset in seconds (shared chart imports). Preserved; not used by the engine. */
+  /** Rhythm charts accept any MIDI pitch on a single tap lane. Omitted means pitch matching. */
+  matching?: "pitch" | "rhythm";
+  /** Browser-local audio asset to decode before starting this song. */
+  audioAssetId?: string;
+  /** Backing-track start time on the chart timeline, in seconds. */
   audioOffset?: number;
-  /** Backing audio file name (shared chart imports). Preserved; not used by the engine. */
+  /** Original backing audio file name (shared chart imports). */
   audioName?: string;
   /** Normalized tempo map (shared chart imports). Always constant in v1; the engine plays `bpm`. */
   tempoMap?: { time: number; bpm: number }[];

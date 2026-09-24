@@ -32,6 +32,26 @@ are restored after hydration. Invalid saved values safely fall back to defaults;
 playback, audio permission and MIDI access are never restored automatically.
 Missing assigned devices remain explicit rather than silently changing routes.
 
+## Playable imports
+
+**Import songs** opens a preview without starting audio or changing the selected
+song. Validated chart JSON, constant-tempo MIDI files, and decoded audio files
+can be added to the setlist. Failed imports leave the current selection intact.
+Only populated parts can be enabled; a suitable part is selected automatically.
+Identical imports reuse their entry, and removing the selected import returns
+to a fresh built-in set. Removing another entry preserves a paused take.
+
+Audio imports analyze actual energy attacks into one any-note HIT lane and play
+the original recording against the same audio clock as scoring. Count-in,
+pause/resume, seek, volume and playback speed apply to the backing source. Speed
+also changes its pitch. Preview notes explain approximate detection and tempo;
+this does not claim note-for-note transcription or subjective musical fairness.
+
+Chart metadata is saved locally; original files use IndexedDB. Missing audio
+produces a reimport instruction instead of a silent set. Storage failures retain
+a playable current-visit copy. Import cancellation releases unaccepted previews,
+and loading media metadata checks the six-minute limit before full PCM decoding.
+
 ## Automated coverage
 
 Run `npm test`, `npm run typecheck`, `npm run lint` and `npm run build`.
@@ -48,6 +68,14 @@ playback, and opening the mobile setlist from focus mode.
 and channel routing, releases during reassignment, saved setup after reload and
 invalid storage recovery. Its virtual MIDI devices exercise browser integration;
 they do not establish physical instrument latency.
+
+`npm run test:imports` exercises real file-picker JSON/MIDI import, playable
+notes/holds, duplicate handling, persistence, invalid files, populated lineups,
+removal and mobile layout. `npm run test:audio` uses original generated WAV,
+MP3 and FLAC fixtures to check decoder support, detected hits, backing-buffer
+playback, any-pitch MIDI input, count-in, pause/resume, speed, storage restoration
+and missing-audio recovery. These fixtures contain known attacks; listening
+acceptance on a varied music collection remains a separate check.
 
 These source-module regressions run against the development server; production
 render acceptance remains the separate browser smoke check.
