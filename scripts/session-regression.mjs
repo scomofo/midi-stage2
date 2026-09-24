@@ -30,6 +30,7 @@ try {
     const probe = window.sessionProbe = {
       time: -1, ticks: 0, judge: null, audio: null, keys: KEYS.keys,
       beginCalls: 0, beginSettled: 0, blockInit: false, pendingInit: [], tones: [], clicks: [],
+      controlCountInSchedule: false,
     };
     AudioEngine.prototype.songAt = function () { probe.audio = this; return probe.time; };
     const init = AudioEngine.prototype.init;
@@ -54,6 +55,20 @@ try {
     AudioEngine.prototype.click = function (at, accent) {
       probe.clicks.push({ generation: this.generation, at });
       return click.call(this, at, accent);
+    };
+    const schedule = AudioEngine.prototype.schedule;
+    AudioEngine.prototype.schedule = function () {
+      if (!probe.controlCountInSchedule) schedule.call(this);
+    };
+    probe.scheduleAt = (time) => {
+      const ctx = probe.audio.ctx;
+      const ownClock = Object.getOwnPropertyDescriptor(ctx, 'currentTime');
+      Object.defineProperty(ctx, 'currentTime', { configurable: true, value: time });
+      try { schedule.call(probe.audio); }
+      finally {
+        if (ownClock) Object.defineProperty(ctx, 'currentTime', ownClock);
+        else delete ctx.currentTime;
+      }
     };
     const tick = Judge.prototype.tick;
     Judge.prototype.tick = function (time) {
@@ -149,6 +164,7 @@ try {
     p.countInPosition = p.time;
   });
   await pause.click();
+  await page.evaluate(() => { window.sessionProbe.controlCountInSchedule = true; });
   await resume.click();
   await page.waitForFunction(() => window.sessionProbe.audio.running);
   await page.evaluate(() => {
@@ -166,18 +182,28 @@ try {
     p.countInFirstBacking = p.audio.origin + firstBacking.time / p.audio.speed;
     p.countInClickTimes = expected.map((time) => p.audio.origin + time / p.audio.speed);
     p.countInGeneration = p.audio.generation;
-  });
-  await page.waitForFunction(() => {
-    const p = window.sessionProbe;
-    return p.tones.some((tone) => tone.generation === p.countInGeneration && tone.backing);
+    // Exercise the real scheduler and Web Audio dispatch at each look-ahead
+    // boundary. A loaded CI host can intentionally skip callbacks >70ms late;
+    // callback punctuality is separate from count-in scheduling correctness.
+    try {
+      for (const time of [...p.countInClickTimes, p.countInFirstBacking]) p.scheduleAt(time - 0.06);
+    } finally {
+      // scheduleAt restores the native clock synchronously. The existing timer
+      // can now continue from the real scheduler's advanced event cursor.
+      p.controlCountInSchedule = false;
+    }
   });
   await page.evaluate(() => {
     const p = window.sessionProbe;
     const backing = p.tones.find((tone) => tone.generation === p.countInGeneration && tone.backing);
     const clicks = p.clicks.filter((click) => click.generation === p.countInGeneration);
-    if (Math.abs(backing.at - p.countInFirstBacking) > 1e-6 || clicks.length !== p.countInClickTimes.length ||
+    if (!backing || Math.abs(backing.at - p.countInFirstBacking) > 1e-6 || clicks.length !== p.countInClickTimes.length ||
       clicks.some((click, index) => Math.abs(click.at - p.countInClickTimes[index]) > 1e-6))
-      throw Error('Resumed count-in clicks and backing notes must share the original playback origin');
+      throw Error(`Resumed count-in clicks and backing notes must share the original playback origin: ${JSON.stringify({
+        backingAt: backing?.at, expectedBackingAt: p.countInFirstBacking,
+        clicks: clicks.map((click) => click.at), expectedClicks: p.countInClickTimes,
+        generation: p.countInGeneration, origin: p.audio.origin, now: p.audio.ctx.currentTime,
+      })}`);
   });
   await page.evaluate(() => {
     const p = window.sessionProbe;
