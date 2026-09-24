@@ -29,7 +29,7 @@ try {
     const { Judge, KEYS } = await import('/src/lib/midi-stage/engine.ts');
     const probe = window.sessionProbe = {
       time: -1, ticks: 0, judge: null, audio: null, keys: KEYS.keys,
-      beginCalls: 0, beginSettled: 0, blockInit: false, pendingInit: [],
+      beginCalls: 0, beginSettled: 0, blockInit: false, pendingInit: [], tones: [], clicks: [],
     };
     AudioEngine.prototype.songAt = function () { probe.audio = this; return probe.time; };
     const init = AudioEngine.prototype.init;
@@ -44,6 +44,16 @@ try {
       probe.lastOptions = options;
       try { return await begin.call(this, options); }
       finally { probe.beginSettled++; }
+    };
+    const tone = AudioEngine.prototype.tone;
+    AudioEngine.prototype.tone = function (...args) {
+      probe.tones.push({ generation: this.generation, at: args[3], backing: args[6] === this.buses.backing });
+      return tone.apply(this, args);
+    };
+    const click = AudioEngine.prototype.click;
+    AudioEngine.prototype.click = function (at, accent) {
+      probe.clicks.push({ generation: this.generation, at });
+      return click.call(this, at, accent);
     };
     const tick = Judge.prototype.tick;
     Judge.prototype.tick = function (time) {
@@ -70,6 +80,21 @@ try {
     assert.equal(await page.evaluate(() => window.sessionProbe.audio?.running ?? false), false,
       'ready session must not have a live audio scheduler');
   };
+  const assertResultsFocus = async () => {
+    const heading = page.locator('[data-session-overlay="results"] h2');
+    await page.waitForFunction(() => document.activeElement?.matches('[data-session-overlay="results"] h2'));
+    assert.match(await heading.getAttribute('aria-describedby'), /session-result-summary/);
+    await heading.evaluate((element) => {
+      const bounds = element.getBoundingClientRect();
+      if (bounds.top < 0 || bounds.bottom > innerHeight) throw Error('Completed set heading must be in view');
+    });
+    await page.keyboard.press('Tab');
+    assert.equal(await page.getByRole('button', { name: 'Play again', exact: true }).evaluate((button) => button === document.activeElement), true,
+      'Tab from the results heading must reach Play again');
+    await frames();
+    assert.equal(await page.getByRole('button', { name: 'Play again', exact: true }).evaluate((button) => button === document.activeElement), true,
+      'HUD updates must not steal focus from a results action');
+  };
   await assertReady();
   // Observe long enough for the decorative highway loop to move independently
   // of the player clock (a frame-only check can miss a clock rounded to seconds).
@@ -89,7 +114,7 @@ try {
   await page.waitForFunction(() => window.sessionProbe.pendingInit.length > 0);
   assert.equal(await page.evaluate(() => window.sessionProbe.beginCalls), 1,
     'rapid Start shortcuts must share one pending start');
-  await page.getByRole('button', { name: 'Restart', exact: true }).click();
+  await page.getByRole('button', { name: 'Reset set', exact: true }).click();
   await page.evaluate(() => {
     const p = window.sessionProbe;
     p.blockInit = false;
@@ -113,6 +138,46 @@ try {
     document.body.dispatchEvent(new KeyboardEvent('keyup', { code: p.keys[0], bubbles: true }));
     if (p.judge.stats.extra !== 0 || p.judge.stats.miss !== 0 || p.judge.stats.score !== 0)
       throw Error('Count-in practice must not score or penalize stray input');
+  });
+  // Pausing before the first note must retain the remaining audible count-in
+  // and keep the first backing notes aligned with the same song-time origin.
+  await page.evaluate(() => {
+    const p = window.sessionProbe;
+    p.countInJudge = p.judge;
+    p.countInBeat = 60 / p.audio.song.bpm;
+    p.time = -2.4 * p.countInBeat;
+    p.countInPosition = p.time;
+  });
+  await pause.click();
+  await resume.click();
+  await page.waitForFunction(() => window.sessionProbe.audio.running);
+  await page.evaluate(() => {
+    const p = window.sessionProbe;
+    const negativeClicks = p.audio.events.filter((event) => event.click && event.time < 0).map((event) => event.time);
+    const expected = [-2 * p.countInBeat, -p.countInBeat];
+    if (negativeClicks.length !== expected.length || negativeClicks.some((time, index) => Math.abs(time - expected[index]) > 1e-6))
+      throw Error('Resuming the count-in must schedule only its remaining beats');
+    if (p.lastOptions.countIn !== false || p.lastOptions.seek !== p.countInPosition)
+      throw Error('Count-in resume must preserve the frozen timeline without a new lead-in');
+    if (p.judge !== p.countInJudge || p.judge.stats.score || p.judge.stats.miss || p.judge.stats.extra)
+      throw Error('Count-in resume must preserve the untouched scoring session');
+    const firstBacking = p.audio.events.find((event) => event.destination === p.audio.buses.backing);
+    if (!firstBacking) throw Error('Count-in regression needs backing notes');
+    p.countInFirstBacking = p.audio.origin + firstBacking.time / p.audio.speed;
+    p.countInClickTimes = expected.map((time) => p.audio.origin + time / p.audio.speed);
+    p.countInGeneration = p.audio.generation;
+  });
+  await page.waitForFunction(() => {
+    const p = window.sessionProbe;
+    return p.tones.some((tone) => tone.generation === p.countInGeneration && tone.backing);
+  });
+  await page.evaluate(() => {
+    const p = window.sessionProbe;
+    const backing = p.tones.find((tone) => tone.generation === p.countInGeneration && tone.backing);
+    const clicks = p.clicks.filter((click) => click.generation === p.countInGeneration);
+    if (Math.abs(backing.at - p.countInFirstBacking) > 1e-6 || clicks.length !== p.countInClickTimes.length ||
+      clicks.some((click, index) => Math.abs(click.at - p.countInClickTimes[index]) > 1e-6))
+      throw Error('Resumed count-in clicks and backing notes must share the original playback origin');
   });
   await page.evaluate(() => {
     const p = window.sessionProbe;
@@ -162,6 +227,7 @@ try {
   });
   await page.getByText('SET COMPLETE', { exact: true }).waitFor();
   await frames();
+  await assertResultsFocus();
   assert.equal(await remaining.innerText(), '00:00', 'finished session must show no remaining time');
   const duration = await page.evaluate(() => {
     const seconds = Math.floor(window.sessionProbe.audio.song.duration);
@@ -222,7 +288,7 @@ try {
   await page.getByRole('button', { name: 'Resume set', exact: true }).click();
   await page.waitForFunction(() => window.sessionProbe.audio.running);
   await pause.click();
-  await page.getByRole('button', { name: 'Restart', exact: true }).click();
+  await page.getByRole('button', { name: 'Reset set', exact: true }).click();
   const savedBeforeDemo = await page.evaluate(() => {
     window.sessionProbe.time = 0;
     return Object.keys(localStorage).filter((key) => key.startsWith('midi-stage-best/'))
@@ -268,8 +334,19 @@ try {
   await page.keyboard.press('Escape');
   await setlist.waitFor({ state: 'hidden' });
   await screenshot('session-mobile-paused.png');
+  await page.getByRole('button', { name: 'Resume set', exact: true }).click();
+  await page.waitForFunction(() => window.sessionProbe.audio.running);
+  await page.locator('.pad').last().scrollIntoViewIfNeeded();
+  await page.locator('.pad').last().focus();
+  await page.evaluate(() => { window.sessionProbe.time = window.sessionProbe.audio.song.duration + 2; });
+  await page.getByText('SET COMPLETE', { exact: true }).waitFor();
+  await frames();
+  await assertResultsFocus();
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false,
+    'mobile results must not overflow horizontally');
+  await screenshot('session-mobile-results.png');
   assert.deepEqual(errors, []);
-  console.log('PASS: ready clock; duplicate/cancelled start; count-in input; native button keys; hit/hold through volume and pause; finish/save; chart reset; first rehearsal; focus-loss pause/release; autoplay never saves; room pauses; mobile setlist exits focus mode');
+  console.log('PASS: ready clock; duplicate/cancelled start; count-in input and resumed audible beats; native button keys; hit/hold through volume and pause; finish/save; results focus and keyboard actions; chart reset; first rehearsal; focus-loss pause/release; autoplay never saves; room pauses; mobile setlist and results discovery');
 } finally {
   await browser.close();
 }

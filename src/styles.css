@@ -280,6 +280,12 @@
   z-index: 0;
   transition: height 80ms linear;
 }
+.pad.pad-rhythm {
+  min-height: 64px;
+  flex-direction: row;
+  gap: 1rem;
+  font-size: 0.875rem;
+}
 .pad > * {
   position: relative;
   z-index: 1;

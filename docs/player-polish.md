@@ -10,7 +10,11 @@ tab pauses playback and clears held input so a missing key-up cannot leave a
 note sounding. Resume remains a deliberate player action. Enter and Space
 retain native activation on focused buttons; Shift+R resets the set without
 claiming the keyboard part's unmodified R key. Early count-in practice is unscored;
-the normal first-note timing window still permits an early hit.
+the normal first-note timing window still permits an early hit. Resuming during
+the count-in plays its remaining clicks without restarting the take.
+
+Completed results move focus to the result heading and into view. Subsequent
+HUD updates leave focus alone, so Tab continues to the next action.
 
 ## Soundcheck and saved setup
 
@@ -40,17 +44,28 @@ can be added to the setlist. Failed imports leave the current selection intact.
 Only populated parts can be enabled; a suitable part is selected automatically.
 Identical imports reuse their entry, and removing the selected import returns
 to a fresh built-in set. Removing another entry preserves a paused take.
+Import previews and errors move into view after processing. Saved-song actions
+are disabled while reading or saving; closing the library remains available.
 
 Audio imports analyze actual energy attacks into one any-note HIT lane and play
 the original recording against the same audio clock as scoring. Count-in,
 pause/resume, seek, volume and playback speed apply to the backing source. Speed
 also changes its pitch. Preview notes explain approximate detection and tempo;
 this does not claim note-for-note transcription or subjective musical fairness.
+Solo rhythm charts also accept Space, with a wide touch pad and tap-specific
+instructions. Holding Space cannot repeat-score notes or scroll the page;
+focused buttons retain normal keyboard activation. The transport's **Reset set**
+returns to ready without playback, while **Restart set** in the pause panel
+starts a fresh take.
 
 Chart metadata is saved locally; original files use IndexedDB. Missing audio
 produces a reimport instruction instead of a silent set. Storage failures retain
 a playable current-visit copy. Import cancellation releases unaccepted previews,
 and loading media metadata checks the six-minute limit before full PCM decoding.
+The importer reports checking, decoding and analysis progress. Analysis runs in
+cooperative chunks so the library can close promptly. Cancellation releases
+metadata resources and skips later work; a browser decode already in flight may
+finish internally, but its cancelled result is not analyzed or added.
 
 ## Automated coverage
 

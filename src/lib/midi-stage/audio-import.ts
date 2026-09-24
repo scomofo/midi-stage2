@@ -9,9 +9,36 @@ const AUDIO_EXTENSION = /\.(mp3|wav|wave|flac|m4a|aac|ogg|oga|opus|webm|aif|aiff
 const HOP_SECONDS = 0.02;
 const MIN_ONSET_GAP = 0.16;
 const MAX_ONSETS = 3000;
+const ANALYSIS_CHUNK_SAMPLES = 131072;
 
 export type SongAudioSamples = Pick<AudioBuffer, "sampleRate" | "length" | "duration" | "numberOfChannels" | "getChannelData">;
 export type AudioAnalysis = { chart: SharedChart; warnings: string[] };
+export type AudioImportProgress = { phase: "checking" | "decoding" | "analyzing"; progress?: number };
+export type AudioImportOptions = {
+  signal?: AbortSignal;
+  onProgress?: (progress: AudioImportProgress) => void;
+};
+
+function throwIfCancelled(signal?: AbortSignal) {
+  if (signal?.aborted) throw new DOMException("Song import was cancelled.", "AbortError");
+}
+
+/** A task boundary lets the browser paint progress and handle Close/Escape. */
+function yieldToBrowser(signal?: AbortSignal): Promise<void> {
+  throwIfCancelled(signal);
+  return new Promise((resolve, reject) => {
+    const onAbort = () => {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", onAbort);
+      reject(new DOMException("Song import was cancelled.", "AbortError"));
+    };
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, 0);
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
+}
 
 export function isSupportedAudioFile(file: Pick<File, "name" | "type">): boolean {
   if (/\.(mid|midi|json)$/i.test(file.name) || /midi/i.test(file.type)) return false;
@@ -24,7 +51,8 @@ function checkAudioSize(size: number) {
 }
 
 /** Read container metadata before allocating a full decoded PCM recording. */
-async function checkAudioMetadata(file: File): Promise<void> {
+async function checkAudioMetadata(file: File, signal?: AbortSignal): Promise<void> {
+  throwIfCancelled(signal);
   if (typeof Audio === "undefined") throw new Error("Audio import is not available in this browser.");
   return new Promise((resolve, reject) => {
     const audio = new Audio();
@@ -34,6 +62,7 @@ async function checkAudioMetadata(file: File): Promise<void> {
       if (settled) return;
       settled = true;
       clearTimeout(timeout);
+      signal?.removeEventListener("abort", onAbort);
       audio.onloadedmetadata = null;
       audio.onerror = null;
       audio.removeAttribute("src");
@@ -42,7 +71,9 @@ async function checkAudioMetadata(file: File): Promise<void> {
       if (error) reject(error);
       else resolve();
     };
+    const onAbort = () => finish(new DOMException("Song import was cancelled.", "AbortError"));
     const timeout = setTimeout(() => finish(new Error("The song's length could not be read. Try exporting it as WAV or MP3.")), 15000);
+    signal?.addEventListener("abort", onAbort, { once: true });
     audio.preload = "metadata";
     audio.onloadedmetadata = () => {
       if (!Number.isFinite(audio.duration) || audio.duration < 1 || audio.duration > MAX_AUDIO_SECONDS + 0.15) {
@@ -113,7 +144,7 @@ function tempoFromOnsets(flux: Float64Array, hop: number, onsetCount: number): n
  * All highway notes come from local increases in the recording's energy;
  * estimating the count-in tempo never adds or snaps notes onto a fake grid.
  */
-export function analyzeSongAudio(buffer: SongAudioSamples, filename: string, fingerprint: string): AudioAnalysis {
+function* analyzeSongAudioSteps(buffer: SongAudioSamples, filename: string, fingerprint: string): Generator<number, AudioAnalysis> {
   const { duration, sampleRate, length, numberOfChannels } = buffer;
   if (!Number.isFinite(duration) || duration < 1 || duration > MAX_AUDIO_SECONDS) {
     throw new Error("Choose a song between 1 second and 6 minutes long.");
@@ -129,6 +160,7 @@ export function analyzeSongAudio(buffer: SongAudioSamples, filename: string, fin
   const frameCount = Math.ceil(length / hopSize);
   const bands = [new Float64Array(frameCount), new Float64Array(frameCount), new Float64Array(frameCount)];
   const channels = Math.min(2, numberOfChannels);
+  const framesPerChunk = Math.max(1, Math.floor(ANALYSIS_CHUNK_SAMPLES / hopSize));
   const lowCoefficient = 1 - Math.exp(-2 * Math.PI * 300 / sampleRate);
   const midCoefficient = 1 - Math.exp(-2 * Math.PI * 2500 / sampleRate);
   for (let channel = 0; channel < channels; channel++) {
@@ -154,6 +186,10 @@ export function analyzeSongAudio(buffer: SongAudioSamples, filename: string, fin
       bands[0]![frame] += lowEnergy * scale;
       bands[1]![frame] += midEnergy * scale;
       bands[2]![frame] += highEnergy * scale;
+      if ((frame + 1) % framesPerChunk === 0 || frame + 1 === frameCount) {
+        // Keep the filter state across task boundaries, without copying PCM.
+        yield 0.9 * (channel * frameCount + frame + 1) / (channels * frameCount);
+      }
     }
   }
 
@@ -245,18 +281,57 @@ export function analyzeSongAudio(buffer: SongAudioSamples, filename: string, fin
   return { chart, warnings };
 }
 
+/** The synchronous analysis API uses exactly the same steps as browser imports. */
+export function analyzeSongAudio(buffer: SongAudioSamples, filename: string, fingerprint: string): AudioAnalysis {
+  const steps = analyzeSongAudioSteps(buffer, filename, fingerprint);
+  let next = steps.next();
+  while (!next.done) next = steps.next();
+  return next.value;
+}
+
 /** Read, fingerprint, decode, and analyze a user-selected file entirely locally. */
-export async function importAudioFile(file: File): Promise<AudioAnalysis & { buffer: AudioBuffer }> {
+export async function importAudioFile(file: File, options: AudioImportOptions = {}): Promise<AudioAnalysis & { buffer: AudioBuffer }> {
+  const { signal, onProgress } = options;
+  throwIfCancelled(signal);
   checkAudioSize(file.size);
   if (!isSupportedAudioFile(file)) {
     throw new Error("Choose MP3, WAV, FLAC, M4A, OGG, or another browser-supported audio file.");
   }
-  await checkAudioMetadata(file);
+  onProgress?.({ phase: "checking" });
+  await checkAudioMetadata(file, signal);
+  throwIfCancelled(signal);
   const data = await file.arrayBuffer();
+  throwIfCancelled(signal);
   if (!globalThis.crypto?.subtle) throw new Error("Audio import needs a secure browser connection. Reload the game over HTTPS.");
   // Hash before decodeAudioData, which is permitted to detach its input buffer.
   const hash = await globalThis.crypto.subtle.digest("SHA-256", data);
+  throwIfCancelled(signal);
   const fingerprint = Array.from(new Uint8Array(hash), (value) => value.toString(16).padStart(2, "0")).join("");
+  onProgress?.({ phase: "decoding" });
+  throwIfCancelled(signal);
   const buffer = await decodeSongAudio(data);
-  return { ...analyzeSongAudio(buffer, file.name, fingerprint), buffer };
+  // Native decoding cannot be aborted, but a dismissed import must never start
+  // the expensive sample analysis when that outstanding decode completes.
+  throwIfCancelled(signal);
+  onProgress?.({ phase: "analyzing", progress: 0 });
+  await yieldToBrowser(signal);
+  const steps = analyzeSongAudioSteps(buffer, file.name, fingerprint);
+  let reportedProgress = 0;
+  for (;;) {
+    throwIfCancelled(signal);
+    const next = steps.next();
+    if (next.done) {
+      onProgress?.({ phase: "analyzing", progress: 1 });
+      throwIfCancelled(signal);
+      return { ...next.value, buffer };
+    }
+    // Yield every bounded sample chunk, but avoid rerendering the panel for
+    // tiny fractions on a long song. Five-percent steps keep feedback useful.
+    const progress = Math.floor(next.value * 20) / 20;
+    if (progress > reportedProgress) {
+      reportedProgress = progress;
+      onProgress?.({ phase: "analyzing", progress });
+    }
+    await yieldToBrowser(signal);
+  }
 }

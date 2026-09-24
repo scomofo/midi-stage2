@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ArrowRight,
   Check,
@@ -26,6 +26,7 @@ type SongLibraryPanelProps = {
     warnings: string[];
   } | null;
   reading: boolean;
+  readingLabel?: string;
   saving?: boolean;
   error: string | null;
   libraryWarning: string | null;
@@ -40,6 +41,7 @@ type SongLibraryPanelProps = {
 export function SongLibraryPanel({
   candidate,
   reading,
+  readingLabel = "Reading your song…",
   saving = false,
   error,
   libraryWarning,
@@ -54,7 +56,28 @@ export function SongLibraryPanel({
   const [fileNotice, setFileNotice] = useState("");
   const [removing, setRemoving] = useState<string | null>(null);
   const dragDepth = useRef(0);
+  const previewRef = useRef<HTMLElement>(null);
+  const previewTitleRef = useRef<HTMLHeadingElement>(null);
+  const errorRef = useRef<HTMLParagraphElement>(null);
   const busy = reading || saving;
+  const previewReady = candidate !== null && !reading;
+  const candidateName = candidate?.name;
+  const candidateFileName = candidate?.fileName;
+  const notice = fileNotice || error;
+
+  useEffect(() => {
+    if (!previewReady) return;
+    previewTitleRef.current?.focus({ preventScroll: true });
+    previewRef.current?.scrollIntoView({ block: "start", behavior: "auto" });
+    // The parent refreshes the HUD throughout the session. Only a newly read
+    // preview should move focus, never those unrelated renders.
+  }, [previewReady, candidateName, candidateFileName]);
+
+  useEffect(() => {
+    if (!notice) return;
+    errorRef.current?.focus({ preventScroll: true });
+    errorRef.current?.scrollIntoView({ block: "nearest", behavior: "auto" });
+  }, [notice]);
 
   function chooseFile(files: FileList | null) {
     if (busy || !files?.length) return;
@@ -157,21 +180,24 @@ export function SongLibraryPanel({
                 className="size-4 animate-spin motion-reduce:animate-none"
                 aria-hidden="true"
               />
-              Reading your song…
+              {readingLabel}
             </p>
           ) : null}
-          {fileNotice || error ? (
+          {notice ? (
             <p
+              ref={errorRef}
               role="alert"
+              tabIndex={-1}
               className="mt-3 break-words rounded-lg border border-border bg-surface px-3 py-3 text-sm leading-relaxed text-tungsten"
             >
-              {fileNotice || error}
+              {notice}
             </p>
           ) : null}
         </div>
 
         {candidate ? (
           <section
+            ref={previewRef}
             aria-labelledby="song-preview-title"
             className="min-w-0 rounded-xl border border-accent/30 bg-surface p-4 text-fg"
           >
@@ -179,7 +205,9 @@ export function SongLibraryPanel({
               <Check className="size-4" aria-hidden="true" /> READY FOR THE SETLIST
             </div>
             <h3
+              ref={previewTitleRef}
               id="song-preview-title"
+              tabIndex={-1}
               className="break-words font-display text-xl font-semibold tracking-tight"
             >
               {candidate.name}
@@ -275,7 +303,8 @@ export function SongLibraryPanel({
                     <button
                       type="button"
                       aria-label={`Play ${song.name}`}
-                      className="flex min-h-11 min-w-0 flex-1 items-center gap-3 rounded-lg text-left transition-colors hover:text-accent"
+                      className="flex min-h-11 min-w-0 flex-1 items-center gap-3 rounded-lg text-left transition-colors hover:text-accent disabled:pointer-events-none disabled:opacity-40"
+                      disabled={busy}
                       onClick={() => onSelect(song.id)}
                     >
                       <FileMusic className="size-5 shrink-0 text-accent" aria-hidden="true" />
@@ -294,6 +323,7 @@ export function SongLibraryPanel({
                       size="icon"
                       className="shrink-0"
                       aria-label={`Remove ${song.name}`}
+                      disabled={busy}
                       onClick={() => setRemoving(song.id)}
                     >
                       <Trash2 className="size-4" aria-hidden="true" />
@@ -309,6 +339,7 @@ export function SongLibraryPanel({
                           type="button"
                           variant="secondary"
                           className="flex-1"
+                          disabled={busy}
                           onClick={() => {
                             onRemove(song.id);
                             setRemoving(null);
@@ -320,6 +351,7 @@ export function SongLibraryPanel({
                           type="button"
                           variant="ghost"
                           className="flex-1"
+                          disabled={busy}
                           onClick={() => setRemoving(null)}
                         >
                           Keep
@@ -342,6 +374,10 @@ export function SongLibraryPanel({
             </div>
           )}
         </section>
+
+        <p role="status" aria-atomic="true" className="sr-only">
+          {previewReady ? `${candidateName} is ready. Review the preview and add it to your setlist.` : ""}
+        </p>
 
         <p className="mt-auto border-t border-border pt-4 text-xs leading-relaxed text-muted">
           Your files stay in this browser and are never uploaded. Keep the originals; if browser
