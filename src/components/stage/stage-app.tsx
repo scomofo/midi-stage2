@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent } from "react";
 import {
   Lamp,
+  SlidersHorizontal,
   Maximize2,
   Minimize2,
   Menu,
@@ -14,6 +15,9 @@ import {
 import { Button } from "@/components/ui/button";
 import { FeelPanel } from "@/components/stage/feel-panel";
 import { SessionOverlay, type SessionResults } from "@/components/stage/session-overlay";
+import { SoundcheckPanel } from "@/components/stage/soundcheck-panel";
+import { defaultMidiRoutes, loadMidiRoutes, saveMidiRoutes, resolveMidiPlayer, type MidiRoute } from "@/lib/midi-stage/midi-routing";
+import { loadSessionPreferences, saveSessionPreferences } from "@/lib/midi-stage/preferences";
 import { useStageMidi } from "@/components/stage/use-stage-midi";
 import { PianoGuide } from "@/components/stage/piano-guide";
 import { AudioEngine } from "@/lib/midi-stage/audio";
@@ -100,6 +104,12 @@ export function StageApp() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const startTicket = useRef(0);
   const pendingRehearsal = useRef(false);
+  const midiOwners = useRef(new Map<string, { playerId: Instrument; token: string }>());
+  const [midiRoutes, setMidiRoutes] = useState(defaultMidiRoutes);
+  const [preferencesHydrated, setPreferencesHydrated] = useState(false);
+  const [soundcheckOpen, setSoundcheckOpen] = useState(false);
+  const [unlockingSound, setUnlockingSound] = useState(false);
+  const [lastPlayed, setLastPlayed] = useState("");
   const panelRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLElement>(null);
   const [focusStage, setFocusStage] = useState(false);
@@ -156,6 +166,7 @@ export function StageApp() {
     startTicket.current++;
     const audio = bag.current?.audio || new AudioEngine();
     audio.stop();
+    midiOwners.current.clear();
     const b: Bag = {
       audio,
       renderer: bag.current?.renderer || null,
@@ -275,6 +286,10 @@ export function StageApp() {
     const judge = b.judges.get(p.id);
     if (!judge || lane < 0 || lane >= judge.lanes.length || b.status === "paused" || b.status === "starting" || b.feelOpen) return;
     const pitch = inputPitch ?? judge.lanes[lane]!.pitch;
+    if (b.status === "ready") {
+      const source = token.startsWith("midi:") ? "MIDI" : token.startsWith("key:") || token.startsWith("pad-key:") ? "computer keyboard" : "touch / pointer";
+      setLastPlayed(`${p.label} · ${judge.lanes[lane]!.short} · ${source}`);
+    }
     const now = performance.now() / 1000;
     b.padFlash.set(`${p.id}:${lane}`, now + 0.16);
     b.pressed.set(`${p.id}:${lane}`, now + 0.18);
@@ -437,6 +452,7 @@ export function StageApp() {
       b.status = "playing";
       setStatus("playing");
       setOverlay(false);
+      setSoundcheckOpen(false);
       setMenu(false);
       canvasRef.current?.focus({ preventScroll: true });
     } catch (e) {
@@ -538,13 +554,37 @@ export function StageApp() {
     setOverlay(true);
   }
 
+  // Restore after hydration; never write the server-rendered defaults over a saved setup.
+  useLayoutEffect(() => {
+    const saved = loadSessionPreferences(catalog("standard").map((entry) => entry.id));
+    setSongId(saved.songId);
+    setPlayers(defaultPlayers().map((player) => ({ ...player, enabled: saved.enabledPlayers.includes(player.id) })));
+    setDifficulty(saved.difficulty);
+    setSpeed(saved.speed);
+    setGuide(saved.guide);
+    setMetronome(saved.metronome);
+    setVolume(saved.volume);
+    setFocusStage(saved.focusStage);
+    setMidiRoutes(loadMidiRoutes());
+    setPreferencesHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (!preferencesHydrated) return;
+    saveSessionPreferences({ songId, enabledPlayers: players.filter((p) => p.enabled).map((p) => p.id), difficulty, speed, guide, metronome, volume, focusStage });
+  }, [preferencesHydrated, songId, players, difficulty, speed, guide, metronome, volume, focusStage]);
+
+  useEffect(() => {
+    if (preferencesHydrated) saveMidiRoutes(midiRoutes);
+  }, [preferencesHydrated, midiRoutes]);
+
   // Commit session readiness before the animation loop can publish HUD updates.
   useLayoutEffect(() => {
     initBag();
     setStatus("ready");
     setResults(null);
     setOverlay(true);
-    setReady(true);
+    setReady(preferencesHydrated);
     setBest(loadBest(bestKey(song, difficulty, speed, players)));
     if (pendingRehearsal.current) {
       pendingRehearsal.current = false;
@@ -553,7 +593,7 @@ export function StageApp() {
       if (bag.current) { bag.current.guide = true; bag.current.metronome = true; }
       void startSession(false);
     }
-  }, [initBag, song, difficulty, speed, players, startSession]);
+  }, [initBag, song, difficulty, speed, players, startSession, preferencesHydrated]);
 
   // Listening controls belong to the live session. Rebuilding here would erase
   // scores and holds while the audio clock continued playing.
@@ -773,6 +813,7 @@ export function StageApp() {
         e.preventDefault();
         if (feelOpen) setFeelOpen(false);
         else if (menu) setMenu(false);
+        else if (soundcheckOpen) setSoundcheckOpen(false);
         else if (b.status === "playing") pauseSession();
         return;
       }
@@ -811,7 +852,7 @@ export function StageApp() {
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("keyup", onUp);
     };
-  }, [pauseSession, startSession, resetReady, feelOpen, menu]);
+  }, [pauseSession, startSession, resetReady, feelOpen, menu, soundcheckOpen]);
 
   useEffect(() => {
     if (!toast) return;
@@ -820,23 +861,54 @@ export function StageApp() {
   }, [toast]);
 
   const midi = useStageMidi({
-    onNoteOn: (note, velocity, token) => {
+    onNoteOn: (note, velocity, token, source) => {
       const b = bag.current;
       if (!b) return;
-      for (const p of b.players.filter((p) => p.enabled)) {
-        const judge = b.judges.get(p.id);
-        const lane = p.type === "drums"
-          ? judge?.lanes.findIndex((l) => l.notes?.includes(note)) ?? -1
-          : judge?.lanes.findIndex((l) => l.pc === ((note % 12) + 12) % 12) ?? -1;
-        if (lane >= 0) hit(b, p, lane, `${token}:${p.id}`, velocity, note);
-      }
+      const p = resolveMidiPlayer(b.players, midiRoutes, source);
+      if (!p) return;
+      const judge = b.judges.get(p.id);
+      const lane = p.type === "drums"
+        ? judge?.lanes.findIndex((l) => l.notes?.includes(note)) ?? -1
+        : judge?.lanes.findIndex((l) => l.pc === ((note % 12) + 12) % 12) ?? -1;
+      if (lane < 0 || b.status === "paused" || b.status === "starting" || b.feelOpen) return;
+      const ownedToken = `${token}:${p.id}`;
+      midiOwners.current.set(token, { playerId: p.id, token: ownedToken });
+      hit(b, p, lane, ownedToken, velocity, note);
     },
     onNoteOff: (token) => {
+      const owner = midiOwners.current.get(token);
+      midiOwners.current.delete(token);
       const b = bag.current;
-      if (b) for (const p of b.players.filter((p) => p.enabled)) release(b, p, `${token}:${p.id}`);
+      const p = b?.players.find((player) => player.id === owner?.playerId);
+      if (b && p && owner) release(b, p, owner.token);
     },
     onDisconnect: () => pauseSession("MIDI disconnected. Reconnect your instrument or continue on keyboard."),
   });
+
+  function changeMidiRoute(id: Instrument, route: MidiRoute) {
+    const b = bag.current;
+    if (!b || b.status === "playing" || b.status === "starting") return;
+    // Release using the original owner before reassignment, including paused holds.
+    for (const owner of midiOwners.current.values()) {
+      const p = b.players.find((player) => player.id === owner.playerId);
+      if (p) release(b, p, owner.token);
+    }
+    midiOwners.current.clear();
+    setMidiRoutes((previous) => ({ ...previous, [id]: route }));
+  }
+
+  async function enableSound() {
+    const b = bag.current;
+    if (!b || unlockingSound || b.status !== "ready") return;
+    setUnlockingSound(true);
+    try {
+      await b.audio.init();
+    } catch (error) {
+      setToast(error instanceof Error ? error.message : "Sound could not start. Try Enable sound again.");
+    } finally {
+      setUnlockingSound(false);
+    }
+  }
 
   useEffect(() => { if (midi.error) setToast(midi.error); }, [midi.error]);
 
@@ -855,6 +927,7 @@ export function StageApp() {
       // song time so unattended notes never earn sustain bonuses on return.
       for (const j of b.judges.values()) for (const token of [...j.held.keys()]) j.release(token, b.position);
       for (const token of [...b.audio.monitorVoices.keys()]) b.audio.release(token);
+      midiOwners.current.clear();
       b.canvasPtrs.clear();
       b.pressed.clear();
       b.sounding.clear();
@@ -1123,12 +1196,36 @@ export function StageApp() {
                 <RotateCcw className="size-4" />
               </Button>
             </div>
-            <Button variant="ghost" aria-pressed={focusStage} onClick={() => { if (focusStage && window.innerWidth < 1024) openMenu(); else setFocusStage((v) => !v); }}>
-              {focusStage ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
-              {focusStage ? "Show setlist" : "Focus stage"}
-            </Button>
+            <div className="flex flex-wrap gap-1">
+              <Button variant="ghost" disabled={busy} aria-expanded={soundcheckOpen} aria-controls="soundcheck-panel" onClick={() => setSoundcheckOpen((value) => !value)}>
+                <SlidersHorizontal className="size-4" /> Soundcheck
+              </Button>
+              <Button variant="ghost" aria-pressed={focusStage} onClick={() => { if (focusStage && window.innerWidth < 1024) openMenu(); else setFocusStage((v) => !v); }}>
+                {focusStage ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
+                {focusStage ? "Show setlist" : "Focus stage"}
+              </Button>
+            </div>
           </div>
 
+          {soundcheckOpen && !busy ? (
+            <SoundcheckPanel
+              players={enabled}
+              inputs={midi.inputs}
+              routes={midiRoutes}
+              audioReady={bag.current?.audio.ctx?.state === "running"}
+              unlocking={unlockingSound}
+              canPractice={status === "ready" && !results}
+              volume={volume}
+              lastPlayed={lastPlayed}
+              midiLast={midi.last}
+              midiError={midi.error ?? ""}
+              connecting={midi.connecting}
+              onEnableSound={() => void enableSound()}
+              onConnect={() => void midi.connect()}
+              onRouteChange={changeMidiRoute}
+              onClose={() => setSoundcheckOpen(false)}
+            />
+          ) : null}
 
           <div className="stage-hud grid grid-cols-2 gap-3 rounded-t-2xl bg-surface px-4 py-3 shadow-[0_0_0_1px_rgba(239,232,220,0.08)] sm:grid-cols-4 lg:grid-cols-5">
             <div className={cn("hud-chip accent", hud.gain > 0 && "pop")}>

@@ -1,13 +1,18 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { MidiNotes } from "./midi-notes.ts";
+import type { MidiSource } from "../../lib/midi-stage/midi-routing.ts";
 
 function setup() {
   const notes = new MidiNotes();
   const held = new Map<string, number>();
   const released: string[] = [];
+  const sources: MidiSource[] = [];
   const callbacks = {
-    onNoteOn: (note: number, _velocity: number, token: string) => held.set(token, note),
+    onNoteOn: (note: number, _velocity: number, token: string, source: MidiSource) => {
+      held.set(token, note);
+      sources.push(source);
+    },
     onNoteOff: (token: string) => {
       held.delete(token);
       released.push(token);
@@ -15,10 +20,22 @@ function setup() {
   };
   const send = (id: string, ...data: number[]) =>
     notes.message(id, Uint8Array.from(data), callbacks);
-  return { notes, held, released, callbacks, send };
+  return { notes, held, released, sources, callbacks, send };
 }
 
 describe("MIDI held notes", () => {
+  it("passes opaque input identity and one-based channels to each strike", () => {
+    const { sources, send } = setup();
+    send('keys:"usb":1', 0x90, 60, 100);
+    send("pads", 0x99, 36, 90);
+    send("keys", 0x9f, 67, 80);
+    assert.deepEqual(sources, [
+      { inputId: 'keys:"usb":1', channel: 1 },
+      { inputId: "pads", channel: 10 },
+      { inputId: "keys", channel: 16 },
+    ]);
+  });
+
   it("keeps matching pitches separate across devices and channels", () => {
     const { held, send } = setup();
     send("keys", 0x90, 60, 100);

@@ -1,9 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { noteName } from "@/lib/midi-stage/engine";
 import { MidiNotes, type MidiNoteCallbacks } from "./midi-notes";
 
 type MidiCallbacks = MidiNoteCallbacks & { onDisconnect: () => void };
 type InputBinding = { input: MIDIInput; listener: (event: MIDIMessageEvent) => void };
-type MidiState = { connected: boolean; connecting: boolean; last: string; error: string | null };
+export type MidiInputInfo = { id: string; name: string; manufacturer: string };
+type MidiState = {
+  connected: boolean;
+  connecting: boolean;
+  inputs: MidiInputInfo[];
+  last: string;
+  error: string | null;
+};
 
 function connectionError(error: unknown) {
   const name = error && typeof error === "object" && "name" in error ? error.name : "";
@@ -25,6 +33,7 @@ export function useStageMidi(callbacks: MidiCallbacks) {
   const [state, setState] = useState<MidiState>({
     connected: false,
     connecting: false,
+    inputs: [],
     last: "Computer keys ready. MIDI is optional.",
     error: null,
   });
@@ -62,7 +71,7 @@ export function useStageMidi(callbacks: MidiCallbacks) {
         if (note) {
           setState((previous) => ({
             ...previous,
-            last: `Note ${note.note} · ch ${note.channel} · vel ${note.velocity}`,
+            last: `${noteName(note.note)} · ${input.name?.trim() || "MIDI instrument"} · ch ${note.channel} · vel ${note.velocity}`,
           }));
         }
       };
@@ -75,6 +84,11 @@ export function useStageMidi(callbacks: MidiCallbacks) {
     setState((previous) => ({
       ...previous,
       connected: count > 0,
+      inputs: [...bindings.current.values()].map(({ input }) => ({
+        id: input.id,
+        name: input.name?.trim() || "MIDI instrument",
+        manufacturer: input.manufacturer?.trim() || "",
+      })),
       last: disconnected
         ? `MIDI input disconnected. ${count ? `${count} input${count === 1 ? " remains" : "s remain"} live.` : "Reconnect your instrument or use computer keys."}`
         : changed || !previous.connected
