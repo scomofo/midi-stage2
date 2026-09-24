@@ -6,6 +6,14 @@ export type MidiRoute = {
   inputId: string;
   /** MIDI channels are numbered 1–16. Null accepts every channel. */
   channel: number | null;
+  /**
+   * Remembered device identity for a "device" assignment. The browser's opaque
+   * input id can change when the OS MIDI backend underneath it changes (for
+   * example across the Windows MIDI Services rollout), while the human-readable
+   * name and manufacturer stay stable. Stored only to re-link the assignment.
+   */
+  inputName?: string;
+  inputManufacturer?: string;
 };
 export type MidiRoutes = Record<Instrument, MidiRoute>;
 
@@ -51,7 +59,14 @@ function parseRoute(value: unknown): MidiRoute | undefined {
   if (route.mode === "device") {
     if (!route.inputId.trim()) return;
     // Preserve the browser's opaque device ID exactly, including punctuation.
-    return { mode: "device", inputId: route.inputId, channel: route.channel as number | null };
+    const remembered: Pick<MidiRoute, "inputName" | "inputManufacturer"> = {};
+    if (typeof route.inputName === "string" && route.inputName.trim()) {
+      remembered.inputName = route.inputName.trim();
+    }
+    if (typeof route.inputManufacturer === "string" && route.inputManufacturer.trim()) {
+      remembered.inputManufacturer = route.inputManufacturer.trim();
+    }
+    return { mode: "device", inputId: route.inputId, channel: route.channel as number | null, ...remembered };
   }
   return { mode: route.mode, inputId: "", channel: null };
 }
@@ -88,4 +103,57 @@ export function saveMidiRoutes(routes: MidiRoutes, storage?: Pick<Storage, "setI
   } catch {
     return false;
   }
+}
+
+/** A live input as reported by the browser's MIDI enumeration. */
+export type MidiLiveInput = { id: string; name: string; manufacturer: string };
+export type MidiRemap = { instrument: Instrument; name: string };
+
+function identityMatches(route: MidiRoute, input: MidiLiveInput): boolean {
+  const remembered = route.inputName?.trim();
+  if (!remembered) return false;
+  return input.name.trim() === remembered
+    && input.manufacturer.trim() === (route.inputManufacturer ?? "").trim();
+}
+
+/**
+ * Re-link saved per-device assignments after the browser's opaque device ids
+ * change. When a stored input id is still live, the remembered name and
+ * manufacturer are refreshed. When it is gone but exactly one live input
+ * matches the remembered identity, the assignment follows it. Zero or several
+ * matches leave the route untouched so the existing "disconnected device" UI
+ * keeps asking the player to choose.
+ */
+export function remapMidiRouteInputIds(
+  routes: MidiRoutes,
+  liveInputs: readonly MidiLiveInput[],
+): { routes: MidiRoutes; changed: boolean; remapped: MidiRemap[] } {
+  const next: MidiRoutes = { ...routes };
+  let changed = false;
+  const remapped: MidiRemap[] = [];
+  for (const instrument of INSTRUMENTS) {
+    const route = next[instrument];
+    if (route.mode !== "device") continue;
+    const live = liveInputs.find((input) => input.id === route.inputId);
+    if (live) {
+      const name = live.name.trim();
+      const manufacturer = live.manufacturer.trim();
+      if (route.inputName !== name || (route.inputManufacturer ?? "") !== manufacturer) {
+        next[instrument] = {
+          ...route,
+          inputName: name,
+          ...(manufacturer ? { inputManufacturer: manufacturer } : {}),
+        };
+        changed = true;
+      }
+      continue;
+    }
+    const candidates = liveInputs.filter((input) => identityMatches(route, input));
+    if (candidates.length !== 1) continue;
+    const match = candidates[0];
+    next[instrument] = { ...route, inputId: match.id };
+    remapped.push({ instrument, name: match.name.trim() || "MIDI device" });
+    changed = true;
+  }
+  return { routes: next, changed, remapped };
 }
