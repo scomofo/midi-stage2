@@ -808,7 +808,7 @@ export class StageRenderer {
 
   private paintBand(state: DrawState) {
     const { ctx, w, h } = this;
-    const size = Math.min(76, w * 0.14, h * 0.17);
+    const size = Math.min(104, w * 0.18, h * 0.22);
     const figures: { id: Instrument; x: number }[] = [
       { id: "keys", x: 0.35 },
       { id: "drums", x: 0.45 },

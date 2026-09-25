@@ -23,6 +23,14 @@ export function createPerformerArt(instrument: Instrument): HTMLCanvasElement {
   // Filled tailored silhouettes, rim-lit shoulders, separate instrument props.
   // The rim light is the only thing separating the band from the back wall,
   // so it runs brighter than a true silhouette would.
+  // Backlight halo: baked stage backlight that lifts each performer off the wall.
+  // Rocksmith-style amber wash, hot center falling off hard like a real spot.
+  const halo = c.createRadialGradient(0, 32, 4, 0, 32, 44);
+  halo.addColorStop(0, "rgba(232,168,76,0.28)");
+  halo.addColorStop(0.5, "rgba(232,168,76,0.10)");
+  halo.addColorStop(1, "rgba(232,168,76,0)");
+  c.fillStyle = halo;
+  c.fillRect(-44, -12, 88, 88);
   polygon(
     [
       [-10, 40],
@@ -33,15 +41,16 @@ export function createPerformerArt(instrument: Instrument): HTMLCanvasElement {
       [-4, 68],
       [-13, 68],
     ],
-    "#181f2a",
+    "#232c3a",
   );
   const jacket = c.createLinearGradient(-14, 0, 14, 0);
-  jacket.addColorStop(0, "#5f7372");
-  jacket.addColorStop(0.22, "#28363f");
-  jacket.addColorStop(1, "#0b1220");
+  jacket.addColorStop(0, "#7d8f8d");
+  jacket.addColorStop(0.22, "#3d4f57");
+  jacket.addColorStop(0.55, "#2a3540");
+  jacket.addColorStop(1, "#141b26");
   c.fillStyle = jacket;
-  c.strokeStyle = "#8fb3a8";
-  c.lineWidth = 1.1;
+  c.strokeStyle = "#d8b988";
+  c.lineWidth = 1.2;
   c.beginPath();
   c.moveTo(-5, 22);
   c.quadraticCurveTo(-16, 21, -15, 34);
@@ -52,7 +61,29 @@ export function createPerformerArt(instrument: Instrument): HTMLCanvasElement {
   c.closePath();
   c.fill();
   c.stroke();
+  // Shirt visible under the open jacket, catches the front light.
+  const shirt = c.createLinearGradient(-4, 24, 4, 46);
+  shirt.addColorStop(0, "#8a8f8a");
+  shirt.addColorStop(1, "#3a3f3d");
+  c.fillStyle = shirt;
+  c.beginPath();
+  c.moveTo(-4, 24);
+  c.lineTo(4, 24);
+  c.lineTo(2, 46);
+  c.lineTo(-2, 46);
+  c.closePath();
+  c.fill();
   c.fillStyle = "#343d3b";
+  c.beginPath();
+  c.ellipse(0, 14, 6.5, 8, -0.12, 0, Math.PI * 2);
+  c.fill();
+  // Face catches the spotlight: warm highlight on the lit side.
+  // Rocksmith-style: hot amber key from stage right, falloff to shadow.
+  const face = c.createLinearGradient(-6, 8, 6, 20);
+  face.addColorStop(0, "#a08a64");
+  face.addColorStop(0.4, "#6b5f4a");
+  face.addColorStop(1, "#232a29");
+  c.fillStyle = face;
   c.beginPath();
   c.ellipse(0, 14, 6.5, 8, -0.12, 0, Math.PI * 2);
   c.fill();
@@ -64,6 +95,23 @@ export function createPerformerArt(instrument: Instrument): HTMLCanvasElement {
   c.beginPath();
   c.ellipse(-1, 9, 7, 4, -0.15, 0, Math.PI * 2);
   c.fill();
+  // Rock hair: messy, catches the amber backlight on top.
+  c.fillStyle = "#1a1512";
+  c.beginPath();
+  c.moveTo(-7, 12);
+  c.quadraticCurveTo(-8, 2, -2, 3);
+  c.quadraticCurveTo(3, 1, 7, 6);
+  c.quadraticCurveTo(8, 11, 6, 13);
+  c.quadraticCurveTo(4, 8, 0, 9);
+  c.quadraticCurveTo(-4, 8, -7, 12);
+  c.closePath();
+  c.fill();
+  c.strokeStyle = "#d8a860";
+  c.lineWidth = 0.8;
+  c.beginPath();
+  c.moveTo(-5, 6);
+  c.quadraticCurveTo(-2, 3, 3, 4);
+  c.stroke();
 
   if (instrument === "keys") {
     polygon(
@@ -75,10 +123,13 @@ export function createPerformerArt(instrument: Instrument): HTMLCanvasElement {
       ],
       "#16232b",
     );
-    c.fillStyle = "#d4daca";
+    c.fillStyle = "#e8ece0";
     c.fillRect(-23, 40, 46, 4);
     c.fillStyle = "#07121b";
     for (let i = 0; i < 14; i++) c.fillRect(-21 + i * 3.1, 40, 1.5, 2.5);
+    // Key bed catches the stage wash.
+    c.fillStyle = "rgba(232,236,224,0.16)";
+    c.fillRect(-25, 37, 50, 3);
     c.strokeStyle = "#84938d";
     c.lineWidth = 2;
     c.beginPath();
@@ -116,7 +167,12 @@ export function createPerformerArt(instrument: Instrument): HTMLCanvasElement {
       c.stroke();
       c.beginPath();
       c.ellipse(side * 25, 35, 12, 2.5, side * 0.1, 0, Math.PI * 2);
-      c.fillStyle = "#b2986e";
+      c.fillStyle = "#c8ab7d";
+      c.fill();
+      // Cymbal catches the light.
+      c.fillStyle = "rgba(240,220,170,0.35)";
+      c.beginPath();
+      c.ellipse(side * 25 - 3, 34.2, 6, 1.2, side * 0.1, 0, Math.PI * 2);
       c.fill();
       polygon(
         [
@@ -142,6 +198,15 @@ export function createPerformerArt(instrument: Instrument): HTMLCanvasElement {
     c.arc(0, 59, 10, 0, Math.PI * 2);
     c.lineWidth = 0.7;
     c.stroke();
+    // Sticks raised, mid-performance.
+    c.strokeStyle = "#d8c49a";
+    c.lineWidth = 1.5;
+    c.beginPath();
+    c.moveTo(-8, 32);
+    c.lineTo(-18, 18);
+    c.moveTo(8, 32);
+    c.lineTo(16, 16);
+    c.stroke();
   } else {
     // Guitar and bass bodies, neck, bridge and shoulder strap.
     c.strokeStyle = "#b49b7c";
@@ -153,10 +218,15 @@ export function createPerformerArt(instrument: Instrument): HTMLCanvasElement {
     c.save();
     c.translate(6, 43);
     c.rotate(-0.62);
-    c.fillStyle = instrument === "bass" ? "#587c76" : "#a17d52";
+    c.fillStyle = instrument === "bass" ? "#6a8f89" : "#b28e5e";
     c.beginPath();
     c.ellipse(-4, 2, 9, 8, 0, 0, Math.PI * 2);
     c.ellipse(4, 0, 7, 6, 0, 0, Math.PI * 2);
+    c.fill();
+    // Body highlight: stage wash across the curve.
+    c.fillStyle = "rgba(240,230,200,0.22)";
+    c.beginPath();
+    c.ellipse(-5, 0, 5, 3.5, -0.3, 0, Math.PI * 2);
     c.fill();
     c.fillStyle = "#aaad91";
     c.fillRect(4, -2, instrument === "bass" ? 29 : 23, 3);
@@ -175,6 +245,15 @@ export function createPerformerArt(instrument: Instrument): HTMLCanvasElement {
       "#263b40",
     );
   }
+  // Front key light: warm spot washing the performer from the front,
+  // hot on the instrument side, falling off to the edges. Rocksmith-style.
+  const key = c.createLinearGradient(-20, 0, 20, 0);
+  key.addColorStop(0, "rgba(232,168,76,0)");
+  key.addColorStop(0.35, "rgba(232,168,76,0.14)");
+  key.addColorStop(0.65, "rgba(232,168,76,0.14)");
+  key.addColorStop(1, "rgba(232,168,76,0)");
+  c.fillStyle = key;
+  c.fillRect(-20, 0, 40, 72);
   return canvas;
 }
 
