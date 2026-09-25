@@ -21,6 +21,8 @@ export function createPerformerArt(instrument: Instrument): HTMLCanvasElement {
     c.stroke();
   };
   // Filled tailored silhouettes, rim-lit shoulders, separate instrument props.
+  // The rim light is the only thing separating the band from the back wall,
+  // so it runs brighter than a true silhouette would.
   polygon(
     [
       [-10, 40],
@@ -31,14 +33,15 @@ export function createPerformerArt(instrument: Instrument): HTMLCanvasElement {
       [-4, 68],
       [-13, 68],
     ],
-    "#11151c",
+    "#181f2a",
   );
   const jacket = c.createLinearGradient(-14, 0, 14, 0);
-  jacket.addColorStop(0, "#526362");
-  jacket.addColorStop(0.22, "#1d2a32");
-  jacket.addColorStop(1, "#080f18");
+  jacket.addColorStop(0, "#5f7372");
+  jacket.addColorStop(0.22, "#28363f");
+  jacket.addColorStop(1, "#0b1220");
   c.fillStyle = jacket;
-  c.strokeStyle = "#708c85";
+  c.strokeStyle = "#8fb3a8";
+  c.lineWidth = 1.1;
   c.beginPath();
   c.moveTo(-5, 22);
   c.quadraticCurveTo(-16, 21, -15, 34);
