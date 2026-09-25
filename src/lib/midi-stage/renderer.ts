@@ -808,7 +808,7 @@ export class StageRenderer {
 
   private paintBand(state: DrawState) {
     const { ctx, w, h } = this;
-    const size = Math.min(76, w * 0.14, h * 0.17);
+    const size = Math.min(104, w * 0.18, h * 0.22);
     const figures: { id: Instrument; x: number }[] = [
       { id: "keys", x: 0.35 },
       { id: "drums", x: 0.45 },
@@ -1216,10 +1216,12 @@ export class StageRenderer {
 
     const harm = currentHarmony(state.song, Math.max(0, t));
     if (harm && t > 0) {
-      ctx.font = "700 13px Syne, sans-serif";
-      ctx.fillStyle = "rgba(239,232,220,0.7)";
-      ctx.textAlign = "left";
-      ctx.fillText(`${harm.roman}   ${harm.name}`, 22, h * 0.18);
+      // Song-level harmony sits top-center where the eye rests between
+      // phrases, not orphaned in the corner away from the play action.
+      ctx.font = "700 14px Syne, sans-serif";
+      ctx.fillStyle = "rgba(239,232,220,0.85)";
+      ctx.textAlign = "center";
+      ctx.fillText(`${harm.roman}   ${harm.name}`, w / 2, h * 0.045);
     }
 
     return geom;
