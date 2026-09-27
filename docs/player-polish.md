@@ -224,3 +224,41 @@ timing. On the intended computer and MIDI instrument, play First Rehearsal:
 Use the production build for this pass. Commercial recordings and subjective
 chart fairness require their own acceptance; this change does not claim to
 validate them.
+
+## Authored guitar arrangements
+
+Backline Drive is a 38.4-second, 100 BPM original riff with four practice sections.
+The primary arrangement authors each guitar note's string and fret in standard
+E–A–D–G–B–E tuning. String 1 is high E; string 6 is low E. Six fixed highway lanes
+run low to high, preserving string identity through passage slicing and difficulty
+changes. Numbered gems and the next-shape guide show actual frets, including open
+strings. No fingering is inferred from MIDI pitch. Only authored built-in charts
+use this mode; the existing import formats do not accept guitar-position data.
+
+Real-guitar input scores exact MIDI pitches. Wrong octaves count as extra notes;
+keyboard keys and generic touch pads cannot score this arrangement. MIDI note-off
+releases the owning sustain. Each chord tone is judged independently so a physical
+strum can arrive as several successive note-ons. Pitch-only MIDI cannot prove which
+string or fingering was used. Per-string channel validation, audio-interface pitch
+detection, bends, slides, hammer-ons and latency calibration are not implemented.
+Watch the house provides an unscored play-along with the synthesized guide.
+
+The Arcade variant shares the authored music but uses five separate button lanes.
+Fret selection is silent; a strum must match the entire nearest unresolved shape.
+Missing or extra buttons produce one extra strum with no partial chord score.
+Direction is not judged, and key-repeat cannot generate new strums. Each successful
+gem retains the existing scoring/combo rules. Sustain ownership belongs to the
+fret, not the strum key; releasing the last input holding that fret ends its hold.
+
+Pointer inputs are held until release or cancellation. Native keyboard activation
+of a fret button toggles it; multiple owners of the same fret cannot prematurely
+release one another. Manual pause preserves held frets and judges; releases while
+paused use the frozen song position. Focus loss clears inputs and pauses. Reset,
+chart changes and fresh starts clear ownership. Demo cannot score human input.
+Both authored modes lock the lineup to guitar while drums and bass provide backing.
+
+`npm run test:guitar` exercises browser input, exact-pitch MIDI routing, arcade
+chords, holds, repeats, pause/cleanup, rehearsal restoration, autoplay, mobile
+multi-touch and the real-string guide. Unit tests validate authored pitches and
+playable shapes, chart lane identity and scoring boundaries. Virtual MIDI validates
+routing only; physical guitar tracking and audible latency still need hardware QA.

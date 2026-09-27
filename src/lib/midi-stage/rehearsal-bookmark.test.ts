@@ -206,3 +206,16 @@ describe("rehearsal bookmark resolution", () => {
     assert.equal(resolveRehearsalBookmark(invalid as unknown as RehearsalBookmark, [song()]), null);
   });
 });
+
+
+it("restores authored guitar rehearsals only with the guitar lineup", () => {
+  for (const guitarMode of ["strings", "fret-strum"] as const) {
+    const chart = song({ guitarMode });
+    const saved = bookmark();
+    assert.equal(resolveRehearsalBookmark(saved, [chart]), null);
+    saved.setup.enabledPlayers = ["guitar"];
+    assert.ok(resolveRehearsalBookmark(saved, [chart]));
+    saved.setup.enabledPlayers = ["guitar", "keys"];
+    assert.equal(resolveRehearsalBookmark(saved, [chart]), null);
+  }
+});

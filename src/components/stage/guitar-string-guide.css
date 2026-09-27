@@ -1,0 +1,120 @@
+.guitar-string-guide {
+  --string-guide-space-xs: 4px;
+  --string-guide-space-sm: 8px;
+  --string-guide-space-md: 12px;
+  --string-guide-space-lg: 16px;
+  display: grid;
+  gap: var(--string-guide-space-sm);
+  min-width: 0;
+  margin-block: var(--string-guide-space-md);
+  padding: var(--string-guide-space-md);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  color: var(--color-fg);
+}
+.guitar-string-guide-heading,
+.guitar-string-guide-caption {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--string-guide-space-sm);
+  flex-wrap: wrap;
+}
+.guitar-string-guide-heading p {
+  display: flex;
+  align-items: center;
+  gap: var(--string-guide-space-sm);
+  margin: 0;
+  color: var(--color-tungsten);
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+.guitar-string-guide-status {
+  color: var(--color-muted);
+  font-size: 0.6875rem;
+}
+.guitar-string-guide-status[data-connected="true"] { color: var(--color-accent); }
+.guitar-string-guide-caption {
+  color: var(--color-muted);
+  font-size: 0.6875rem;
+  line-height: 1.5;
+}
+.guitar-string-guide-caption p { margin: 0; }
+.guitar-string-guide-caption strong {
+  color: var(--color-fg);
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+.guitar-string-guide-strings {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: var(--string-guide-space-xs);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.guitar-string-guide-string {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--string-guide-space-xs);
+  min-width: 0;
+  padding: var(--string-guide-space-sm) var(--string-guide-space-xs);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-elevated);
+  color: var(--color-muted);
+}
+.guitar-string-guide-string[data-active="true"] {
+  border-color: color-mix(in oklab, var(--color-accent) 65%, var(--color-border));
+  background: color-mix(in oklab, var(--color-accent) 8%, var(--color-elevated));
+  color: var(--color-fg);
+}
+.guitar-string-guide-tuning {
+  display: flex;
+  align-items: baseline;
+  gap: var(--string-guide-space-xs);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  line-height: 1.4;
+}
+.guitar-string-guide-tuning small { color: var(--color-muted); font-size: 0.5625rem; }
+.guitar-string-guide-fret {
+  font-family: var(--font-mono);
+  font-size: 1.5rem;
+  font-weight: 500;
+  line-height: 1.25;
+  font-variant-numeric: tabular-nums;
+}
+.guitar-string-guide-string[data-active="true"] .guitar-string-guide-fret { color: var(--color-accent); }
+.guitar-string-guide-position {
+  font-size: 0.5625rem;
+  font-weight: 500;
+  line-height: 1.4;
+  letter-spacing: 0.06em;
+}
+.guitar-string-guide-help {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: 0.6875rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.guitar-string-guide-actions {
+  display: flex;
+  gap: var(--string-guide-space-sm);
+  flex-wrap: wrap;
+}
+.guitar-string-guide-actions button {
+  min-height: 44px;
+  height: auto;
+  max-width: 100%;
+  white-space: normal;
+  font-size: 0.75rem;
+}
+@media (min-width: 701px) {
+  .guitar-string-guide { padding: var(--string-guide-space-lg); }
+  .guitar-string-guide-strings { gap: var(--string-guide-space-sm); }
+  .guitar-string-guide-string { flex-direction: row; justify-content: space-evenly; }
+}

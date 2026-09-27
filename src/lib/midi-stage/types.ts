@@ -3,11 +3,19 @@ export type Instrument = (typeof INSTRUMENTS)[number];
 
 export type Grade = "perfect" | "great" | "good" | "miss" | "extra" | "release";
 
+/** Arcade button index, not a physical guitar string or fret position. */
+export type ArcadeFret = 0 | 1 | 2 | 3 | 4;
+
+export type GuitarPosition = { string: 1 | 2 | 3 | 4 | 5 | 6; fret: number };
+
 export type Note = {
   time: number;
   duration: number;
   pitch: number;
   velocity: number;
+  arcadeFret?: ArcadeFret;
+  /** Authored physical string and fret, never inferred from pitch alone. */
+  guitarPosition?: GuitarPosition;
 };
 
 export type Part = {
@@ -42,6 +50,10 @@ export type Song = {
   key?: string;
   /** Rhythm charts accept any MIDI pitch on a single tap lane. Omitted means pitch matching. */
   matching?: "pitch" | "rhythm";
+  /** Explicitly authored guitar gameplay; never inferred from MIDI pitch. */
+  guitarMode?: "strings" | "fret-strum";
+  /** Open-string MIDI pitches from low string 6 to high string 1. Defaults to standard tuning. */
+  guitarTuning?: readonly number[];
   /** Browser-local audio asset to decode before starting this song. */
   audioAssetId?: string;
   /** Backing-track start time on the chart timeline, in seconds. */
@@ -61,6 +73,7 @@ export type Lane = {
   color: string;
   notes?: number[];
   any?: boolean;
+  guitarString?: GuitarPosition["string"];
 };
 
 export type ChartNote = Note & {

@@ -41,6 +41,7 @@ jobs:
           npm run test:targeted-practice
           npm run test:navigation
           npm run test:rehearsal-bookmark
+          npm run test:guitar
           npm run test:setup
           npm run test:imports
           npm run test:audio

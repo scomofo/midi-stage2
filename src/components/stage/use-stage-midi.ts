@@ -16,9 +16,9 @@ type MidiState = {
 function connectionError(error: unknown) {
   const name = error && typeof error === "object" && "name" in error ? error.name : "";
   if (name === "NotAllowedError" || name === "SecurityError") {
-    return "MIDI access was blocked. Allow MIDI in your browser's site settings and try again. Computer keys still work.";
+    return "MIDI access was blocked. Allow MIDI in your browser's site settings and try again.";
   }
-  return "MIDI could not connect. Check your instrument's USB connection and try again. Computer keys still work.";
+  return "MIDI could not connect. Check your instrument's USB connection and try again.";
 }
 
 export function useStageMidi(callbacks: MidiCallbacks) {
@@ -34,7 +34,7 @@ export function useStageMidi(callbacks: MidiCallbacks) {
     connected: false,
     connecting: false,
     inputs: [],
-    last: "Computer keys ready. MIDI is optional.",
+    last: "MIDI is optional. Connect an instrument for MIDI note input.",
     error: null,
   });
 
@@ -90,11 +90,11 @@ export function useStageMidi(callbacks: MidiCallbacks) {
         manufacturer: input.manufacturer?.trim() || "",
       })),
       last: disconnected
-        ? `MIDI input disconnected. ${count ? `${count} input${count === 1 ? " remains" : "s remain"} live.` : "Reconnect your instrument or use computer keys."}`
+        ? `MIDI input disconnected. ${count ? `${count} input${count === 1 ? " remains" : "s remain"} live.` : "Reconnect your instrument to restore MIDI input."}`
         : changed || !previous.connected
           ? count
             ? `${count} MIDI input${count === 1 ? "" : "s"} live.`
-            : "MIDI is ready. Plug in an instrument; computer keys still work."
+            : "MIDI is ready. Plug in an instrument to receive notes."
           : previous.last,
     }));
     // Releasing the lost device's notes precedes the parent's session pause.
@@ -110,7 +110,7 @@ export function useStageMidi(callbacks: MidiCallbacks) {
     }
     if (typeof navigator === "undefined" || !navigator.requestMIDIAccess) {
       const error =
-        "This browser cannot connect MIDI instruments. Try Chrome or Edge. Computer keys still work here.";
+        "This browser cannot connect MIDI instruments. Try Chrome or Edge.";
       setState((previous) => ({ ...previous, connecting: false, error, last: error }));
       return Promise.resolve();
     }

@@ -1,5 +1,6 @@
 import type { Harmony, Instrument, Part, Song } from "./types";
 import { INSTRUMENTS } from "./types";
+import { makeBacklineDrive, makeBacklineDriveArcade } from "./guitar-song";
 
 const LABELS: Record<Instrument, string> = {
   drums: "Drums",
@@ -281,7 +282,7 @@ export function makeFirstRehearsal(): Song {
 }
 
 export function catalog(difficulty: "chill" | "standard" | "expert"): Song[] {
-  return [makeOpenStage(difficulty), makeFirstRehearsal(), makePocketSong(0), makePocketSong(1), makePocketSong(2)];
+  return [makeOpenStage(difficulty), makeFirstRehearsal(), makePocketSong(0), makePocketSong(1), makePocketSong(2), makeBacklineDrive(difficulty), makeBacklineDriveArcade(difficulty)];
 }
 
 export { LABELS };
