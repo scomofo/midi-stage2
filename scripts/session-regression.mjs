@@ -110,21 +110,27 @@ try {
       if (bounds.top < 0 || bounds.bottom > innerHeight) throw Error('Completed set heading must be in view');
     });
     await page.keyboard.press('Tab');
-    const recommendedPractice = page.locator('[data-session-overlay="results"]')
-      .getByRole('button', { name: 'Practice this passage', exact: true });
-    if (await recommendedPractice.count()) {
-      assert.equal(await recommendedPractice.evaluate((button) => button === document.activeElement), true,
-        'Tab from the results heading must reach the recommended passage when one is offered');
-      await frames();
-      assert.equal(await recommendedPractice.evaluate((button) => button === document.activeElement), true,
-        'HUD updates must not steal focus from the recommended passage action');
-      await page.keyboard.press('Tab');
-    }
     assert.equal(await page.getByRole('button', { name: 'Play again', exact: true }).evaluate((button) => button === document.activeElement), true,
-      'Results keyboard navigation must reach Play again after any recommended passage action');
+      'Tab from the result heading must reach Play again before the detailed report');
+    await page.getByRole('button', { name: 'Play again', exact: true }).evaluate((button) => {
+      const bounds = button.getBoundingClientRect();
+      if (bounds.top < 0 || bounds.bottom > innerHeight) throw Error('Replay must be visible when focused');
+    });
     await frames();
     assert.equal(await page.getByRole('button', { name: 'Play again', exact: true }).evaluate((button) => button === document.activeElement), true,
       'HUD updates must not steal focus from a results action');
+    const recommendedPractice = page.locator('[data-session-overlay="results"]')
+      .getByRole('button', { name: 'Practice this passage', exact: true });
+    if (await recommendedPractice.count()) {
+      await page.keyboard.press('Tab'); // Next song.
+      await page.keyboard.press('Tab');
+      assert.equal(await recommendedPractice.evaluate((button) => button === document.activeElement), true,
+        'The recommended passage must remain keyboard-accessible after the main results actions');
+      await frames();
+      assert.equal(await recommendedPractice.evaluate((button) => button === document.activeElement), true,
+        'HUD updates must not steal focus from the recommended passage action');
+      await page.getByRole('button', { name: 'Play again', exact: true }).focus();
+    }
   };
   await assertReady();
   // Observe long enough for the decorative highway loop to move independently

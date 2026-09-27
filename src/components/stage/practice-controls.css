@@ -23,18 +23,49 @@
   min-width: 0;
 }
 
-.practice-section-field > label {
+.practice-section-label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--practice-space-xs) var(--practice-space-sm);
+  margin-bottom: var(--practice-space-xs);
+}
+
+.practice-section-label label {
   display: flex;
   align-items: center;
   gap: var(--practice-space-sm);
-  margin-bottom: var(--practice-space-xs);
   color: var(--color-muted);
   font-size: var(--practice-text-sm);
 }
 
+.practice-position {
+  color: var(--color-muted);
+  font-size: var(--practice-text-sm);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.practice-section-picker {
+  display: flex;
+  align-items: center;
+  gap: var(--practice-space-sm);
+  min-width: 0;
+}
+
+.practice-step {
+  flex: 0 0 44px;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-sm);
+}
+
 .practice-section-field select {
   display: block;
+  flex: 1;
   width: 100%;
+  min-width: 0;
   min-height: 44px;
   padding: var(--practice-space-sm) var(--practice-space-md);
   border: 1px solid var(--color-border-strong);

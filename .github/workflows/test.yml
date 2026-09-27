@@ -39,6 +39,8 @@ jobs:
           npm run test:session
           npm run test:practice
           npm run test:targeted-practice
+          npm run test:navigation
+          npm run test:rehearsal-bookmark
           npm run test:setup
           npm run test:imports
           npm run test:audio

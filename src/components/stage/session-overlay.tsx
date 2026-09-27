@@ -359,6 +359,23 @@ export function SessionOverlay({
                 </dd>
               </div>
             </dl>
+            <div className="session-actions">
+              <Button type="button" onClick={onRestart} disabled={busy} data-session-primary>
+                <RotateCcw size={16} aria-hidden="true" />
+                {busy ? "Preparing…" : "Play again"}
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={onNext}
+                disabled={busy}
+                title={nextSongName ? `Play ${nextSongName}` : undefined}
+              >
+                Next song
+                <ArrowRight size={16} aria-hidden="true" />
+              </Button>
+            </div>
+            {nextSongName ? <p className="session-next-song">Up next: {nextSongName}</p> : null}
             <dl className="session-judgements" aria-label="Note breakdown">
               <div>
                 <dt>Perfect</dt>
@@ -391,23 +408,6 @@ export function SessionOverlay({
             {!results.demo && !results.practice && results.recommendation && onPractice ? (
               <RecommendedPractice recommendation={results.recommendation} busy={busy} onPractice={onPractice} />
             ) : null}
-            <div className="session-actions">
-              <Button type="button" onClick={onRestart} disabled={busy} data-session-primary>
-                <RotateCcw size={16} aria-hidden="true" />
-                {busy ? "Preparing…" : "Play again"}
-              </Button>
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={onNext}
-                disabled={busy}
-                title={nextSongName ? `Play ${nextSongName}` : undefined}
-              >
-                Next song
-                <ArrowRight size={16} aria-hidden="true" />
-              </Button>
-            </div>
-            {nextSongName ? <p className="session-next-song">Up next: {nextSongName}</p> : null}
             <Button
               type="button"
               variant="ghost"

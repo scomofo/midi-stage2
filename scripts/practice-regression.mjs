@@ -151,6 +151,8 @@ try {
   const resume = page.getByRole('button', { name: 'Resume', exact: true });
   const reset = page.getByRole('button', { name: 'Reset set', exact: true });
   const section = page.getByRole('combobox', { name: 'Practice section', exact: true });
+  const previousSection = page.getByRole('button', { name: 'Previous practice section', exact: true });
+  const nextSection = page.getByRole('button', { name: 'Next practice section', exact: true });
   const repeat = page.getByRole('checkbox', { name: 'Repeat section', exact: true });
   const fullSong = page.getByRole('button', { name: 'Full song', exact: true });
   const results = page.locator('[data-session-overlay="results"]');
@@ -224,6 +226,46 @@ try {
 
   phase = 'section boundaries and personal records';
   await importFile(chartFile, 'Practice Boundaries');
+
+  phase = 'adjacent passage navigation';
+  assert.equal(await previousSection.count(), 0, 'Full-song mode should keep the passage arrows out of the tab order');
+  await selectNamedSection('Opening');
+  assert.equal(await previousSection.isDisabled(), true, 'Previous must stop at the first passage');
+  assert.equal(await nextSection.isEnabled(), true);
+  await nextSection.focus();
+  await page.keyboard.press('Enter');
+  await ready();
+  assert.match(await section.locator('option:checked').innerText(), /Solo/);
+  await begin();
+  await page.evaluate(() => {
+    const p = window.practiceProbe;
+    p.navigationJudge = p.live.judges.get('keys');
+    p.time = 0;
+    document.body.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyA', bubbles: true }));
+  });
+  await nextSection.click();
+  await ready();
+  assert.match(await section.locator('option:checked').innerText(), /Outro/);
+  await page.evaluate(() => {
+    const p = window.practiceProbe;
+    if (p.live.judges.get('keys') === p.navigationJudge || p.live.judges.get('keys').stats.score !== 0
+      || p.live.pressed.size || p.audio.monitorVoices.size)
+      throw Error('Changing passage during play must clear held input and voices and prepare a fresh score');
+  });
+  await nextSection.click();
+  await ready();
+  assert.match(await section.locator('option:checked').innerText(), /Silence/);
+  assert.equal(await nextSection.isDisabled(), true, 'Next must stop at the last passage');
+  assert.equal(await section.evaluate((element) => element === document.activeElement), true,
+    'Reaching an endpoint must hand focus to the selector instead of a disabled arrow');
+  await previousSection.click();
+  await ready();
+  assert.match(await section.locator('option:checked').innerText(), /Outro/);
+  await screenshot('practice-navigation-desktop.png');
+  await fullSong.click();
+  await ready();
+
+  phase = 'section boundaries and personal records';
   await page.evaluate(() => {
     const p = window.practiceProbe;
     p.savedKey = `midi-stage-best/${p.live.song.id}/standard/1/keys`;
@@ -354,6 +396,8 @@ try {
     await endPass();
     await page.waitForFunction(() => window.practiceProbe.pendingInit.length > 0);
     const pending = await page.evaluate(() => window.practiceProbe.begins.length);
+    assert.equal(await previousSection.isDisabled(), true, 'Navigation must wait for pending audio setup');
+    assert.equal(await nextSection.isDisabled(), true);
     if (action === 'full-song') await fullSong.click();
     else {
       await reset.click();
@@ -461,6 +505,16 @@ try {
   await pause.click();
   await reset.click();
   await page.setViewportSize({ width: 390, height: 844 });
+  for (const control of [previousSection, nextSection]) {
+    const box = await control.boundingBox();
+    assert.ok(box && box.width >= 44 && box.height >= 44, 'Passage arrows must have 44px touch targets');
+  }
+  await previousSection.tap();
+  await ready();
+  assert.equal(await previousSection.isDisabled(), true);
+  await nextSection.tap();
+  await ready();
+  assert.equal(await previousSection.isEnabled(), true);
   await screenshot('practice-ready-mobile.png');
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false);
   await begin();
@@ -477,7 +531,7 @@ try {
   await ready();
   assert.equal(await page.evaluate(() => window.practiceProbe.audio.backingSource), null);
   assert.deepEqual(errors, []);
-  console.log('PASS: named and eight-bar sections; rebased boundaries and clipped holds; two repeats with audible count-ins; fresh scoring, held-input and voice cleanup; paused count-in resume; repeat-off results; practice/autoplay personal-best isolation; pending repeat cancellation; original audio section offsets, bounded duration, tempo, seek/resume/replay cleanup; mobile touch and layout');
+  console.log('PASS: named and eight-bar sections; adjacent passage keyboard/touch navigation, boundaries, busy state and playing cleanup; rebased boundaries and clipped holds; two repeats with audible count-ins; fresh scoring, held-input and voice cleanup; paused count-in resume; repeat-off results; practice/autoplay personal-best isolation; pending repeat cancellation; original audio section offsets, bounded duration, tempo, seek/resume/replay cleanup; mobile touch and layout');
 } catch (error) {
   console.error('Practice regression failed during:', phase, error);
   console.error('Practice regression page:', await page.locator('body').innerText().catch(() => 'Page unavailable'));

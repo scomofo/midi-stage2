@@ -49,7 +49,7 @@ export function SoundcheckPanel({
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <h2 id="soundcheck-title" className="font-display text-xl font-semibold tracking-tight">
+          <h2 id="soundcheck-title" tabIndex={-1} className="font-display text-xl font-semibold tracking-tight">
             Soundcheck
           </h2>
           <p className="mt-1 text-sm leading-relaxed text-muted">
