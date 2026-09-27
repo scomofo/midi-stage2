@@ -126,6 +126,35 @@ try {
   assert.equal(await voices(), 0, 'releasing the warmup key must release its voice');
   await assertUnscored();
 
+  // A piano has one tab stop; arrow navigation follows pitch rather than its
+  // layered white-key/black-key DOM order, and leaving a held key releases it.
+  const piano = page.getByRole('group', { name: 'Piano keys', exact: true });
+  assert.equal(await piano.locator('.pkey[tabindex="0"]').count(), 1);
+  await piano.getByRole('button', { name: 'C 3', exact: true }).focus();
+  await page.keyboard.press('ArrowRight');
+  assert.equal(await piano.getByRole('button', { name: 'C♯ 3', exact: true }).evaluate((el) => el === document.activeElement), true);
+  await page.keyboard.press('End');
+  assert.equal(await piano.getByRole('button', { name: 'B 4', exact: true }).evaluate((el) => el === document.activeElement), true);
+  await page.keyboard.press('Home');
+  await page.keyboard.down('Enter');
+  assert.equal(await voices(), 1, 'Enter on a piano key must start one monitor voice');
+  await page.keyboard.press('ArrowRight');
+  assert.equal(await voices(), 0, 'moving away from a held piano key must release its voice');
+  await page.keyboard.up('Enter');
+  await page.keyboard.press('ArrowRight');
+  await page.keyboard.down('Space');
+  assert.equal(await voices(), 1, 'Space must play the newly focused pitch');
+  await page.keyboard.up('Space');
+  assert.equal(await voices(), 0, 'Space release must stop the focused piano voice');
+  await page.keyboard.press('Tab');
+  assert.equal(await page.evaluate(() => Boolean(document.activeElement?.closest('.piano-guide'))), false,
+    'Tab must leave the piano without visiting every pitch');
+  await page.keyboard.press('Shift+Tab');
+  assert.equal(await piano.getByRole('button', { name: 'D 3', exact: true }).evaluate((el) => el === document.activeElement), true,
+    'returning to the piano must retain the last focused pitch');
+  await assertUnscored();
+  if (screenshotDir) await piano.screenshot({ path: join(screenshotDir, 'setup-piano-desktop.png') });
+
   await page.getByRole('button', { name: 'Connect MIDI', exact: true }).first().click();
   await page.waitForFunction(() => window.fakeMidi.requests === 1);
   await page.getByRole('combobox', { name: 'Keys MIDI input', exact: true })
@@ -216,6 +245,23 @@ try {
     assert.ok(bounds && bounds.x >= 0 && bounds.x + bounds.width <= 391, 'mobile routing control must be on screen');
   }
   await screenshot('setup-soundcheck-mobile.png');
+  await page.getByRole('button', { name: 'The room', exact: true }).click();
+  const room = page.getByRole('dialog');
+  await room.waitFor();
+  for (const slider of await room.locator('.feel-range').all()) {
+    const bounds = await slider.boundingBox();
+    assert.ok(bounds && bounds.height >= 44 && bounds.x >= 0 && bounds.x + bounds.width <= 391,
+      'room faders need a phone-sized hit area without horizontal overflow');
+  }
+  const lights = room.getByRole('slider', { name: 'LIGHTS', exact: true });
+  await lights.fill('40');
+  await lights.focus();
+  await page.keyboard.press('ArrowRight');
+  assert.equal(await lights.inputValue(), '41');
+  assert.equal(await lights.getAttribute('aria-valuetext'), '41 percent');
+  await screenshot('setup-room-mobile.png');
+  await page.keyboard.press('Escape');
+  await room.waitFor({ state: 'detached' });
 
   await page.evaluate((key) => localStorage.setItem(key, '{broken JSON'), storageKey);
   await page.reload({ waitUntil: 'domcontentloaded' });

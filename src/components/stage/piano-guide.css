@@ -1,0 +1,38 @@
+.piano-guide {
+  min-width: 0;
+}
+.pkey-octave,
+.pkey-state {
+  position: absolute;
+  inset-inline: 0;
+  pointer-events: none;
+  text-align: center;
+  line-height: 1;
+}
+.pkey-octave {
+  bottom: 5px;
+  font: 500 9px var(--font-mono);
+}
+.pkey-state {
+  bottom: 21px;
+  font: 700 11px var(--font-sans);
+}
+.pkey.black .pkey-state { bottom: 6px; }
+.piano .pkey.live:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: -3px;
+}
+.piano-keyboard-help {
+  margin-top: 8px;
+  color: var(--color-muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+.piano-guide:not(:focus-within) .piano-keyboard-help {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
