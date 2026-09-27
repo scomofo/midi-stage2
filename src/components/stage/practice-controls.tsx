@@ -1,5 +1,6 @@
 import { useId, useRef } from "react";
-import { ChevronLeft, ChevronRight, Repeat2 } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, Map, Repeat2 } from "lucide-react";
+import { SongMap } from "@/components/stage/song-map";
 import { Button } from "@/components/ui/button";
 import { formatTime } from "@/lib/midi-stage/engine";
 import type { PracticeSection } from "@/lib/midi-stage/practice";
@@ -8,6 +9,9 @@ import "./practice-controls.css";
 export type PracticeControlsProps = {
   sections: PracticeSection[];
   selectedId: string;
+  duration: number;
+  mapOpen: boolean;
+  onMapOpenChange: (open: boolean) => void;
   loop: boolean;
   pass: number;
   lastTake: { accuracy: number; score: number } | null;
@@ -20,6 +24,9 @@ export type PracticeControlsProps = {
 export function PracticeControls({
   sections,
   selectedId,
+  duration,
+  mapOpen,
+  onMapOpenChange,
   loop,
   pass,
   lastTake,
@@ -100,6 +107,9 @@ export function PracticeControls({
             ) : null}
           </div>
         </div>
+        <Button type="button" variant="ghost" className="practice-explore" aria-expanded={mapOpen} aria-controls={`${id}-map`} onClick={() => onMapOpenChange(!mapOpen)} disabled={!sections.length}>
+          <Map size={16} aria-hidden="true" /> Explore song <ChevronDown size={14} className={mapOpen ? "is-open" : ""} aria-hidden="true" />
+        </Button>
         {selected ? (
           <>
             <label className="practice-repeat">
@@ -111,17 +121,18 @@ export function PracticeControls({
               />
               Repeat section
             </label>
-            <Button
+            {!mapOpen ? <Button
               type="button"
               variant="ghost"
               className="practice-exit"
               onClick={onExit}
             >
               Full song
-            </Button>
+            </Button> : null}
           </>
         ) : null}
       </div>
+      {mapOpen ? <div id={`${id}-map`}><SongMap sections={sections} selectedId={selectedId} duration={duration} busy={busy} onSelect={onSelect} onExit={onExit} /></div> : null}
       <p className="practice-help" id={`${id}-help`}>
         {selected
           ? "Each take starts with a count-in and a fresh score. Turn off Repeat section to finish the current take. Practice scores aren’t saved."

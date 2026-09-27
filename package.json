@@ -22,6 +22,7 @@
     "test:session": "node scripts/session-regression.mjs",
     "test:practice": "node scripts/practice-regression.mjs",
     "test:targeted-practice": "node scripts/targeted-practice-regression.mjs",
+    "test:navigation": "node scripts/navigation-regression.mjs",
     "test:setup": "node scripts/setup-regression.mjs",
     "test:imports": "node scripts/import-regression.mjs",
     "test:audio": "node scripts/audio-import-regression.mjs",

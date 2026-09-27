@@ -9,6 +9,7 @@ import {
   Pause,
   Play,
   Radio,
+  Search,
   RotateCcw,
   Volume2,
   X,
@@ -17,6 +18,8 @@ import { Button } from "@/components/ui/button";
 import { FeelPanel } from "@/components/stage/feel-panel";
 import { SessionOverlay, type SessionResults } from "@/components/stage/session-overlay";
 import { StageCountIn } from "@/components/stage/stage-count-in";
+import { StageFinder, type StageFinderItem } from "@/components/stage/stage-finder";
+import "./stage-launcher.css";
 import { PracticeControls } from "@/components/stage/practice-controls";
 import { loadAudioAsset, saveAudioAsset, deleteAudioAsset } from "@/lib/midi-stage/audio-assets";
 import type { AudioImportProgress } from "@/lib/midi-stage/audio-import";
@@ -94,6 +97,7 @@ type Bag = {
   canvasPtrs: Map<number, { player: Player; lane: number; token: string }>;
   feelOpen: boolean;
   libraryOpen: boolean;
+  finderOpen: boolean;
   feelLane: number;
 };
 
@@ -157,6 +161,10 @@ export function StageApp() {
   const menuRef = useRef<HTMLElement>(null);
   const [focusStage, setFocusStage] = useState(false);
   const transportRef = useRef<HTMLDivElement>(null);
+  const finderTriggerRef = useRef<HTMLButtonElement>(null);
+  const practiceRef = useRef<HTMLDivElement>(null);
+  const [finderOpen, setFinderOpen] = useState(false);
+  const [songMapOpen, setSongMapOpen] = useState(false);
   const bag = useRef<Bag | null>(null);
   const [ready, setReady] = useState(false);
   const [songId, setSongId] = useState("open-stage");
@@ -261,6 +269,7 @@ export function StageApp() {
       canvasPtrs: new Map(),
       feelOpen: bag.current?.feelOpen ?? false,
       libraryOpen: bag.current?.libraryOpen ?? false,
+      finderOpen: bag.current?.finderOpen ?? false,
       feelLane: bag.current?.feelLane ?? 0,
     };
     bag.current = b;
@@ -355,7 +364,7 @@ export function StageApp() {
 
   function hit(b: Bag, p: Player, lane: number, token: string, velocity = 105, inputPitch?: number) {
     const judge = b.judges.get(p.id);
-    if (!judge || lane < 0 || lane >= judge.lanes.length || b.status === "paused" || b.status === "starting" || b.feelOpen || b.libraryOpen) return;
+    if (!judge || lane < 0 || lane >= judge.lanes.length || b.status === "paused" || b.status === "starting" || b.feelOpen || b.libraryOpen || b.finderOpen) return;
     const pitch = inputPitch ?? judge.lanes[lane]!.pitch;
     if (b.status === "ready") {
       const source = token.startsWith("midi:") ? "MIDI" : token.startsWith("key:") || token.startsWith("pad-key:") ? "computer keyboard" : "touch / pointer";
@@ -992,6 +1001,13 @@ export function StageApp() {
       const b = bag.current;
       if (!b) return;
       const el = e.target as HTMLElement;
+      if ((e.ctrlKey || e.metaKey) && e.code === "KeyK") {
+        e.preventDefault();
+        if (feelOpen || libraryOpen || menu || readingImport || savingImport) return;
+        if (!e.repeat) changeFinderOpen(!finderOpen);
+        return;
+      }
+      if (finderOpen) return; // The finder owns all keys, including Escape.
       if (e.code === "Escape") {
         e.preventDefault();
         if (libraryOpen) closeSongLibrary();
@@ -1043,7 +1059,7 @@ export function StageApp() {
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("keyup", onUp);
     };
-  }, [pauseSession, startSession, resetReady, feelOpen, libraryOpen, menu, soundcheckOpen]);
+  }, [pauseSession, startSession, resetReady, feelOpen, libraryOpen, menu, soundcheckOpen, finderOpen, readingImport, savingImport]);
 
   useEffect(() => {
     if (!toast) return;
@@ -1062,7 +1078,7 @@ export function StageApp() {
       const lane = anyLane >= 0 ? anyLane : p.type === "drums"
         ? judge?.lanes.findIndex((l) => l.notes?.includes(note)) ?? -1
         : judge?.lanes.findIndex((l) => l.pc === ((note % 12) + 12) % 12) ?? -1;
-      if (lane < 0 || b.status === "paused" || b.status === "starting" || b.feelOpen || b.libraryOpen) return;
+      if (lane < 0 || b.status === "paused" || b.status === "starting" || b.feelOpen || b.libraryOpen || b.finderOpen) return;
       const ownedToken = `${token}:${p.id}`;
       midiOwners.current.set(token, { playerId: p.id, token: ownedToken });
       hit(b, p, lane, ownedToken, velocity, note);
@@ -1150,8 +1166,42 @@ export function StageApp() {
       else if (!e.shiftKey && (document.activeElement === last || !panel.contains(document.activeElement))) { e.preventDefault(); first?.focus(); }
     };
     document.addEventListener("keydown", trap);
-    return () => { document.removeEventListener("keydown", trap); previous?.focus({ preventScroll: true }); };
+    return () => {
+      document.removeEventListener("keydown", trap);
+      // A finder command can open this panel after its search field unmounts.
+      // Return to the visible launcher if that original focus target is gone.
+      const target = previous?.isConnected && previous !== document.body ? previous : finderTriggerRef.current;
+      target?.focus({ preventScroll: true });
+    };
   }, [feelOpen, libraryOpen, menu]);
+
+  function changeFinderOpen(open: boolean) {
+    if (open) {
+      if (bag.current?.status === "starting") resetReady();
+      else pauseSession();
+      setSoundcheckOpen(false);
+    }
+    // Mirror immediately so MIDI cannot play while a command is being chosen,
+    // and selecting Play can still unlock audio in the original user gesture.
+    if (bag.current) bag.current.finderOpen = open;
+    setFinderOpen(open);
+  }
+
+  function focusTransport(playback = false) {
+    requestAnimationFrame(() => {
+      transportRef.current?.scrollIntoView({ block: "start", behavior: "auto" });
+      if (playback) canvasRef.current?.focus({ preventScroll: true });
+      else transportRef.current?.querySelector<HTMLButtonElement>("button:not(:disabled)")?.focus({ preventScroll: true });
+    });
+  }
+
+  function openSongMap() {
+    setSongMapOpen(true);
+    requestAnimationFrame(() => {
+      practiceRef.current?.querySelector(".practice-controls")?.scrollIntoView({ block: "start", behavior: "auto" });
+      practiceRef.current?.querySelector<HTMLButtonElement>(".song-map button:not(:disabled)")?.focus({ preventScroll: true });
+    });
+  }
 
   function openMenu() {
     if (bag.current?.status === "starting") resetReady();
@@ -1219,6 +1269,7 @@ export function StageApp() {
     setPracticeSelection(null);
     setPlayers((current) => lineupForSong(next, current));
     setSongId(next.id);
+    setSongMapOpen(false);
     setMenu(false);
     closeSongLibrary();
   }
@@ -1348,6 +1399,24 @@ export function StageApp() {
 
   const enabled = players.filter((p) => p.enabled);
   const busy = status === "playing" || status === "starting";
+  const setupLabel = `${enabled.map((player) => player.label).join(" + ")} · ${difficulty[0]!.toUpperCase()}${difficulty.slice(1)} · ${Math.round(speed * 100)}% tempo · ${midi.connected ? "MIDI connected" : "Keyboard ready"}`;
+  const finderItems: StageFinderItem[] = finderOpen ? [
+    { id: "play-focus", group: "Stage", icon: "play", label: status === "paused" ? "Resume in focus" : "Play in focus", detail: status === "paused" ? "Keep your place and score; bring the highway forward" : practice ? `${practice.name} · count-in and a fresh take` : "Bring the highway forward and start this set", keywords: ["start", "play", "resume", "focus", "rehearse"], disabled: !ready || busy, onSelect: () => {
+      setFocusStage(true);
+      setSongMapOpen(false);
+      if (results) resetReady();
+      void startSession(false);
+      focusTransport(true);
+    } },
+    { id: "explore", group: "Stage", icon: "passage", label: "Explore this song", detail: `${passages.length} passages · choose exactly what to rehearse`, keywords: ["map", "section", "practice"], onSelect: openSongMap },
+    { id: "beginner", group: "Stage", icon: "play", label: "Try beginner rehearsal", detail: "Solo keys · Chill · 75% tempo · guide and click", keywords: ["learn", "easy", "first"], disabled: !ready, onSelect: () => { quickStart(); setFocusStage(true); setSongMapOpen(false); focusTransport(true); } },
+    { id: "soundcheck", group: "Controls", icon: "sound", label: "Check my sound and input", detail: "Audition keys and review MIDI routing", keywords: ["soundcheck", "audio", "midi", "keyboard"], onSelect: () => { setSoundcheckOpen(true); requestAnimationFrame(() => { document.getElementById("soundcheck-panel")?.scrollIntoView({ block: "start", behavior: "auto" }); document.getElementById("soundcheck-title")?.focus({ preventScroll: true }); }); } },
+    { id: "room", group: "Controls", icon: "room", label: "Shape the room", detail: "Lights, crowd and effects", keywords: ["feel", "lights", "vfx", "calm"], onSelect: () => { setFeelTap(true); setFeelOpen(true); } },
+    { id: "import", group: "Controls", icon: "import", label: "Bring your own song", detail: "Import audio, MIDI or a Stage chart", keywords: ["import", "library", "upload"], onSelect: openSongLibrary },
+    { id: "reset", group: "Controls", icon: "reset", label: "Reset this set", detail: "Return to ready with a fresh score", keywords: ["restart", "clear"], onSelect: () => { resetReady(); focusTransport(); } },
+    ...songs.map((entry): StageFinderItem => ({ id: `song:${entry.id}`, group: "Songs", icon: "song", label: entry.name, detail: `${entry.id === song.id ? "Current song · " : ""}${Math.round(entry.bpm)} BPM · ${formatTime(entry.duration)}`, keywords: [entry.arrangementDescription ?? ""], onSelect: () => { selectSong(entry); focusTransport(); } })),
+    ...passages.map((section): StageFinderItem => ({ id: `passage:${section.id}`, group: "Passages", icon: "passage", label: section.name, detail: `${song.name} · ${formatTime(section.start)}–${formatTime(section.end)}`, keywords: ["practice", "section", song.name], onSelect: () => { resetReady(); setPracticeSelection({ songId: song.id, sectionId: section.id }); setSongMapOpen(true); focusTransport(); } })),
+  ] : [];
   const rhythm = song.matching === "rhythm";
   const spaceToHit = rhythm && enabled.length === 1;
   const timelineSections = useMemo(() => {
@@ -1379,7 +1448,7 @@ export function StageApp() {
   }, [timelineSections, stageSong.duration]);
 
   return (
-    <div className={cn("stage-shell flex min-h-dvh flex-col", focusStage && "stage-focused")}>
+    <div className={cn("stage-shell flex min-h-dvh flex-col", focusStage && "stage-focused", status === "playing" && "stage-performing")}>
       <header className="relative z-20 flex items-center justify-between gap-2 px-3 py-3 sm:gap-3 sm:px-4 md:px-6">
         <div className="flex items-center gap-3">
           <span className="eq-bars" aria-hidden="true">
@@ -1559,6 +1628,15 @@ export function StageApp() {
           </div>
           <p className="stage-song-description mb-3 max-w-[70ch] text-[13px] text-pretty text-muted">{song.arrangementDescription}</p>
 
+          <div className="stage-launch-strip">
+            <button ref={finderTriggerRef} type="button" className="stage-finder-trigger" aria-label="Open stage finder" aria-keyshortcuts="Control+K Meta+K" aria-haspopup="dialog" aria-expanded={finderOpen} onClick={() => changeFinderOpen(true)}>
+              <Search size={19} aria-hidden="true" />
+              <span><strong>Find your next move</strong><small>Songs, passages and stage controls</small></span>
+              <kbd aria-hidden="true">⌘ / Ctrl K</kbd>
+            </button>
+            <p className="stage-launch-setup"><i aria-hidden="true" /><span>{setupLabel}</span></p>
+          </div>
+
           <div ref={transportRef} role="group" aria-label="Playback controls" className="stage-transport flex flex-wrap items-center justify-between gap-2">
             <div className="flex flex-wrap gap-2">
               <Button onClick={() => void startSession(false)} disabled={!ready || busy}>
@@ -1616,8 +1694,12 @@ export function StageApp() {
             />
           ) : null}
 
+          <div ref={practiceRef} className="stage-practice-region">
           <PracticeControls
             sections={passages}
+            duration={song.duration}
+            mapOpen={songMapOpen}
+            onMapOpenChange={setSongMapOpen}
             selectedId={practice?.id ?? ""}
             loop={repeatPractice}
             pass={practicePass}
@@ -1630,6 +1712,7 @@ export function StageApp() {
             onLoopChange={setRepeatPractice}
             onExit={() => { resetReady(); setPracticeSelection(null); }}
           />
+          </div>
 
           <div className="stage-hud grid grid-cols-2 gap-3 rounded-t-2xl bg-surface px-4 py-3 shadow-[0_0_0_1px_rgba(239,232,220,0.08)] sm:grid-cols-4 lg:grid-cols-5">
             <div className={cn("hud-chip accent", hud.gain > 0 && "pop")}>
@@ -1699,7 +1782,7 @@ export function StageApp() {
                 songName={song.name}
                 rhythm={rhythm}
                 busy={!ready || busy}
-                allowPauseFocus={!feelOpen && !libraryOpen && !menu && !soundcheckOpen}
+                allowPauseFocus={!feelOpen && !libraryOpen && !menu && !soundcheckOpen && !finderOpen}
                 demo={bag.current?.demo ?? false}
                 results={results}
                 practice={practice ? { ...practice, pass: practicePass } : undefined}
@@ -1907,6 +1990,15 @@ export function StageApp() {
           </p>
         </section>
       </div>
+
+      <StageFinder
+        open={finderOpen}
+        onOpenChange={changeFinderOpen}
+        items={finderItems}
+        songName={song.name}
+        setupLabel={setupLabel}
+        onReturnFocus={() => requestAnimationFrame(() => finderTriggerRef.current?.focus({ preventScroll: true }))}
+      />
 
       {libraryOpen ? (
         <>
