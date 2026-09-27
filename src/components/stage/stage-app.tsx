@@ -1331,6 +1331,31 @@ export function StageApp() {
   const busy = status === "playing" || status === "starting";
   const rhythm = song.matching === "rhythm";
   const spaceToHit = rhythm && enabled.length === 1;
+  const timelineSections = useMemo(() => {
+    const sections = stageSong.sections
+      .filter((section) => Number.isFinite(section.time) && section.time >= 0 && section.time < stageSong.duration)
+      .slice()
+      .sort((a, b) => a.time - b.time)
+      .filter((section, index, sorted) => index === 0 || section.time !== sorted[index - 1].time);
+    if (sections[0]?.time !== 0) sections.unshift({ time: 0, name: sections.length ? "Opening" : "Full song" });
+    return sections;
+  }, [stageSong]);
+  const elapsed = Math.max(0, Math.min(stageSong.duration, hud.elapsed));
+  const progress = stageSong.duration > 0 ? (elapsed / stageSong.duration) * 100 : 0;
+  const currentSectionIndex = timelineSections.reduce((current, section, index) => section.time <= elapsed ? index : current, 0);
+  const currentSection = timelineSections[currentSectionIndex];
+  const nextSection = timelineSections[currentSectionIndex + 1];
+  const timelineStatus = results ? "Complete" : status === "ready" ? "Ready" : status === "starting" ? "Starting" : status === "paused" ? "Paused" : bag.current?.demo ? "Autoplay" : "Playing";
+  // Sparse ticks stay legible for dense imported charts, while section names remain exact.
+  const timelineMarkers = useMemo(() => {
+    let lastPosition = 0;
+    return timelineSections.filter((section) => {
+      const position = stageSong.duration > 0 ? section.time / stageSong.duration : 0;
+      if (position - lastPosition < 0.045 || position > 0.97) return false;
+      lastPosition = position;
+      return true;
+    });
+  }, [timelineSections, stageSong.duration]);
 
   return (
     <div className={cn("stage-shell flex min-h-dvh flex-col", focusStage && "stage-focused")}>
@@ -1697,75 +1722,98 @@ export function StageApp() {
             </div>
           ) : null}
 
-          <div className="mt-3">
-            <div className="h-1 overflow-hidden rounded-full bg-elevated" role="progressbar" aria-label={practice ? "Passage progress" : "Song progress"} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(100 * hud.elapsed / stageSong.duration)}>
-              <div className="h-full bg-accent" style={{ width: `${stageSong.duration ? (hud.elapsed / stageSong.duration) * 100 : 0}%` }} />
+          <div className="stage-timeline">
+            <div className="stage-timeline-heading">
+              <span className="stage-playback-state" data-active={status === "playing"}>
+                <i aria-hidden="true" />{timelineStatus}
+              </span>
+              <div className="stage-section-context">
+                <span className="stage-current-section" title={currentSection?.name || "Count-in"}>
+                  <small>NOW</small> {currentSection?.name || "Count-in"}
+                </span>
+                {nextSection ? <span className="stage-next-section" title={nextSection.name}><small>NEXT</small> {nextSection.name}</span> : null}
+              </div>
             </div>
-            <div className="mt-1 flex justify-between font-mono text-[10px] tabular-nums text-muted">
-              <span aria-label="Elapsed time">{formatTime(hud.elapsed / speed)}</span>
-              <span>{status === "ready" ? "Ready when you are." : status === "paused" ? "Paused." : bag.current?.demo ? "Watching." : "Make it yours."}</span>
-              <span aria-label="Remaining time">{formatTime(hud.remaining / speed)}</span>
+            <div className="stage-timeline-track" role="progressbar" aria-label={practice ? "Passage progress" : "Song progress"} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(progress)} aria-valuetext={`${Math.round(progress)}%, ${currentSection?.name || "Count-in"}`}>
+              <div className="stage-timeline-fill" style={{ width: `${progress}%` }} />
+              {timelineMarkers.map((section) => (
+                <i key={section.time} className={cn("stage-timeline-marker", section.time <= elapsed && "is-passed")} style={{ left: `${section.time / stageSong.duration * 100}%` }} aria-hidden="true" />
+              ))}
+            </div>
+            <div className="stage-timeline-times">
+              <span><span aria-label="Elapsed time">{formatTime(elapsed / speed)}</span> <small>elapsed</small></span>
+              <span><span aria-label="Remaining time">{formatTime(Math.max(0, stageSong.duration - elapsed) / speed)}</span> <small>remaining</small></span>
             </div>
           </div>
 
-          <div className="mt-4 flex flex-wrap items-end gap-4">
-            <label className="flex flex-col gap-1 text-[9px] tracking-[0.14em] text-muted">
-              DIFFICULTY
-              <select
-                className="h-10 min-w-[120px] rounded-lg bg-elevated px-2 text-[13px] text-fg shadow-[0_0_0_1px_rgba(239,232,220,0.12)]"
-                value={difficulty}
-                disabled={busy}
-                onChange={(e) => setDifficulty(e.target.value as Difficulty)}
-              >
-                <option value="chill">Chill</option>
-                <option value="standard">Standard</option>
-                <option value="expert">Expert</option>
-              </select>
-            </label>
-            <label className="flex flex-col gap-1 text-[9px] tracking-[0.14em] text-muted">
-              TEMPO
-              <select
-                className="h-10 min-w-[100px] rounded-lg bg-elevated px-2 text-[13px] text-fg shadow-[0_0_0_1px_rgba(239,232,220,0.12)]"
-                value={String(speed)}
-                disabled={busy}
-                onChange={(e) => setSpeed(Number(e.target.value))}
-              >
-                <option value="0.5">50%</option>
-                <option value="0.75">75%</option>
-                <option value="1">100%</option>
-                <option value="1.25">125%</option>
-              </select>
-            </label>
-            <label className="flex h-10 items-center gap-2 text-[12px] text-muted">
-              <input type="checkbox" checked={guide} disabled={busy} onChange={(e) => setGuide(e.target.checked)} suppressHydrationWarning />
-              {rhythm ? "Hit guide" : "Guide part"}
-            </label>
-            <label className="flex h-10 items-center gap-2 text-[12px] text-muted">
-              <input type="checkbox" checked={metronome} disabled={busy} onChange={(e) => setMetronome(e.target.checked)} suppressHydrationWarning />
-              Click
-            </label>
-            {(rhythm || enabled.some((p) => p.type === "guitar")) && (
-              <label className="flex h-11 items-center gap-2 text-[12px] text-muted">
-                <input type="checkbox" checked={strumGuide} onChange={(e) => setStrumGuide(e.target.checked)} aria-describedby="strum-guide-help" suppressHydrationWarning />
-                Strum arrows
+          <section className="stage-setup" aria-labelledby="stage-setup-heading">
+            <div className="stage-setup-heading">
+              <h3 id="stage-setup-heading">SESSION SETUP</h3>
+              <p id="stage-setup-help">{busy ? "Pause to adjust difficulty, tempo, guide or click." : "Volume can change while you play."}</p>
+            </div>
+            <div className="stage-setup-controls">
+              <label className="stage-setup-field">
+                DIFFICULTY
+                <select
+                  value={difficulty}
+                  disabled={busy}
+                  aria-describedby="stage-setup-help"
+                  onChange={(e) => setDifficulty(e.target.value as Difficulty)}
+                >
+                  <option value="chill">Chill</option>
+                  <option value="standard">Standard</option>
+                  <option value="expert">Expert</option>
+                </select>
               </label>
-            )}
-            <label className="ml-auto flex items-center gap-2 text-[9px] tracking-[0.14em] text-muted">
-              <Volume2 className="size-4" />
-              <input
-                type="range"
-                min={0}
-                max={100}
-                value={volume}
-                aria-label="Master volume"
-                onChange={(e) => {
-                  const v = Number(e.target.value);
-                  setVolume(v);
-                }}
-                suppressHydrationWarning
-              />
-            </label>
-          </div>
+              <label className="stage-setup-field">
+                TEMPO
+                <select
+                  value={String(speed)}
+                  disabled={busy}
+                  aria-describedby="stage-setup-help"
+                  onChange={(e) => setSpeed(Number(e.target.value))}
+                >
+                  <option value="0.5">50%</option>
+                  <option value="0.75">75%</option>
+                  <option value="1">100%</option>
+                  <option value="1.25">125%</option>
+                </select>
+              </label>
+              <div className="stage-setup-toggles">
+                <label className="stage-setup-toggle">
+                  <input type="checkbox" checked={guide} disabled={busy} onChange={(e) => setGuide(e.target.checked)} suppressHydrationWarning />
+                  {rhythm ? "Hit guide" : "Guide part"}
+                </label>
+                <label className="stage-setup-toggle">
+                  <input type="checkbox" checked={metronome} disabled={busy} onChange={(e) => setMetronome(e.target.checked)} suppressHydrationWarning />
+                  Click
+                </label>
+                {(rhythm || enabled.some((p) => p.type === "guitar")) && (
+                  <label className="stage-setup-toggle">
+                    <input type="checkbox" checked={strumGuide} onChange={(e) => setStrumGuide(e.target.checked)} aria-describedby="strum-guide-help" suppressHydrationWarning />
+                    Strum arrows
+                  </label>
+                )}
+              </div>
+              <label className="stage-setup-volume">
+                <span><Volume2 size={14} aria-hidden="true" /> MASTER <output aria-hidden="true">{volume}%</output></span>
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  value={volume}
+                  aria-label="Master volume"
+                  aria-valuetext={`${volume}%`}
+                  style={{ ["--volume-level" as string]: `${volume}%` }}
+                  onChange={(e) => {
+                    const v = Number(e.target.value);
+                    setVolume(v);
+                  }}
+                  suppressHydrationWarning
+                />
+              </label>
+            </div>
+          </section>
 
           {(rhythm || enabled.some((p) => p.type === "guitar")) && (
             <p id="strum-guide-help" className="mt-3 text-xs text-muted">
