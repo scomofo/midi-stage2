@@ -177,6 +177,14 @@ try {
         speed: 1, t: 21.8, now: 10, energy: 0.72, trauma: 0, bloom: 0, combo: 12,
         particles: [], flashes: [], callouts: [], pressed: new Map(), reduced,
         feel: withPreset(mode === 'calm' ? 'calm' : 'house'), strumGuide: mode.startsWith('strum-') };
+      if (mode === 'sustain') {
+        const judge = judges.get('keys');
+        const note = judge.notes.find((note) => note.duration >= 1);
+        if (!note) throw Error('Sustain fixture needs a long note');
+        judge.hit(note.time, note.lane, 'graphics-hold');
+        state.t = note.time + 0.2;
+        if (!judge.activeHolds.has(note)) throw Error('Sustain fixture must use a real held note');
+      }
       renderer.draw(state);
       if (mode === 'chords' && !reduced) {
         const original = canvas.toDataURL();
@@ -208,11 +216,22 @@ try {
           { player: 'keys', grade: 'perfect', text: 'perfect', delta: 0, until: 10.7 },
           { player: 'keys', grade: 'perfect', text: '25 STREAK', delta: 0, until: 10.9 });
         const labels = [];
+        const gradePositions = [];
         const text = renderer.ctx.fillText;
-        renderer.ctx.fillText = function (label, ...args) { labels.push(label); return text.call(this, label, ...args); };
+        renderer.ctx.fillText = function (label, ...args) {
+          labels.push(label);
+          if (label === 'PERFECT') {
+            const point = this.getTransform().transformPoint({ x: args[0], y: args[1] });
+            gradePositions.push(point.y / renderer.dpr);
+          }
+          return text.call(this, label, ...args);
+        };
         try { renderer.draw(state); } finally { renderer.ctx.fillText = text; }
         if (labels.filter((label) => label === 'PERFECT').length !== 1 || labels.includes('GREAT') || !labels.includes('25 STREAK')) {
           throw Error('Chord judgments overlap or hide the streak milestone');
+        }
+        if (gradePositions.some((y) => y <= g.hit + 24 || y >= height - 20)) {
+          throw Error('Hit feedback must stay below the note path and above the footer');
         }
       }
       const club = renderer.clubArt;
@@ -258,9 +277,9 @@ try {
     };
   });
   const results = [];
-  for (const [width, height] of [[1100, 600], [366, 500]]) {
+  for (const [width, height] of [[1100, 600], [366, 420]]) {
     await page.setViewportSize({ width: Math.max(390, width), height: Math.max(844, height) });
-    for (const mode of ['chords', 'rhythm', 'band', 'hit', 'calm', 'strum-guitar', 'strum-rhythm']) {
+    for (const mode of ['chords', 'rhythm', 'band', 'hit', 'sustain', 'calm', 'strum-guitar', 'strum-rhythm']) {
       results.push(await page.evaluate(([w, h, m]) => window.renderGraphics(w, h, m), [width, height, mode]));
       if (output) {
         // Export the fixed fixture canvas itself; it is independent of the
@@ -270,6 +289,7 @@ try {
       }
     }
     results.push(await page.evaluate(([w, h]) => window.renderGraphics(w, h, 'chords', true), [width, height]));
+    results.push(await page.evaluate(([w, h]) => window.renderGraphics(w, h, 'sustain', true), [width, height]));
   }
   assert.deepEqual(errors, []);
   console.log(JSON.stringify({ ok: true, results }, null, 2));

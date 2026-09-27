@@ -227,8 +227,9 @@ export class StageRenderer {
     this.paintBand(state);
     const geom = this.paintHighways(state);
     this.paintParticles(state, geom);
-    this.paintCallouts(state, geom);
     this.paintVignette(state);
+    // Judgment text stays readable on the apron, outside the stage lighting.
+    this.paintCallouts(state, geom);
 
     ctx.restore();
   }
@@ -1038,7 +1039,8 @@ export class StageRenderer {
       ctx.stroke();
       ctx.restore();
 
-      const beatPulse = 0.5 + 0.5 * Math.abs(Math.sin(t * (state.song.bpm / 60) * Math.PI));
+      const beatPulse = state.reduced ? 0 : 0.5 + 0.5 * Math.abs(Math.sin(t * (state.song.bpm / 60) * Math.PI));
+      const compactHints = h < 500;
       const strikeW = point(0, 1).width;
       for (let lane = 0; lane < laneCount; lane++) {
         const mid = point(lane + 0.5, 1);
@@ -1051,7 +1053,7 @@ export class StageRenderer {
           (state.pressed.get(`${p.id}:${lane}`) || 0) > state.now || heldLanes.has(lane);
         const soon = Number.isFinite(nextAt[lane]) ? progress(nextAt[lane]!) : -1;
         const live = Boolean(flash || pressing);
-        const squash = live ? 1.28 : soon > 0.88 ? 1.1 : 1 + beatPulse * 0.04;
+        const squash = state.reduced ? 1 : live ? 1.28 : soon > 0.88 ? 1.1 : 1 + beatPulse * 0.04;
         const tint = flash?.kind === "miss" ? "#d36a6a" : lanes[lane]!.color;
         ctx.beginPath();
         ctx.ellipse(mid.x, hit + 4, rx + 5, 12, 0, 0, Math.PI * 2);
@@ -1081,16 +1083,22 @@ export class StageRenderer {
           ctx.fill();
           ctx.restore();
         }
+        const code = active.length < 3 ? KEYS[p.id][lane] : undefined;
+        const hintSize = active.length > 2 ? 8 : 10;
+        let hint = compactHints && code ? `${lanes[lane]!.short} · ${keyLabel(code)}` : lanes[lane]!.short;
+        ctx.font = `700 ${hintSize}px 'IBM Plex Sans', system-ui, sans-serif`;
+        // Full shortcuts remain on the pad controls; don't crowd adjacent
+        // receptors with a long combined hint such as "KICK · SPACE".
+        if (compactHints && ctx.measureText(hint).width > lw - 4) hint = lanes[lane]!.short;
         this.text(
-          lanes[lane]!.short,
+          hint,
           mid.x,
           hit + 22,
-          active.length > 2 ? 8 : 10,
+          hintSize,
           lanes[lane]!.color,
           "700",
         );
-        if (active.length < 3) {
-          const code = KEYS[p.id][lane];
+        if (active.length < 3 && !compactHints) {
           if (code) this.text(keyLabel(code), mid.x, hit + 36, 8, "rgba(239,232,220,0.45)", "500");
         }
       }
@@ -1120,30 +1128,43 @@ export class StageRenderer {
         const pos = point(n.lane + 0.5, pr);
         const lw = pos.width / laneCount;
         if (p.type !== "drums" && n.duration / state.speed >= 0.35 && n.time + n.duration > t) {
-          const tail = point(n.lane + 0.5, clamp(progress(n.time + n.duration), 0, 1));
-          ctx.beginPath();
-          ctx.moveTo(tail.x, tail.y);
-          ctx.lineTo(pos.x, pos.y);
-          ctx.strokeStyle = hexA(
-            color,
-            n.state === 2
-              ? 0.12
-              : isHeld
-                ? state.reduced
-                  ? 0.88
-                  : 0.78 + 0.2 * Math.sin(state.now * 14)
-                : 0.38,
-          );
-          ctx.lineWidth = Math.max(3, lw * 0.16);
-          ctx.lineCap = "round";
-          ctx.stroke();
-          // A bright core gives the sustain a readable ribbon at every distance.
-          ctx.beginPath();
-          ctx.moveTo(tail.x, tail.y);
-          ctx.lineTo(pos.x, pos.y);
-          ctx.strokeStyle = hexA("#e8fff4", n.state === 2 ? 0.06 : isHeld ? 0.9 : 0.52);
-          ctx.lineWidth = Math.max(1, lw * 0.035);
-          ctx.stroke();
+          const tailProgress = progress(n.time + n.duration);
+          const tailPr = clamp(tailProgress, 0, 1);
+          const tail = point(n.lane + 0.5, tailPr);
+          // Project both edges: distant sustain tails narrow with the highway
+          // instead of using the near note's stroke width all the way back.
+          const ribbon = (halfLane: number, fill: string) => {
+            const tl = point(n.lane + 0.5 - halfLane, tailPr);
+            const tr = point(n.lane + 0.5 + halfLane, tailPr);
+            const bl = point(n.lane + 0.5 - halfLane, pr);
+            const br = point(n.lane + 0.5 + halfLane, pr);
+            this.poly([[tl.x, tl.y], [tr.x, tr.y], [br.x, br.y], [bl.x, bl.y]], fill);
+          };
+          ctx.save();
+          if (isHeld) {
+            ctx.shadowColor = color;
+            ctx.shadowBlur = 10 * state.feel.trails;
+          }
+          ribbon(0.1, hexA(color, n.state === 2 ? 0.14 : isHeld ? 0.8 : 0.42));
+          ctx.shadowBlur = 0;
+          ribbon(0.022, hexA("#e8fff4", n.state === 2 ? 0.08 : isHeld ? 0.94 : 0.55));
+          // Only show an end cap when the actual release point is in view;
+          // a sustain continuing beyond the horizon must remain open-ended.
+          if (tailProgress >= 0) {
+            const capLeft = point(n.lane + 0.36, tailPr);
+            const capRight = point(n.lane + 0.64, tailPr);
+            ctx.lineCap = "round";
+            ctx.beginPath();
+            ctx.moveTo(capLeft.x, tail.y);
+            ctx.lineTo(capRight.x, tail.y);
+            ctx.strokeStyle = hexA(color, n.state === 2 ? 0.2 : 0.9);
+            ctx.lineWidth = Math.max(2, tail.scale * 5);
+            ctx.stroke();
+            ctx.strokeStyle = hexA("#efe8dc", n.state === 2 ? 0.1 : isHeld ? 0.95 : 0.72);
+            ctx.lineWidth = Math.max(0.8, tail.scale * 1.5);
+            ctx.stroke();
+          }
+          ctx.restore();
         }
 
         if (n.chord && n.lanes && n.lanes[0] === n.lane) {
@@ -1170,7 +1191,7 @@ export class StageRenderer {
         }
 
         const alpha = n.state === 2 ? 0.22 : isPop ? 0.95 * (1 - popK) : 0.95;
-        const grow = isPop ? 1 + popK * 0.55 : pr > 0.82 && n.state === 0 ? 1.06 : 1;
+        const grow = state.reduced ? 1 : isPop ? 1 + popK * 0.55 : pr > 0.82 && n.state === 0 ? 1.06 : 1;
         const rw = Math.min(laneCount === 1 ? 70 : 42, Math.max(4.5, lw * 0.37)) * pos.scale * grow;
         const strum =
           state.strumGuide && (p.type === "guitar" || state.song.matching === "rhythm")
@@ -1273,7 +1294,7 @@ export class StageRenderer {
   }
 
   private paintCallouts(state: DrawState, geom: Map<Instrument, Geom>) {
-    const { ctx, h } = this;
+    const { ctx, w, h } = this;
     if (!state.feel.callouts) return;
     // Chords can emit several judgments in one frame. Keep one grade and one
     // milestone per player instead of stacking labels over incoming notes.
@@ -1283,45 +1304,80 @@ export class StageRenderer {
       if (c.until <= state.now) continue;
       (c.text && c.text !== c.grade ? milestones : latest).set(c.player, c);
     }
-    for (const [player, c] of latest) {
-      const g = geom.get(c.player);
-      if (!g) continue;
-      const k = clamp((c.until - state.now) / 0.7, 0, 1);
-      const pop = state.reduced ? 1 : 0.92 + 0.08 * (1 - (1 - k) * (1 - k));
-      ctx.globalAlpha = k;
-      const y = h * 0.42;
-      const size = Math.min(22, Math.max(10, this.w / Math.max(1, geom.size) / 9));
-      ctx.save();
-      ctx.translate(g.cx, y);
-      ctx.scale(pop, pop);
-      this.text(GRADE_LABEL[c.grade], 0, 0, size, GRADE_COLOR[c.grade], "800");
-      ctx.restore();
-      if (c.grade === "perfect" || c.grade === "great" || c.grade === "good") {
-        const late =
-          Math.abs(c.delta) < 5
-            ? "RIGHT ON TIME"
-            : `${Math.abs(Math.round(c.delta))} ms ${c.delta < 0 ? "early" : "late"}`;
-        this.text(late, g.cx, y + 18, Math.min(10, size * 0.48), "rgba(239,232,220,0.7)", "500");
-      }
+    for (const [player, g] of geom) {
+      const c = latest.get(player);
       const milestone = milestones.get(player);
-      if (milestone) {
-        ctx.globalAlpha = clamp((milestone.until - state.now) / 0.3, 0, 1);
-        this.text(milestone.text!, g.cx, y - 24, size * 0.66, "#e0b27a", "700");
-        milestones.delete(player);
+      if (!c && !milestone) continue;
+      // Keep feedback on the apron, below the lane/key hints and above the
+      // canvas footer. Each player owns a bounded strip, even in a full band.
+      const cardW = Math.min(228, w / Math.max(1, geom.size) - 12);
+      const top = g.hit + (h < 500 || geom.size > 2 ? 34 : 46);
+      const cardH = Math.min(54, h - 28 - top);
+      if (cardW < 32 || cardH < 24) continue;
+      const left = g.cx - cardW / 2;
+      const gradeAlpha = c ? clamp((c.until - state.now) / 0.24, 0, 1) : 0;
+      const milestoneAlpha = milestone ? clamp((milestone.until - state.now) / 0.3, 0, 1) : 0;
+      const success = c && (c.grade === "perfect" || c.grade === "great" || c.grade === "good") && Number.isFinite(c.delta);
+      const size = Math.min(17, Math.max(10, cardW / 10), cardH * 0.32);
+      const detailSize = Math.min(10, Math.max(8, cardW / 20), cardH * 0.26);
+
+      ctx.save();
+      ctx.globalAlpha = Math.max(gradeAlpha, milestoneAlpha);
+      ctx.beginPath();
+      ctx.roundRect(left, top, cardW, cardH, 6);
+      ctx.fillStyle = "rgba(5,9,14,0.94)";
+      ctx.fill();
+      ctx.strokeStyle = "rgba(143,212,196,0.2)";
+      ctx.lineWidth = 1;
+      ctx.stroke();
+
+      if (c) {
+        ctx.globalAlpha = gradeAlpha;
+        this.text(GRADE_LABEL[c.grade], g.cx, top + cardH * (success || milestone ? 0.24 : 0.5), size, GRADE_COLOR[c.grade], "800");
       }
-    }
-    for (const [player, c] of milestones) {
-      const g = geom.get(player);
-      if (!g) continue;
-      ctx.globalAlpha = clamp((c.until - state.now) / 0.3, 0, 1);
-      this.text(
-        c.text!,
-        g.cx,
-        h * 0.42 - 24,
-        Math.min(14, this.w / Math.max(1, geom.size) / 13),
-        "#e0b27a",
-        "700",
-      );
+      if (success) {
+        const judge = state.judges.get(player);
+        // Offset values are real milliseconds. Normalize against this player's
+        // current judgment window so the visual still agrees at slower tempos.
+        const windowMs = Math.max(1, ((judge?.windows[2] ?? 0.15) / (judge?.speed || 1)) * 1000);
+        const perfectMs = ((judge?.windows[0] ?? 0.045) / (judge?.speed || 1)) * 1000;
+        const half = Math.min(66, (cardW - 24) / 2);
+        const y = top + cardH * 0.52;
+        const tick = g.cx + clamp(c.delta / windowMs, -1, 1) * half;
+        const perfectHalf = half * clamp(perfectMs / windowMs, 0, 1);
+        ctx.fillStyle = "rgba(143,212,196,0.2)";
+        ctx.fillRect(g.cx - perfectHalf, y - 2, perfectHalf * 2, 4);
+        ctx.beginPath();
+        ctx.moveTo(g.cx - half, y);
+        ctx.lineTo(g.cx + half, y);
+        ctx.strokeStyle = "rgba(239,232,220,0.35)";
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(g.cx, y - 3);
+        ctx.lineTo(g.cx, y + 3);
+        ctx.strokeStyle = "rgba(239,232,220,0.65)";
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(tick, y - 4);
+        ctx.lineTo(tick, y + 4);
+        ctx.strokeStyle = GRADE_COLOR[c.grade];
+        ctx.lineWidth = 2.5;
+        ctx.stroke();
+        const timing = Math.abs(c.delta) < 5
+          ? "RIGHT ON TIME"
+          : `${Math.abs(Math.round(c.delta))} ms ${c.delta < 0 ? "early" : "late"}`;
+        // Narrow band strips give a milestone the detail row briefly; the
+        // early/late tick stays visible alongside the grade throughout.
+        if (!milestone || cardW >= 180) {
+          this.text(timing, g.cx - (milestone ? cardW * 0.23 : 0), top + cardH * 0.81, detailSize, "rgba(239,232,220,0.85)", "500");
+        }
+      }
+      if (milestone) {
+        ctx.globalAlpha = milestoneAlpha;
+        this.text(milestone.text, g.cx + (success && cardW >= 180 ? cardW * 0.24 : 0), top + cardH * (c ? 0.81 : 0.5), c ? detailSize : size, "#e0b27a", "700");
+      }
+      ctx.restore();
     }
     ctx.globalAlpha = 1;
   }
