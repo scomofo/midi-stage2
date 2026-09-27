@@ -448,6 +448,7 @@ export class StageRenderer {
     if (lights < 0.03) return;
     const e = Math.min(1, state.energy * 0.8 + this.cue.drive * 0.4);
     const t = state.reduced ? 0 : this.cue.clock;
+    const geometricBloom = state.reduced ? 0 : state.bloom;
     const beat = Math.PI;
     const cue = state.feel.heads ?? "fan";
     const cone = (
@@ -479,7 +480,7 @@ export class StageRenderer {
       const pulse = 0.68 + this.cue.pulse * 0.22 + this.cue.drive * 0.1;
       const tint = c.i % 2 ? this.cue.secondary : this.cue.primary;
       const a = (0.12 + e * 0.1 + state.bloom * 0.16) * lights * pulse;
-      const half = w * c.spread * (0.9 + state.bloom * 0.1);
+      const half = w * c.spread * (0.9 + geometricBloom * 0.1);
       cone(originX, aimX, landY, half * 1.32, a * 0.28, tint);
       cone(originX, aimX, landY, half, a * 0.55, tint);
       cone(originX, aimX, landY, half * 0.32, a * 0.7, tint);
@@ -494,7 +495,7 @@ export class StageRenderer {
         aimX,
         landY,
         half * 0.82,
-        13 + state.bloom * 7,
+        13 + geometricBloom * 7,
         tint,
         a,
         phase,
@@ -687,6 +688,7 @@ export class StageRenderer {
     const e = Math.min(1, state.energy * 0.8 + this.cue.drive * 0.4);
     const pulse = 0.7 + this.cue.pulse * 0.3;
     const lift = 1 + state.bloom * 0.65;
+    const geometricBloom = state.reduced ? 0 : state.bloom;
     for (const c of this.crowd) {
       const gallery = c.y < 0.55;
       const twinkle = state.reduced
@@ -722,8 +724,8 @@ export class StageRenderer {
       ctx.beginPath();
       ctx.arc(
         c.x * w,
-        c.y * h - state.bloom * (gallery ? 2 : 4),
-        c.s * (1 + state.bloom * 0.24),
+        c.y * h - geometricBloom * (gallery ? 2 : 4),
+        c.s * (1 + geometricBloom * 0.24),
         0,
         Math.PI * 2,
       );
@@ -1226,7 +1228,12 @@ export class StageRenderer {
           state.strumGuide && (p.type === "guitar" || state.song.matching === "rhythm")
             ? suggestedStrum(state.song, n.time)
             : undefined;
-        const rh = Math.max(4, (strum ? 15 : 10) * pos.scale + pr * 3.2) * grow;
+        const depthHeight = Math.max(4, (strum ? 15 : 10) * pos.scale + pr * 3.2) * grow * 2.8;
+        // On compact highways, preserve a readable attack face instead of
+        // stretching narrow notes into tall columns. Strum arrows get extra
+        // vertical room, and distant notes retain a small visible silhouette.
+        const widthHeight = Math.max(strum ? 4 : 3, (strum ? 9 : 7) * pos.scale, rw * 2.4 * (strum ? 1.05 : 0.7));
+        const rh = Math.min(depthHeight, widthHeight) / 2.8;
         ctx.save();
         const artKey = `${color}:${p.type === "drums"}:${strum ?? "none"}`;
         let art = this.noteArt.get(artKey);

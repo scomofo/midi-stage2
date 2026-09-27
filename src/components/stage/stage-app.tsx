@@ -16,6 +16,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { FeelPanel } from "@/components/stage/feel-panel";
 import { SessionOverlay, type SessionResults } from "@/components/stage/session-overlay";
+import { StageCountIn } from "@/components/stage/stage-count-in";
 import { PracticeControls } from "@/components/stage/practice-controls";
 import { loadAudioAsset, saveAudioAsset, deleteAudioAsset } from "@/lib/midi-stage/audio-assets";
 import type { AudioImportProgress } from "@/lib/midi-stage/audio-import";
@@ -753,6 +754,23 @@ export function StageApp() {
   }, [strumGuide, initBag]);
 
   useEffect(() => {
+    const motion = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const applyMotion = () => {
+      const b = bag.current;
+      if (!b) return;
+      b.reduced = motion.matches;
+      if (motion.matches) {
+        b.particles = [];
+        b.trauma = 0;
+        b.bloom = 0;
+      }
+    };
+    applyMotion();
+    motion.addEventListener("change", applyMotion);
+    return () => motion.removeEventListener("change", applyMotion);
+  }, []);
+
+  useEffect(() => {
     setFeel(loadFeel());
     setFeelHydrated(true);
   }, []);
@@ -1345,8 +1363,10 @@ export function StageApp() {
   const progress = stageSong.duration > 0 ? (elapsed / stageSong.duration) * 100 : 0;
   const currentSectionIndex = timelineSections.reduce((current, section, index) => section.time <= elapsed ? index : current, 0);
   const currentSection = timelineSections[currentSectionIndex];
-  const nextSection = timelineSections[currentSectionIndex + 1];
-  const timelineStatus = results ? "Complete" : status === "ready" ? "Ready" : status === "starting" ? "Starting" : status === "paused" ? "Paused" : bag.current?.demo ? "Autoplay" : "Playing";
+  const countIn = status === "playing" && /^[1-4]$/.test(hud.countdown) ? Number(hud.countdown) as 1 | 2 | 3 | 4 : 0;
+  const currentSectionName = countIn ? "Count-in" : currentSection?.name || "Opening";
+  const nextSection = countIn ? currentSection : timelineSections[currentSectionIndex + 1];
+  const timelineStatus = results ? "Complete" : status === "ready" ? "Ready" : status === "starting" ? "Starting" : status === "paused" ? "Paused" : countIn ? "Count-in" : bag.current?.demo ? "Autoplay" : "Playing";
   // Sparse ticks stay legible for dense imported charts, while section names remain exact.
   const timelineMarkers = useMemo(() => {
     let lastPosition = 0;
@@ -1671,14 +1691,7 @@ export function StageApp() {
               tabIndex={-1}
               onPointerMove={onCanvasPointerMove}
             />
-            {hud.countdown && status !== "ready" ? (
-              <div className="pointer-events-none absolute inset-x-0 top-[22%] text-center font-display text-[5.5rem] font-semibold leading-none tracking-[-0.06em] text-accent">
-                {hud.countdown === "PAUSED" ? "Ⅱ" : hud.countdown}
-                <small className="mt-3 block text-[11px] tracking-[0.28em] text-muted">
-                  {hud.countdown === "PAUSED" ? "PAUSED" : status === "playing" && bag.current?.demo ? "AUTOPLAY" : "COUNT IN"}
-                </small>
-              </div>
-            ) : null}
+            {countIn ? <StageCountIn count={countIn} demo={bag.current?.demo ?? false} /> : null}
 
             {overlay && status !== "playing" && !feelOpen ? (
               <SessionOverlay
@@ -1686,6 +1699,7 @@ export function StageApp() {
                 songName={song.name}
                 rhythm={rhythm}
                 busy={!ready || busy}
+                allowPauseFocus={!feelOpen && !libraryOpen && !menu && !soundcheckOpen}
                 demo={bag.current?.demo ?? false}
                 results={results}
                 practice={practice ? { ...practice, pass: practicePass } : undefined}
@@ -1735,13 +1749,13 @@ export function StageApp() {
                 <i aria-hidden="true" />{timelineStatus}
               </span>
               <div className="stage-section-context">
-                <span className="stage-current-section" title={currentSection?.name || "Count-in"}>
-                  <small>NOW</small> {currentSection?.name || "Count-in"}
+                <span className="stage-current-section" title={currentSectionName}>
+                  <small>NOW</small> {currentSectionName}
                 </span>
                 {nextSection ? <span className="stage-next-section" title={nextSection.name}><small>NEXT</small> {nextSection.name}</span> : null}
               </div>
             </div>
-            <div className="stage-timeline-track" role="progressbar" aria-label={practice ? "Passage progress" : "Song progress"} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(progress)} aria-valuetext={`${Math.round(progress)}%, ${currentSection?.name || "Count-in"}`}>
+            <div className="stage-timeline-track" role="progressbar" aria-label={practice ? "Passage progress" : "Song progress"} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(progress)} aria-valuetext={`${Math.round(progress)}%, ${currentSectionName}`}>
               <div className="stage-timeline-fill" style={{ width: `${progress}%` }} />
               {timelineMarkers.map((section) => (
                 <i key={section.time} className={cn("stage-timeline-marker", section.time <= elapsed && "is-passed")} style={{ left: `${section.time / stageSong.duration * 100}%` }} aria-hidden="true" />

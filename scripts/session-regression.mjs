@@ -163,6 +163,22 @@ try {
   });
   assert.equal(await page.evaluate(() => window.sessionProbe.beginCalls), 2,
     'Enter on Start must begin exactly one set');
+  for (const count of [4, 3, 2, 1]) {
+    await page.evaluate((count) => {
+      const p = window.sessionProbe;
+      p.time = -(count - 0.2) * 60 / p.audio.song.bpm;
+    }, count);
+    await page.waitForFunction((count) => document.querySelector('.stage-count-in')?.getAttribute('data-count') === String(count), count);
+    assert.equal(await page.locator('.stage-playback-state').innerText(), 'Count-in');
+    assert.match(await page.getByRole('progressbar', { name: 'Song progress', exact: true }).getAttribute('aria-valuetext'), /0%, Count-in/);
+    if (count === 4) {
+      await page.evaluate(() => { window.countInAnnouncement = document.querySelector('.stage-count-in [role="status"]'); });
+      await screenshot('session-count-in.png');
+    } else {
+      assert.equal(await page.evaluate(() => window.countInAnnouncement === document.querySelector('.stage-count-in [role="status"]')), true,
+        'count-in must not remount its phase announcement each beat');
+    }
+  }
   await page.evaluate(() => {
     const p = window.sessionProbe;
     document.body.dispatchEvent(new KeyboardEvent('keydown', { code: p.keys[0], bubbles: true }));
@@ -247,6 +263,13 @@ try {
   await page.keyboard.press('Enter');
   await resume.waitFor();
   await page.getByRole('button', { name: 'Resume set', exact: true }).waitFor();
+  await page.waitForFunction(() => document.activeElement?.matches('[data-session-overlay="paused"] h2'));
+  await page.keyboard.press('Tab');
+  assert.equal(await page.getByRole('button', { name: 'Resume set', exact: true }).evaluate((button) => button === document.activeElement), true,
+    'Tab from the paused heading must reach Resume');
+  await frames();
+  assert.equal(await page.getByRole('button', { name: 'Resume set', exact: true }).evaluate((button) => button === document.activeElement), true,
+    'HUD updates must not steal pause action focus');
   assert.equal(await page.evaluate(() => window.sessionProbe.audio.running), false,
     'Enter on Pause must pause once without toggling back to play');
   // Listening options may change while paused without resetting the session.
@@ -256,6 +279,19 @@ try {
   await resume.focus();
   await page.keyboard.press('Space');
   await page.waitForFunction(() => window.sessionProbe.audio.running);
+  // Live accessibility changes must not restart the clock or lose a held note.
+  const callsBeforeMotion = await page.evaluate(() => window.sessionProbe.beginCalls);
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.waitForFunction(() => window.sessionProbe.live.reduced === true);
+  await page.evaluate(() => {
+    const p = window.sessionProbe;
+    if (p.judge !== p.originalJudge || p.judge.stats.score !== p.score || p.note.hold !== 'held')
+      throw Error('Changing reduced motion must preserve the active scoring session and hold');
+  });
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await page.waitForFunction(() => window.sessionProbe.live.reduced === false);
+  assert.equal(await page.evaluate(() => window.sessionProbe.beginCalls), callsBeforeMotion,
+    'motion preference changes must not restart audio');
   await page.evaluate(() => {
     const p = window.sessionProbe;
     if (p.judge !== p.originalJudge || p.judge.stats.score !== p.score || p.note.hold !== 'held')
@@ -399,6 +435,9 @@ try {
   await page.getByRole('button', { name: 'The room', exact: true }).click();
   await page.getByRole('dialog').waitFor();
   await resume.waitFor();
+  await frames();
+  assert.equal(await page.evaluate(() => Boolean(document.activeElement?.closest('[role="dialog"]'))), true,
+    'pause handoff must not steal focus from room settings');
   assert.equal(await page.evaluate(() => window.sessionProbe.audio.running), false,
     'opening room settings during play must pause the set');
   await page.keyboard.press('Escape');

@@ -170,7 +170,7 @@ try {
       renderer.resize();
       const song = makeOpenStage('expert');
       if (mode === 'rhythm' || mode === 'strum-rhythm') song.matching = 'rhythm';
-      const players = defaultPlayers().map((p) => ({ ...p, enabled: mode === 'band' || mode === 'miss-band' || p.id === (mode === 'strum-guitar' ? 'guitar' : 'keys') }));
+      const players = defaultPlayers().map((p) => ({ ...p, enabled: mode === 'band' || mode === 'miss-band' || mode === 'strum-band' || p.id === (mode === 'strum-guitar' ? 'guitar' : 'keys') }));
       const judges = new Map(players.filter((p) => p.enabled).map((p) => [p.id,
         new Judge(makeChart(song, p), { speed: 1, difficulty: 'standard', drums: p.type === 'drums', onJudge() {} })]));
       const state = { song, players, judges, status: 'playing', demo: false,
@@ -186,6 +186,41 @@ try {
         if (!judge.activeHolds.has(note)) throw Error('Sustain fixture must use a real held note');
       }
       renderer.draw(state);
+      if (width === 366 && (mode === 'band' || mode === 'strum-band')) {
+        const drawImage = renderer.ctx.drawImage;
+        let compactNotes = 0;
+        renderer.ctx.drawImage = function (art, ...args) {
+          if ([...renderer.noteArt.values()].includes(art) && args[2] < 24) {
+            compactNotes++;
+            if (args[3] > Math.max(9, args[2] * 1.1)) throw Error('Compact note heads must not stretch into tall columns');
+          }
+          return drawImage.call(this, art, ...args);
+        };
+        try { renderer.draw(state); } finally { renderer.ctx.drawImage = drawImage; }
+        if (!compactNotes) throw Error('Compact band fixture must draw note heads');
+      }
+      if (reduced && mode === 'chords') {
+        // Changes in hit brightness may remain; stage geometry must stay still.
+        for (const method of ['paintCrowd', 'paintSpots']) {
+          const commands = ['arc', 'ellipse', 'moveTo', 'lineTo', 'quadraticCurveTo', 'translate', 'rotate', 'scale'];
+          const originals = Object.fromEntries(commands.map((key) => [key, renderer.ctx[key]]));
+          let trace = [];
+          for (const key of commands) renderer.ctx[key] = function (...args) {
+            trace.push([key, ...args]);
+            return originals[key].apply(this, args);
+          };
+          try {
+            renderer[method]({ ...state, bloom: 0 });
+            const idle = JSON.stringify(trace);
+            trace = [];
+            renderer[method]({ ...state, bloom: 1 });
+            if (JSON.stringify(trace) !== idle) throw Error(`${method} moves with hit bloom under reduced motion`);
+          } finally {
+            for (const key of commands) renderer.ctx[key] = originals[key];
+          }
+        }
+        renderer.draw(state);
+      }
       if (mode === 'miss-band') {
         const before = renderer.ctx.getImageData(0, 0, canvas.width, canvas.height).data;
         state.flashes.push({ player: 'keys', lane: 0, until: 10.3, kind: 'press' });
@@ -297,7 +332,7 @@ try {
   const results = [];
   for (const [width, height] of [[1100, 600], [366, 420]]) {
     await page.setViewportSize({ width: Math.max(390, width), height: Math.max(844, height) });
-    for (const mode of ['chords', 'rhythm', 'band', 'miss-band', 'hit', 'sustain', 'calm', 'strum-guitar', 'strum-rhythm']) {
+    for (const mode of ['chords', 'rhythm', 'band', 'miss-band', 'hit', 'sustain', 'calm', 'strum-guitar', 'strum-rhythm', 'strum-band']) {
       results.push(await page.evaluate(([w, h, m]) => window.renderGraphics(w, h, m), [width, height, mode]));
       if (output) {
         // Export the fixed fixture canvas itself; it is independent of the

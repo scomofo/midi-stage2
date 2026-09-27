@@ -118,6 +118,8 @@ type SessionOverlayProps = {
   onQuickStart: () => void;
   onBack: () => void;
   onPractice?: () => void;
+  /** Defer the pause handoff while a drawer or dialog owns keyboard focus. */
+  allowPauseFocus?: boolean;
 };
 
 function practiceTip(results: SessionResults, rhythm: boolean) {
@@ -223,6 +225,7 @@ export function SessionOverlay({
   onQuickStart,
   onBack,
   onPractice,
+  allowPauseFocus = true,
 }: SessionOverlayProps) {
   const isResults = mode === "results" && results;
   const isPaused = mode === "paused";
@@ -230,19 +233,35 @@ export function SessionOverlay({
   const runContext = results
     ? `${DIFFICULTY_LABELS[results.difficulty]} · ${Math.round(results.speed * 100)}% tempo · ${results.parts.map((part) => part.label).join(" + ")}`
     : "";
-  const resultsHeadingRef = useRef<HTMLHeadingElement>(null);
+  const sessionHeadingRef = useRef<HTMLHeadingElement>(null);
   const previousMode = useRef(mode);
+  const pauseFocusHandled = useRef(false);
 
   useEffect(() => {
     const leavingResults = previousMode.current === "results" && mode === "ready";
     previousMode.current = mode;
     if (!resultsVisible && !leavingResults) return;
-    const heading = resultsHeadingRef.current;
+    const heading = sessionHeadingRef.current;
     heading?.focus({ preventScroll: true });
     heading?.closest(".session-panel")?.scrollIntoView({ block: "start", behavior: "auto" });
     // Announce completed sets and the ready screen after leaving results.
     // HUD refreshes must not move focus away from the player's next action.
   }, [resultsVisible, mode]);
+
+  useEffect(() => {
+    if (mode !== "paused") {
+      pauseFocusHandled.current = false;
+      return;
+    }
+    if (!allowPauseFocus || pauseFocusHandled.current) return;
+    const heading = sessionHeadingRef.current;
+    if (!heading) return;
+    pauseFocusHandled.current = true;
+    heading.focus({ preventScroll: true });
+    heading.closest(".session-panel")?.scrollIntoView({ block: "start", behavior: "auto" });
+    // Handle a pause once, including after a drawer closes. HUD refreshes and
+    // later drawer visits must leave the player's chosen control focused.
+  }, [mode, allowPauseFocus]);
 
   return (
     <div className="session-overlay" data-session-overlay={mode}>
@@ -256,7 +275,7 @@ export function SessionOverlay({
             <div className="session-eyebrow">
               {results.practice ? "PRACTICE COMPLETE" : "SET COMPLETE"}{results.demo ? " · AUTOPLAY" : ""}
             </div>
-            <h2 ref={resultsHeadingRef} id="session-heading" tabIndex={-1} aria-describedby="session-result-summary">
+            <h2 ref={sessionHeadingRef} id="session-heading" tabIndex={-1} aria-describedby="session-result-summary">
               {results.demo
                 ? "Now make it yours."
                 : results.practice
@@ -401,13 +420,13 @@ export function SessionOverlay({
           </>
         ) : isPaused ? (
           <>
-            <div className="session-eyebrow">
+            <div className="session-eyebrow" id="session-pause-status">
               <Pause size={14} aria-hidden="true" /> {practice ? "PRACTICE PAUSED" : "SET PAUSED"}{demo ? " · AUTOPLAY" : ""}
             </div>
-            <h2 id="session-heading">Take a breath.</h2>
+            <h2 ref={sessionHeadingRef} id="session-heading" tabIndex={-1} aria-describedby="session-pause-status session-pause-description">Take a breath.</h2>
             <p className="session-song">{songName}</p>
             {practice ? <PracticeSummary practice={practice} /> : null}
-            <p className="session-description">
+            <p className="session-description" id="session-pause-description">
               Your place is saved. Pick up the groove when you’re ready.
             </p>
             <KeyGuide controls={controls} rhythm={rhythm} />
@@ -431,7 +450,7 @@ export function SessionOverlay({
         ) : (
           <>
             <div className="session-eyebrow">{practice ? "SECTION PRACTICE" : "YOUR NEXT SESSION"}</div>
-            <h2 ref={resultsHeadingRef} id="session-heading" tabIndex={-1}>Take the stage.</h2>
+            <h2 ref={sessionHeadingRef} id="session-heading" tabIndex={-1}>Take the stage.</h2>
             <p className="session-song">{songName}</p>
             {practice ? <PracticeSummary practice={practice} /> : null}
             <p className="session-description">

@@ -1,0 +1,63 @@
+.stage-count-in {
+  position: absolute;
+  inset-inline: 0;
+  top: 18%;
+  z-index: 2;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+}
+.stage-count-in-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 160px;
+  max-width: calc(100% - 24px);
+  padding: 12px 16px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-lg);
+  background: color-mix(in oklab, var(--color-surface) 92%, transparent);
+  color: var(--color-accent);
+  text-align: center;
+}
+.stage-count-in-label {
+  color: var(--color-muted);
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1.5;
+  letter-spacing: 0.12em;
+}
+.stage-count-in-number {
+  font-family: var(--font-display);
+  font-size: 3.5rem;
+  font-weight: 600;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  animation: count-in-beat 160ms ease-out both;
+}
+.stage-count-in-beats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 4px;
+  align-self: stretch;
+  margin-top: 8px;
+}
+.stage-count-in-beat {
+  height: 4px;
+  border-radius: var(--radius-xs);
+  background: var(--color-border-strong);
+}
+.stage-count-in-beat[data-state="done"] {
+  background: color-mix(in oklab, var(--color-accent) 45%, var(--color-surface));
+}
+.stage-count-in-beat[data-state="current"] {
+  background: var(--color-accent);
+}
+@keyframes count-in-beat {
+  from { opacity: 0.7; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .stage-count-in-number { animation: none; }
+}
