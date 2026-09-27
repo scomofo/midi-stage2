@@ -1,4 +1,48 @@
 /* Session chrome uses the same quiet surfaces and accent as the stage. */
+.stage-focused .stage-song-heading {
+  align-items: center;
+  padding-block: 4px;
+}
+.stage-focused .stage-song-heading h2 {
+  margin-top: 0;
+  font-size: 1.25rem;
+}
+.stage-focused .stage-song-category,
+.stage-focused .stage-song-description {
+  display: none;
+}
+.stage-focused .stage-transport {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  min-height: 60px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-bg);
+  box-shadow: 0 8px 16px color-mix(in oklab, var(--color-bg) 65%, transparent);
+}
+.stage-focused .stage-song-heading,
+.stage-focused .practice-controls,
+.stage-focused .stage-hud,
+.stage-focused .stage-setup,
+.stage-focused .session-panel,
+.stage-focused input,
+.stage-focused select,
+.stage-focused .pad {
+  scroll-margin-top: 120px;
+}
+@media (min-width: 640px) {
+  .stage-focused .stage-song-heading,
+  .stage-focused .practice-controls,
+  .stage-focused .stage-hud,
+  .stage-focused .stage-setup,
+  .stage-focused .session-panel,
+  .stage-focused input,
+  .stage-focused select,
+  .stage-focused .pad {
+    scroll-margin-top: 76px;
+  }
+}
 .stage-timeline {
   margin-top: 16px;
 }

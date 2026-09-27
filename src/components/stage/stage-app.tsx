@@ -155,6 +155,7 @@ export function StageApp() {
   const panelRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLElement>(null);
   const [focusStage, setFocusStage] = useState(false);
+  const transportRef = useRef<HTMLDivElement>(null);
   const bag = useRef<Bag | null>(null);
   const [ready, setReady] = useState(false);
   const [songId, setSongId] = useState("open-stage");
@@ -1519,9 +1520,9 @@ export function StageApp() {
         ) : null}
 
         <section className="flex min-w-0 flex-col px-3 pb-4 md:px-5">
-          <div className="flex flex-wrap items-end justify-between gap-3 py-2">
+          <div className="stage-song-heading flex flex-wrap items-end justify-between gap-3 py-2">
             <div>
-              <div className="text-[10px] font-semibold tracking-[0.18em] text-subtle">
+              <div className="stage-song-category text-[10px] font-semibold tracking-[0.18em] text-subtle">
                 {song.original ? "ORIGINAL SESSION" : "YOUR COLLECTION"} / {song.tag}
               </div>
               <h2 className="font-display mt-1 text-[1.7rem] font-semibold tracking-[-0.03em]">{song.name}</h2>
@@ -1536,9 +1537,9 @@ export function StageApp() {
               </span>
             </div>
           </div>
-          <p className="mb-3 max-w-[70ch] text-[13px] text-pretty text-muted">{song.arrangementDescription}{song.audioAssetId ? " Tempo changes playback speed and pitch." : ""}</p>
+          <p className="stage-song-description mb-3 max-w-[70ch] text-[13px] text-pretty text-muted">{song.arrangementDescription}</p>
 
-          <div className="stage-transport flex flex-wrap items-center justify-between gap-2">
+          <div ref={transportRef} role="group" aria-label="Playback controls" className="stage-transport flex flex-wrap items-center justify-between gap-2">
             <div className="flex flex-wrap gap-2">
               <Button onClick={() => void startSession(false)} disabled={!ready || busy}>
                 {status === "paused" ? (
@@ -1562,7 +1563,13 @@ export function StageApp() {
               <Button variant="ghost" disabled={busy} aria-expanded={soundcheckOpen} aria-controls="soundcheck-panel" onClick={() => setSoundcheckOpen((value) => !value)}>
                 <SlidersHorizontal className="size-4" /> Soundcheck
               </Button>
-              <Button variant="ghost" aria-pressed={focusStage} onClick={() => { if (focusStage && window.innerWidth < 1024) openMenu(); else setFocusStage((v) => !v); }}>
+              <Button variant="ghost" aria-pressed={focusStage} onClick={() => {
+                if (focusStage && window.innerWidth < 1024) openMenu();
+                else {
+                  setFocusStage((value) => !value);
+                  if (!focusStage) requestAnimationFrame(() => transportRef.current?.scrollIntoView({ block: "start", behavior: "auto" }));
+                }
+              }}>
                 {focusStage ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
                 {focusStage ? "Show setlist" : "Focus stage"}
               </Button>
@@ -1749,7 +1756,7 @@ export function StageApp() {
           <section className="stage-setup" aria-labelledby="stage-setup-heading">
             <div className="stage-setup-heading">
               <h3 id="stage-setup-heading">SESSION SETUP</h3>
-              <p id="stage-setup-help">{busy ? "Pause to adjust difficulty, tempo, guide or click." : "Volume can change while you play."}</p>
+              <p id="stage-setup-help">{busy ? "Pause to adjust difficulty, tempo, guide or click." : "Volume can change while you play."}{song.audioAssetId ? " Tempo changes playback speed and pitch." : ""}</p>
             </div>
             <div className="stage-setup-controls">
               <label className="stage-setup-field">

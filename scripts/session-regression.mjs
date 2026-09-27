@@ -286,6 +286,7 @@ try {
   assert.match(await page.locator('.session-timing-part[data-part="keys"]').innerText(), /Not enough hits yet/,
     'one successful hit must not produce a confident timing diagnosis');
   assert.match(await page.locator('.session-timing-part[data-part="keys"]').innerText(), /1 recent hit/);
+  assert.equal(await page.getByRole('meter', { name: 'Keys near centre hits', exact: true }).getAttribute('max'), '1');
   await screenshot('session-results.png');
   // A genuine scored replay must still finish when durable best storage fails.
   await page.evaluate(() => {
@@ -405,7 +406,15 @@ try {
   assert.equal(await resume.isEnabled(), true, 'closing settings must preserve the paused set');
   await page.getByRole('button', { name: 'Focus stage', exact: true }).click();
   assert.equal(await page.getByRole('button', { name: 'Show setlist', exact: true }).getAttribute('aria-pressed'), 'true');
+  await page.locator('.stage-setup').scrollIntoViewIfNeeded();
+  const desktopTransport = await page.getByRole('group', { name: 'Playback controls', exact: true }).boundingBox();
+  assert.ok(desktopTransport && desktopTransport.y >= -1 && desktopTransport.y <= 1,
+    'focused playback controls must stay at the top when setup is in view');
   await page.setViewportSize({ width: 390, height: 844 });
+  await page.locator('.stage-setup').scrollIntoViewIfNeeded();
+  const mobileTransport = await page.getByRole('group', { name: 'Playback controls', exact: true }).boundingBox();
+  assert.ok(mobileTransport && mobileTransport.y >= -1 && mobileTransport.y <= 1 && mobileTransport.width <= 390,
+    'focused playback controls must remain usable after a phone resize');
   await page.getByRole('button', { name: 'Open setlist', exact: true }).click();
   const setlist = page.getByRole('complementary', { name: 'Setlist and lineup', exact: true });
   await setlist.waitFor();
@@ -434,6 +443,7 @@ try {
   assert.match(await emptyTiming.innerText(), /Not enough hits yet/);
   assert.match(await emptyTiming.innerText(), /No successful hits to review\./,
     'a no-hit take must not report perfect timing or a trend');
+  assert.equal(await emptyTiming.getByRole('meter').count(), 0, 'empty timing must not draw misleading meters');
 
   // Finish genuine keyboard takes at known offsets. The probe observes the
   // same judges drawn by the stage; scores and timing samples are never seeded.
@@ -492,6 +502,12 @@ try {
   assert.match(await page.locator('.session-run-context').innerText(), /Standard · 100% tempo · Keys/);
   assert.match(await timingPart('keys').innerText(), /Mostly early/);
   assert.match(await timingPart('keys').innerText(), /8 recent hits · 6 early · 2 near centre · 0 late/);
+  for (const [band, count] of [['early', 6], ['near centre', 2], ['late', 0]]) {
+    const meter = page.getByRole('meter', { name: `Keys ${band} hits`, exact: true });
+    assert.equal(await meter.getAttribute('value'), String(count));
+    assert.equal(await meter.getAttribute('max'), '8');
+    assert.equal(await meter.getAttribute('aria-valuetext'), `${count} of 8 recent successful hits`);
+  }
   assert.equal(await page.locator('.session-timing-part').count(), 1, 'solo results must contain only the active part');
   await assertResultsFocus();
   await screenshot('session-timing-early.png');

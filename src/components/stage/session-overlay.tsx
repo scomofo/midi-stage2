@@ -45,6 +45,34 @@ const TIMING_COPY: Record<TimingSummary["tendency"], { title: string; tip: strin
   insufficient: { title: "Not enough hits yet", tip: "Land a few more hits before reviewing your timing." },
 };
 
+const TIMING_BANDS = [
+  { key: "early", label: "Early" },
+  { key: "centered", label: "Near centre" },
+  { key: "late", label: "Late" },
+] as const;
+
+function TimingDistribution({ label, timing }: { label: string; timing: TimingSummary }) {
+  if (timing.count === 0) return null;
+  return (
+    <div className="session-timing-distribution" role="group" aria-label={`${label} timing distribution`}>
+      {TIMING_BANDS.map((band) => (
+        <label className={`session-timing-band session-timing-band--${band.key}`} key={band.key}>
+          <span>{band.label}</span>
+          <meter
+            min={0}
+            max={timing.count}
+            value={timing[band.key]}
+            aria-label={`${label} ${band.label.toLowerCase()} hits`}
+            aria-valuetext={`${timing[band.key]} of ${timing.count} recent successful hits`}
+          >
+            {timing[band.key]} of {timing.count}
+          </meter>
+        </label>
+      ))}
+    </div>
+  );
+}
+
 function RecentTiming({ parts }: Pick<SessionResults, "parts">) {
   return (
     <section className="session-timing" aria-label="Recent hit timing">
@@ -59,6 +87,7 @@ function RecentTiming({ parts }: Pick<SessionResults, "parts">) {
               <h4>{label}</h4>
               <strong>{TIMING_COPY[timing.tendency].title}</strong>
             </div>
+            <TimingDistribution label={label} timing={timing} />
             <p className="session-timing-counts">
               {timing.count === 0
                 ? "No successful hits to review."

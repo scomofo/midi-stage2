@@ -170,7 +170,7 @@ try {
       renderer.resize();
       const song = makeOpenStage('expert');
       if (mode === 'rhythm' || mode === 'strum-rhythm') song.matching = 'rhythm';
-      const players = defaultPlayers().map((p) => ({ ...p, enabled: mode === 'band' || p.id === (mode === 'strum-guitar' ? 'guitar' : 'keys') }));
+      const players = defaultPlayers().map((p) => ({ ...p, enabled: mode === 'band' || mode === 'miss-band' || p.id === (mode === 'strum-guitar' ? 'guitar' : 'keys') }));
       const judges = new Map(players.filter((p) => p.enabled).map((p) => [p.id,
         new Judge(makeChart(song, p), { speed: 1, difficulty: 'standard', drums: p.type === 'drums', onJudge() {} })]));
       const state = { song, players, judges, status: 'playing', demo: false,
@@ -186,6 +186,24 @@ try {
         if (!judge.activeHolds.has(note)) throw Error('Sustain fixture must use a real held note');
       }
       renderer.draw(state);
+      if (mode === 'miss-band') {
+        const before = renderer.ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+        state.flashes.push({ player: 'keys', lane: 0, until: 10.3, kind: 'press' });
+        state.flashes.push({ player: 'keys', lane: 0, until: 10.3, kind: 'miss' });
+        state.callouts.push({ player: 'keys', grade: 'miss', text: 'miss', delta: 0, until: 10.7 });
+        renderer.draw(state);
+        const after = renderer.ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+        let changed = 0;
+        for (let y = 0; y < canvas.height; y++) for (let x = 0; x < canvas.width; x++) {
+          const i = (y * canvas.width + x) * 4;
+          if (before[i] === after[i] && before[i + 1] === after[i + 1] && before[i + 2] === after[i + 2]) continue;
+          changed++;
+          if (y < canvas.height * 0.7 || x < canvas.width * 0.25 - 2 || x > canvas.width * 0.5 + 2) {
+            throw Error('One player miss must not tint the incoming notes or another player highway');
+          }
+        }
+        if (!changed) throw Error('A miss needs visible local feedback');
+      }
       if (mode === 'chords' && !reduced) {
         const original = canvas.toDataURL();
         renderer.draw({ ...state, now: 1234 });
@@ -250,7 +268,7 @@ try {
         if (i > 1) timings.push(performance.now() - start);
       }
       timings.sort((a, b) => a - b);
-      if (reduced) {
+      if (reduced && mode !== 'miss-band') {
         const before = canvas.toDataURL();
         renderer.draw({ ...state, now: 123 });
         if (canvas.toDataURL() !== before) throw Error('Ambient motion continues under reduced motion');
@@ -279,7 +297,7 @@ try {
   const results = [];
   for (const [width, height] of [[1100, 600], [366, 420]]) {
     await page.setViewportSize({ width: Math.max(390, width), height: Math.max(844, height) });
-    for (const mode of ['chords', 'rhythm', 'band', 'hit', 'sustain', 'calm', 'strum-guitar', 'strum-rhythm']) {
+    for (const mode of ['chords', 'rhythm', 'band', 'miss-band', 'hit', 'sustain', 'calm', 'strum-guitar', 'strum-rhythm']) {
       results.push(await page.evaluate(([w, h, m]) => window.renderGraphics(w, h, m), [width, height, mode]));
       if (output) {
         // Export the fixed fixture canvas itself; it is independent of the
@@ -290,6 +308,7 @@ try {
     }
     results.push(await page.evaluate(([w, h]) => window.renderGraphics(w, h, 'chords', true), [width, height]));
     results.push(await page.evaluate(([w, h]) => window.renderGraphics(w, h, 'sustain', true), [width, height]));
+    results.push(await page.evaluate(([w, h]) => window.renderGraphics(w, h, 'miss-band', true), [width, height]));
   }
   assert.deepEqual(errors, []);
   console.log(JSON.stringify({ ok: true, results }, null, 2));
