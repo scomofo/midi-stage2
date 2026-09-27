@@ -4,6 +4,7 @@ import type { Feel, GoboMotion, GoboPattern, HeadCue } from "./feel";
 import { createClubArt, createNoteArt, createPerformerArt } from "./concert-art";
 import { suggestedStrum } from "./strum-guide";
 import { concertCue, type ConcertCue, type MusicEnergy } from "./concert-cues";
+import { nextVisibleLaneTimes, rendererBeatStart, rendererNoteWindow } from "./renderer-window";
 
 const GRADE_COLOR: Record<Grade, string> = {
   perfect: "#8fd4c4",
@@ -935,11 +936,7 @@ export class StageRenderer {
       ctx.lineTo(br.x, br.y);
       ctx.stroke();
 
-      const nextAt = Array.from({ length: laneCount }, () => Infinity);
-      for (const n of judge.notes) {
-        if (n.state === 0 && n.time >= t - 0.08 && n.time < nextAt[n.lane]!)
-          nextAt[n.lane] = n.time;
-      }
+      const nextAt = nextVisibleLaneTimes(judge.notes, laneCount, t, look);
       const heldLanes = new Set<number>();
       for (const n of judge.activeHolds) heldLanes.add(n.lane);
       const laneFlashes = new Map<number, Flash>();
@@ -1012,10 +1009,7 @@ export class StageRenderer {
         ctx.stroke();
       }
 
-      const first = Math.max(
-        0,
-        state.song.beats.findIndex((b) => b.time >= t - 0.2),
-      );
+      const first = rendererBeatStart(state.song.beats, t, look);
       for (
         let bi = first;
         bi < state.song.beats.length && state.song.beats[bi]!.time < t + look;
@@ -1260,12 +1254,7 @@ export class StageRenderer {
       };
 
       const notes = judge.notes;
-      const lo = Math.max(
-        0,
-        notes.findIndex((n) => n.time >= t - 0.5 * state.speed),
-      );
-      const hi = notes.length;
-      let drawn = 0;
+      const candidates = rendererNoteWindow(notes, t, state.speed);
       ctx.save();
       ctx.beginPath();
       ctx.moveTo(tl.x, tl.y);
@@ -1276,15 +1265,12 @@ export class StageRenderer {
       ctx.clip();
       // Chord links belong behind every attack face. Use the same bounded
       // candidates and old holds as the head pass, without redrawing any art.
-      let bridged = 0;
-      for (let i = Math.min(hi, lo + 900) - 1; i >= Math.max(0, lo - 8); i--) {
+      for (let i = candidates.end - 1; i >= candidates.start; i--) {
         drawChordBridge(notes[i]!);
-        if (++bridged > 900) break;
       }
       for (const n of judge.activeHolds) if (n.time < t - 0.5 * state.speed) drawChordBridge(n);
-      for (let i = Math.min(hi, lo + 900) - 1; i >= Math.max(0, lo - 8); i--) {
+      for (let i = candidates.end - 1; i >= candidates.start; i--) {
         drawNote(notes[i]!);
-        if (++drawn > 900) break;
       }
       for (const n of judge.activeHolds) if (n.time < t - 0.5 * state.speed) drawNote(n);
       ctx.restore();

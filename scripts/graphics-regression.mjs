@@ -182,7 +182,9 @@ try {
         const note = judge.notes.find((note) => note.duration >= 1);
         if (!note) throw Error('Sustain fixture needs a long note');
         judge.hit(note.time, note.lane, 'graphics-hold');
-        state.t = note.time + 0.2;
+        // Advance beyond the candidate look-behind to exercise the separate
+        // active-hold path while the sustain is still sounding.
+        state.t = note.time + 0.7;
         if (!judge.activeHolds.has(note)) throw Error('Sustain fixture must use a real held note');
       }
       renderer.draw(state);
