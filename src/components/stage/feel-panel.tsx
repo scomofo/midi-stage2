@@ -41,6 +41,7 @@ function SliderRow({
         max={100}
         value={Math.round(value * 100)}
         aria-label={label}
+        aria-valuetext={`${Math.round(value * 100)} percent`}
         className="feel-range"
         onChange={(e) => onChange(Number(e.target.value) / 100)}
         onPointerUp={onPreview}

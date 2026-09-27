@@ -1148,13 +1148,34 @@ export class StageRenderer {
         ctx.fillText(`${judge.stats.combo} STREAK  ·  ${judge.multiplier}×`, cx, far - 1);
       }
 
+      const visibleNoteProgress = (n: ChartNote) => {
+        const isHeld = n.hold === "held";
+        const isPop = n.state === 1 && !isHeld && n.hitAt != null && t - n.hitAt < 0.14;
+        const pr = isHeld || isPop ? 1 : progress(n.time);
+        if (pr < -0.04 || pr > 1.2 || (n.state === 1 && !isHeld && !isPop)) return null;
+        return pr;
+      };
+      const drawChordBridge = (n: ChartNote) => {
+        if (!n.chord || !n.lanes || n.lanes.length < 2 || n.lanes[0] !== n.lane) return;
+        const pr = visibleNoteProgress(n);
+        if (pr == null) return;
+        const first = point(n.lanes[0] + 0.5, pr);
+        ctx.beginPath();
+        ctx.moveTo(first.x, first.y);
+        for (let i = 1; i < n.lanes.length; i++) {
+          const mate = point(n.lanes[i]! + 0.5, pr);
+          ctx.lineTo(mate.x, mate.y);
+        }
+        ctx.strokeStyle = hexA("#efe8dc", n.state === 2 ? 0.12 : 0.55);
+        ctx.lineWidth = Math.max(2, first.scale * 3);
+        ctx.stroke();
+      };
       const drawNote = (n: ChartNote) => {
+        const pr = visibleNoteProgress(n);
+        if (pr == null) return;
         const isHeld = n.hold === "held";
         const isPop = n.state === 1 && !isHeld && n.hitAt != null && t - n.hitAt < 0.14;
         const popK = isPop && n.hitAt != null ? clamp((t - n.hitAt) / 0.14, 0, 1) : 0;
-        const pr = isHeld || isPop ? 1 : progress(n.time);
-        if (pr < -0.04 || pr > 1.2) return;
-        if (n.state === 1 && !isHeld && !isPop) return;
         const color = lanes[n.lane]!.color;
         const pos = point(n.lane + 0.5, pr);
         const lw = pos.width / laneCount;
@@ -1200,14 +1221,6 @@ export class StageRenderer {
 
         if (n.chord && n.lanes && n.lanes[0] === n.lane) {
           const mates = n.lanes.map((l) => point(l + 0.5, pr));
-          if (mates.length > 1) {
-            ctx.beginPath();
-            ctx.moveTo(mates[0]!.x, mates[0]!.y);
-            for (const m of mates.slice(1)) ctx.lineTo(m.x, m.y);
-            ctx.strokeStyle = hexA("#efe8dc", n.state === 2 ? 0.12 : 0.55);
-            ctx.lineWidth = Math.max(2, pos.scale * 3);
-            ctx.stroke();
-          }
           if (pr > 0.42 && n.name) {
             const center = mates.reduce((s, m) => s + m.x, 0) / mates.length;
             this.text(
@@ -1261,6 +1274,14 @@ export class StageRenderer {
       ctx.lineTo(bl.x, bl.y);
       ctx.closePath();
       ctx.clip();
+      // Chord links belong behind every attack face. Use the same bounded
+      // candidates and old holds as the head pass, without redrawing any art.
+      let bridged = 0;
+      for (let i = Math.min(hi, lo + 900) - 1; i >= Math.max(0, lo - 8); i--) {
+        drawChordBridge(notes[i]!);
+        if (++bridged > 900) break;
+      }
+      for (const n of judge.activeHolds) if (n.time < t - 0.5 * state.speed) drawChordBridge(n);
       for (let i = Math.min(hi, lo + 900) - 1; i >= Math.max(0, lo - 8); i--) {
         drawNote(notes[i]!);
         if (++drawn > 900) break;

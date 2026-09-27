@@ -441,23 +441,32 @@
 .feel-range {
   appearance: none;
   width: 100%;
+  height: 44px;
+  background: transparent;
+}
+.feel-range::-webkit-slider-runnable-track {
   height: 6px;
   border-radius: 999px;
   background: rgba(239, 232, 220, 0.12);
-  outline: none;
 }
 .feel-range::-webkit-slider-thumb {
   appearance: none;
-  width: 16px;
-  height: 16px;
+  width: 20px;
+  height: 20px;
+  margin-top: -7px;
   border-radius: 999px;
   background: var(--color-accent);
   box-shadow: 0 0 0 4px color-mix(in oklab, var(--color-accent) 22%, transparent);
   cursor: pointer;
 }
+.feel-range::-moz-range-track {
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(239, 232, 220, 0.12);
+}
 .feel-range::-moz-range-thumb {
-  width: 16px;
-  height: 16px;
+  width: 20px;
+  height: 20px;
   border: 0;
   border-radius: 999px;
   background: var(--color-accent);

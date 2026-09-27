@@ -246,6 +246,32 @@ try {
         renderer.draw({ ...state, music: { level: 1, bass: 1 } });
         if (canvas.toDataURL() === original) throw Error('Backing audio energy did not affect lighting');
         renderer.draw(state);
+        // Keep command-order inspection after the native pixel comparisons.
+        const events = [];
+        let path = [];
+        const ctx = renderer.ctx;
+        const originals = Object.fromEntries(['beginPath', 'moveTo', 'lineTo', 'stroke', 'drawImage'].map((key) => [key, ctx[key]]));
+        ctx.beginPath = function () { path = []; return originals.beginPath.call(this); };
+        for (const key of ['moveTo', 'lineTo']) ctx[key] = function (x, y) {
+          path.push([x, y]);
+          return originals[key].call(this, x, y);
+        };
+        ctx.stroke = function (...args) {
+          if (String(this.strokeStyle).replace(/\s/g, '') === 'rgba(239,232,220,0.55)' &&
+              path.length > 1 && path.every((point) => point[1] === path[0][1])) events.push('bridge');
+          return originals.stroke.apply(this, args);
+        };
+        ctx.drawImage = function (art, ...args) {
+          if ([...renderer.noteArt.values()].includes(art)) events.push('head');
+          return originals.drawImage.call(this, art, ...args);
+        };
+        try { renderer.draw(state); } finally {
+          for (const [key, value] of Object.entries(originals)) ctx[key] = value;
+        }
+        if (!events.includes('bridge') || !events.includes('head') || events.lastIndexOf('bridge') > events.indexOf('head')) {
+          throw Error('Chord bridges must draw behind every note face');
+        }
+        renderer.draw(state);
       }
       for (const p of players.filter((p) => p.enabled)) {
         const g = renderer.geom.get(p.id);

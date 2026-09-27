@@ -1728,7 +1728,7 @@ export function StageApp() {
           {song.harmony && enabled.some((p) => p.id === "keys") ? (
             <div className="mt-2 rounded-xl bg-surface px-3 py-2 shadow-[0_0_0_1px_rgba(239,232,220,0.08)]">
               <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-[10px] tracking-[0.14em] text-muted">
-                <span>GOLD: TARGET · GREEN: HIT · ROSE: MISS · TAP TO PLAY</span>
+                <span>● TARGET · ✓ HIT · × MISS · TAP TO PLAY</span>
                 <span className="font-mono text-accent">{hud.chord || "—"}</span>
               </div>
               <PianoGuide
