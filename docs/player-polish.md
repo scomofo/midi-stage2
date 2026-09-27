@@ -83,7 +83,8 @@ review its results. The practice panel shows the take number and previous take's
 score and accuracy. Pause/resume keeps the current take. Reset starts again at
 take one; **Full song** stops practice and restores the full chart. Changing the
 section, lineup, difficulty or tempo resets the take. Practice selections are not
-restored automatically on a later visit.
+restored automatically on a later visit. A saved rehearsal can be reopened explicitly
+with **Continue rehearsal**.
 
 Only notes beginning inside the selected passage are targets. Earlier sustains
 do not turn into extra notes, and sustains crossing the end stop at the boundary.
@@ -98,6 +99,31 @@ passages explain that the lineup has no notes instead of starting a silent loop.
 `npm run test:practice` checks section boundaries, loops/count-ins, score and input
 cleanup, pause/resume, cancelled starts, imported backing audio, isolated records,
 and desktop/mobile controls. `practice.test.ts` covers the pure section/slice rules.
+
+## Continue rehearsal
+
+Starting a human passage rehearsal remembers one latest song, exact passage,
+lineup, difficulty, tempo, guide/strum-guide/click options and repeat setting in
+this browser. Selecting a passage alone, autoplay, failed/cancelled starts and
+full-song play do not replace it. Repeating a take does not write every loop;
+resuming a human rehearsal refreshes its listening options.
+
+On a later visit, **Your last rehearsal** appears above playback controls.
+**Continue rehearsal**, or **Continue last rehearsal** in Stage Finder, restores
+the passage and its setup to ready with a fresh take. Playback starts only when
+the player presses Start. Global volume, focus view and MIDI routes stay current.
+Returning to **Full song** retains the bookmark. **Forget saved rehearsal** removes
+only the bookmark and returns focus to the finder launcher.
+
+Saved data is versioned and validated against the current song and exact passage
+boundaries. Removed songs, changed passages and unavailable imported parts discard
+the bookmark rather than substituting a different rehearsal. Storage failures keep
+the current visit playable and explain when the bookmark could not be saved or
+removed. No score, held input, audio permission or in-progress playback is restored.
+
+`npm run test:rehearsal-bookmark` checks save/restore, explicit starts, keyboard and
+mobile actions, cancelled/failed starts, autoplay isolation and storage recovery.
+Unit checks cover malformed saves, exact passage matching and storage failures.
 
 ## Soundcheck and saved setup
 

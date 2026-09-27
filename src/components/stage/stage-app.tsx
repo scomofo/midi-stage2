@@ -19,6 +19,7 @@ import { FeelPanel } from "@/components/stage/feel-panel";
 import { SessionOverlay, type SessionResults } from "@/components/stage/session-overlay";
 import { StageCountIn } from "@/components/stage/stage-count-in";
 import { StageFinder, type StageFinderItem } from "@/components/stage/stage-finder";
+import { RehearsalBookmarkCard } from "@/components/stage/rehearsal-bookmark-card";
 import "./stage-launcher.css";
 import { PracticeControls } from "@/components/stage/practice-controls";
 import { loadAudioAsset, saveAudioAsset, deleteAudioAsset } from "@/lib/midi-stage/audio-assets";
@@ -28,6 +29,7 @@ import { addLibraryEntry, chartIdentity, loadSongLibrary, MAX_CHART_IMPORT_BYTES
 import { SoundcheckPanel } from "@/components/stage/soundcheck-panel";
 import { defaultMidiRoutes, loadMidiRoutes, saveMidiRoutes, resolveMidiPlayer, type MidiRoute } from "@/lib/midi-stage/midi-routing";
 import { loadSessionPreferences, saveSessionPreferences } from "@/lib/midi-stage/preferences";
+import { clearRehearsalBookmark, loadRehearsalBookmark, resolveRehearsalBookmark, saveRehearsalBookmark, type RehearsalBookmark } from "@/lib/midi-stage/rehearsal-bookmark";
 import { useStageMidi } from "@/components/stage/use-stage-midi";
 import { PianoGuide } from "@/components/stage/piano-guide";
 import { AudioEngine } from "@/lib/midi-stage/audio";
@@ -176,6 +178,8 @@ export function StageApp() {
   const [repeatPractice, setRepeatPractice] = useState(true);
   const [practicePass, setPracticePass] = useState(1);
   const [lastPracticeTake, setLastPracticeTake] = useState<{ accuracy: number; score: number } | null>(null);
+  const [rehearsalBookmark, setRehearsalBookmark] = useState<RehearsalBookmark | null>(null);
+  const [rehearsalWarning, setRehearsalWarning] = useState<string | null>(null);
   const [guide, setGuide] = useState(false);
   const [strumGuide, setStrumGuide] = useState(false);
   const [metronome, setMetronome] = useState(false);
@@ -228,6 +232,9 @@ export function StageApp() {
     ? passages.find((section) => section.id === practiceSelection.sectionId) ?? null
     : null;
   const stageSong = useMemo(() => practice ? practiceSong(song, practice) : song, [song, practice]);
+  const savedRehearsal = useMemo(() => rehearsalBookmark
+    ? resolveRehearsalBookmark(rehearsalBookmark, [...catalog(rehearsalBookmark.setup.difficulty), ...importedCharts.map(songFromSavedChart)])
+    : null, [rehearsalBookmark, importedCharts]);
 
   const initBag = useCallback(() => {
     startTicket.current++;
@@ -569,6 +576,29 @@ export function StageApp() {
       if (ticket !== startTicket.current || bag.current !== b || b.status !== "starting") return;
       b.status = "playing";
       setStatus("playing");
+      // Only a successfully started human rehearsal replaces the bookmark.
+      // Browsing sections, autoplay and cancelled audio setup leave it alone.
+      if (b.practice && !b.demo && !repeating) {
+        const bookmark: RehearsalBookmark = {
+          version: 1,
+          songId: b.fullSong.id,
+          section: { id: b.practice.id, start: b.practice.start, end: b.practice.end },
+          setup: {
+            difficulty: b.difficulty,
+            speed: b.speed,
+            enabledPlayers: b.players.filter((player) => player.enabled).map((player) => player.id),
+            guide: b.guide,
+            strumGuide: b.strumGuide,
+            metronome: b.metronome,
+            repeat: b.repeatPractice,
+          },
+        };
+        const saved = saveRehearsalBookmark(bookmark);
+        setRehearsalBookmark(bookmark);
+        const warning = saved ? null : "Rehearsal kept for this visit. Your browser couldn’t save it for next time.";
+        setRehearsalWarning(warning);
+        if (warning) setToast(warning);
+      }
       setOverlay(false);
       setSoundcheckOpen(false);
       setMenu(false);
@@ -712,6 +742,12 @@ export function StageApp() {
     setVolume(saved.volume);
     setFocusStage(saved.focusStage);
     setMidiRoutes(loadMidiRoutes());
+    const bookmark = loadRehearsalBookmark();
+    const resolved = bookmark ? resolveRehearsalBookmark(bookmark, [
+      ...catalog(bookmark.setup.difficulty), ...library.entries.map(songFromSavedChart),
+    ]) : null;
+    setRehearsalBookmark(resolved?.bookmark ?? null);
+    if (!resolved) clearRehearsalBookmark();
     setPreferencesHydrated(true);
   }, []);
 
@@ -723,6 +759,14 @@ export function StageApp() {
   useEffect(() => {
     if (preferencesHydrated) saveMidiRoutes(midiRoutes);
   }, [preferencesHydrated, midiRoutes]);
+
+  useEffect(() => {
+    if (!preferencesHydrated || !rehearsalBookmark || savedRehearsal) return;
+    // A removed import or changed passage must never reopen a different chart.
+    setRehearsalBookmark(null);
+    setRehearsalWarning(null);
+    clearRehearsalBookmark();
+  }, [preferencesHydrated, rehearsalBookmark, savedRehearsal]);
 
   // Commit session readiness before the animation loop can publish HUD updates.
   useLayoutEffect(() => {
@@ -1203,6 +1247,34 @@ export function StageApp() {
     });
   }
 
+  function continueRehearsal() {
+    if (!savedRehearsal || !ready || status === "playing" || status === "starting") return;
+    const { bookmark, song: restoredSong, section } = savedRehearsal;
+    resetReady();
+    setPlayers((current) => current.map((player) => ({ ...player, enabled: bookmark.setup.enabledPlayers.includes(player.id) })));
+    setSongId(restoredSong.id);
+    setDifficulty(bookmark.setup.difficulty);
+    setSpeed(bookmark.setup.speed);
+    setGuide(bookmark.setup.guide);
+    setStrumGuide(bookmark.setup.strumGuide);
+    setMetronome(bookmark.setup.metronome);
+    setRepeatPractice(bookmark.setup.repeat);
+    setPracticeSelection({ songId: restoredSong.id, sectionId: section.id });
+    setSongMapOpen(false);
+    setSoundcheckOpen(false);
+    setMenu(false);
+    setToast(`${section.name} is ready to rehearse. Start when you’re ready.`);
+    focusTransport();
+  }
+
+  function forgetRehearsal() {
+    const cleared = clearRehearsalBookmark();
+    setRehearsalBookmark(null);
+    setRehearsalWarning(null);
+    setToast(cleared ? "Saved rehearsal forgotten." : "Rehearsal hidden for this visit. Your browser couldn’t remove the saved copy.");
+    requestAnimationFrame(() => finderTriggerRef.current?.focus({ preventScroll: true }));
+  }
+
   function openMenu() {
     if (bag.current?.status === "starting") resetReady();
     else pauseSession();
@@ -1400,7 +1472,9 @@ export function StageApp() {
   const enabled = players.filter((p) => p.enabled);
   const busy = status === "playing" || status === "starting";
   const setupLabel = `${enabled.map((player) => player.label).join(" + ")} · ${difficulty[0]!.toUpperCase()}${difficulty.slice(1)} · ${Math.round(speed * 100)}% tempo · ${midi.connected ? "MIDI connected" : "Keyboard ready"}`;
+  const rehearsalSetupLabel = savedRehearsal ? `${savedRehearsal.bookmark.setup.enabledPlayers.map((id) => players.find((player) => player.id === id)?.label ?? id).join(" + ")} · ${savedRehearsal.bookmark.setup.difficulty} · ${Math.round(savedRehearsal.bookmark.setup.speed * 100)}% tempo` : "";
   const finderItems: StageFinderItem[] = finderOpen ? [
+    ...(savedRehearsal ? [{ id: "continue-rehearsal", group: "Stage" as const, icon: "passage" as const, label: "Continue last rehearsal", detail: `${savedRehearsal.song.name} · ${savedRehearsal.section.name} · ${rehearsalSetupLabel}`, keywords: ["saved", "continue", "practice", "bookmark", "return"], disabled: !ready || busy, onSelect: continueRehearsal }] : []),
     { id: "play-focus", group: "Stage", icon: "play", label: status === "paused" ? "Resume in focus" : "Play in focus", detail: status === "paused" ? "Keep your place and score; bring the highway forward" : practice ? `${practice.name} · count-in and a fresh take` : "Bring the highway forward and start this set", keywords: ["start", "play", "resume", "focus", "rehearse"], disabled: !ready || busy, onSelect: () => {
       setFocusStage(true);
       setSongMapOpen(false);
@@ -1636,6 +1710,19 @@ export function StageApp() {
             </button>
             <p className="stage-launch-setup"><i aria-hidden="true" /><span>{setupLabel}</span></p>
           </div>
+
+          {savedRehearsal && ready && status === "ready" && !results && !practice ? (
+            <RehearsalBookmarkCard
+              songName={savedRehearsal.song.name}
+              sectionName={savedRehearsal.section.name}
+              start={savedRehearsal.section.start}
+              end={savedRehearsal.section.end}
+              setupLabel={rehearsalSetupLabel}
+              warning={rehearsalWarning}
+              onContinue={continueRehearsal}
+              onDismiss={forgetRehearsal}
+            />
+          ) : null}
 
           <div ref={transportRef} role="group" aria-label="Playback controls" className="stage-transport flex flex-wrap items-center justify-between gap-2">
             <div className="flex flex-wrap gap-2">
