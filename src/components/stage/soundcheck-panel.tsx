@@ -1,7 +1,24 @@
-import { Check, Music2, Plug, Volume2, VolumeX, X } from "lucide-react";
+import { Check, Guitar, Music2, Plug, Volume2, VolumeX, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { MidiRoute, MidiRoutes } from "@/lib/midi-stage/midi-routing";
+import type { CableCalibrationRecord } from "@/lib/midi-stage/guitar-cable";
+import type { CableDeviceInfo, CableStatus, CalibrationPhase } from "@/components/stage/use-guitar-cable";
 import type { Instrument, Player } from "@/lib/midi-stage/types";
+
+export type CablePanelProps = {
+  status: CableStatus;
+  error: string | null;
+  devices: CableDeviceInfo[];
+  deviceId: string;
+  level: number;
+  lastNote: string;
+  calibration: CableCalibrationRecord | null;
+  calibrationState: CalibrationPhase;
+  onDeviceChange: (deviceId: string) => void;
+  onConnect: () => void;
+  onDisconnect: () => void;
+  onCalibrate: () => void;
+};
 
 type SoundcheckPanelProps = {
   players: Player[];
@@ -19,6 +36,9 @@ type SoundcheckPanelProps = {
   onConnect: () => void;
   onRouteChange: (id: Instrument, route: MidiRoute) => void;
   onClose: () => void;
+  /** Shown for real-guitar songs: plug a guitar into an audio interface. */
+  cableSupported: boolean;
+  cable: CablePanelProps;
 };
 
 const selectClass =
@@ -40,6 +60,8 @@ export function SoundcheckPanel({
   onConnect,
   onRouteChange,
   onClose,
+  cableSupported,
+  cable,
 }: SoundcheckPanelProps) {
   return (
     <section
@@ -233,6 +255,132 @@ export function SoundcheckPanel({
           If assignments match, the first part in the lineup plays.
         </p>
       </div>
+
+      {cableSupported ? <CableSection cable={cable} audioReady={audioReady} /> : null}
     </section>
+  );
+}
+
+function CableSection({ cable, audioReady }: { cable: CablePanelProps; audioReady: boolean }) {
+  const connected = cable.status === "ready";
+  const busy = cable.status === "requesting";
+  const calibrating = cable.calibrationState.phase === "running";
+  return (
+    <div className="mt-5 border-t border-border pt-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <h3 className="text-sm font-medium">Guitar cable input</h3>
+          <p className="mt-1 text-sm leading-relaxed text-muted">
+            Plug your guitar into an audio interface. Pitch detection scores the notes you play;
+            like MIDI, it cannot tell which string you used.
+          </p>
+        </div>
+        {connected ? (
+          <Button type="button" variant="secondary" className="shrink-0" onClick={cable.onDisconnect}>
+            Disconnect cable
+          </Button>
+        ) : (
+          <Button
+            type="button"
+            variant="secondary"
+            className="shrink-0"
+            disabled={busy || !audioReady}
+            aria-busy={busy}
+            onClick={cable.onConnect}
+          >
+            <Guitar className="size-4" aria-hidden="true" />
+            {busy ? "Connecting…" : "Connect guitar cable"}
+          </Button>
+        )}
+      </div>
+
+      {!audioReady ? (
+        <p className="mt-3 text-sm leading-relaxed text-muted">
+          Enable sound above first — the cable shares the stage&apos;s audio engine.
+        </p>
+      ) : null}
+      {cable.error ? (
+        <p role="alert" className="mt-3 break-words text-sm leading-relaxed text-tungsten">
+          {cable.error}
+        </p>
+      ) : null}
+
+      <div className="mt-4 grid min-w-0 gap-3 sm:grid-cols-2">
+        <label className="flex min-w-0 flex-col gap-2 text-xs font-medium text-muted">
+          Audio input
+          <select
+            aria-label="Guitar cable audio input"
+            className={selectClass}
+            value={cable.deviceId}
+            disabled={connected}
+            onChange={(event) => cable.onDeviceChange(event.target.value)}
+          >
+            <option value="">System default</option>
+            {cable.devices.map((device) => (
+              <option key={device.deviceId} value={device.deviceId}>
+                {device.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <div className="flex min-w-0 flex-col gap-2 text-xs font-medium text-muted">
+          <span id="cable-level-label">Input level{cable.lastNote ? ` · ${cable.lastNote}` : ""}</span>
+          <div
+            role="meter"
+            aria-labelledby="cable-level-label"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={Math.round(cable.level * 100)}
+            className="h-11 w-full min-w-0 overflow-hidden rounded-lg border border-border bg-elevated"
+          >
+            <div
+              className="h-full bg-accent transition-[width] duration-100"
+              style={{ width: `${Math.round(cable.level * 100)}%` }}
+            />
+          </div>
+        </div>
+      </div>
+      {connected ? (
+        <p className="mt-3 text-xs leading-relaxed text-muted">
+          Play a note: the meter should move and the detected pitch should appear above.
+        </p>
+      ) : null}
+
+      <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <h4 className="text-sm font-medium">Latency calibration</h4>
+          <p className="mt-1 text-sm leading-relaxed text-muted">
+            {cable.calibration
+              ? `Input latency ${cable.calibration.offsetMs.toFixed(0)} ms, measured ${cable.calibration.taps} strums.`
+              : "Not calibrated yet — timing scores assume zero input latency."}
+          </p>
+        </div>
+        <Button
+          type="button"
+          variant="secondary"
+          className="shrink-0"
+          disabled={!connected || calibrating}
+          aria-busy={calibrating}
+          onClick={cable.onCalibrate}
+        >
+          {calibrating ? "Listening…" : cable.calibration ? "Re-calibrate" : "Calibrate latency"}
+        </Button>
+      </div>
+      {cable.calibrationState.phase === "running" ? (
+        <p role="status" className="mt-3 text-sm leading-relaxed text-muted">
+          Strum once on each click… {cable.calibrationState.taps} of {cable.calibrationState.total} heard.
+        </p>
+      ) : null}
+      {cable.calibrationState.phase === "done" ? (
+        <p role="status" className="mt-3 text-sm leading-relaxed text-muted">
+          Latency {cable.calibrationState.offsetMs.toFixed(0)} ms saved from {cable.calibrationState.taps} strums.
+        </p>
+      ) : null}
+      {cable.calibrationState.phase === "failed" ? (
+        <p role="alert" className="mt-3 text-sm leading-relaxed text-tungsten">
+          {cable.calibrationState.reason}
+        </p>
+      ) : null}
+    </div>
   );
 }

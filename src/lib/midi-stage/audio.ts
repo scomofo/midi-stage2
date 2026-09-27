@@ -128,6 +128,15 @@ export class AudioEngine {
     return (this.contextAt(stamp) - this.origin) * this.speed;
   }
 
+  /**
+   * Song time of a moment on the AudioContext clock itself (e.g. an
+   * AudioWorklet timestamp). Unlike songAt(), this carries no output-latency
+   * adjustment: input paths measure their own latency by calibration.
+   */
+  songAtAudioTime(audioTime: number) {
+    return (audioTime - this.origin) * this.speed;
+  }
+
   track(source: AudioScheduledSourceNode, gain: GainNode, filter?: BiquadFilterNode) {
     const voice: Voice = {
       source,

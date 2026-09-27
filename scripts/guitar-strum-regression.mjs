@@ -112,7 +112,7 @@ try {
   const assertGatedStart = async () => {
     const before = await page.evaluate(() => window.guitarProbe.begins);
     await start.click();
-    await page.getByText('Connect a guitar MIDI input in Soundcheck, or choose Watch the house to play along.', { exact: true }).first().waitFor();
+    await page.getByText('connect a guitar MIDI device or guitar cable in Soundcheck', { exact: false }).first().waitFor();
     await page.locator('#soundcheck-panel').waitFor();
     await frames();
     assert.equal(await page.evaluate(() => window.guitarProbe.live.status), 'ready');

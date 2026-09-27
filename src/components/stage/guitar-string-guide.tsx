@@ -16,6 +16,8 @@ export type GuitarStringGuideProps = {
   targets: { string: 1 | 2 | 3 | 4 | 5 | 6; fret: number }[];
   chord?: string;
   connected: boolean;
+  /** When true, the connected input is a guitar cable, not MIDI. */
+  cableConnected?: boolean;
   connecting: boolean;
   onConnect: () => void;
   onArcade: () => void;
@@ -26,6 +28,7 @@ export function GuitarStringGuide({
   targets,
   chord,
   connected,
+  cableConnected = false,
   connecting,
   onConnect,
   onArcade,
@@ -66,8 +69,10 @@ export function GuitarStringGuide({
       </ol>
       <p className="guitar-string-guide-help" id={`${id}-help`}>
         {connected
-          ? "Play the shown strings and frets. MIDI scores the notes you send; it cannot verify which string you played."
-          : "Follow the string lanes and fret numbers on your guitar. Use Watch the house to play along without scoring, or connect a guitar MIDI device."}
+          ? cableConnected
+            ? "Play the shown strings and frets. Cable input scores the pitches you play; it cannot verify which string you played."
+            : "Play the shown strings and frets. MIDI scores the notes you send; it cannot verify which string you played."
+          : "Follow the string lanes and fret numbers on your guitar. Use Watch the house to play along without scoring, or connect a guitar MIDI device or guitar cable in Soundcheck."}
       </p>
       <div className="guitar-string-guide-actions">
         {!connected ? (

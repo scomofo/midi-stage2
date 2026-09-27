@@ -33,6 +33,7 @@ import { defaultMidiRoutes, loadMidiRoutes, saveMidiRoutes, resolveMidiPlayer, t
 import { loadSessionPreferences, saveSessionPreferences } from "@/lib/midi-stage/preferences";
 import { clearRehearsalBookmark, loadRehearsalBookmark, resolveRehearsalBookmark, saveRehearsalBookmark, type RehearsalBookmark } from "@/lib/midi-stage/rehearsal-bookmark";
 import { useStageMidi } from "@/components/stage/use-stage-midi";
+import { useGuitarCable } from "@/components/stage/use-guitar-cable";
 import { PianoGuide } from "@/components/stage/piano-guide";
 import { AudioEngine } from "@/lib/midi-stage/audio";
 import {
@@ -160,6 +161,10 @@ export function StageApp() {
   const [importError, setImportError] = useState<string | null>(null);
   const [libraryWarning, setLibraryWarning] = useState<string | null>(null);
   const guitarMidiReadyRef = useRef(false);
+  const guitarCableReadyRef = useRef(false);
+  const cableToken = useRef<string | null>(null);
+  const cableCount = useRef(0);
+  const cableOffsetMs = useRef(0);
   const midiOwners = useRef(new Map<string, { playerId: Instrument; token: string }>());
   const [midiRoutes, setMidiRoutes] = useState(defaultMidiRoutes);
   const [preferencesHydrated, setPreferencesHydrated] = useState(false);
@@ -382,16 +387,17 @@ export function StageApp() {
     if (b.particles.length > 280) b.particles.splice(0, b.particles.length - 280);
   }
 
-  function hit(b: Bag, p: Player, lane: number, token: string, velocity = 105, inputPitch?: number) {
+  function hit(b: Bag, p: Player, lane: number, token: string, velocity = 105, inputPitch?: number, at?: number) {
     if (b.song.guitarMode === "fret-strum" && p.id === "guitar") {
       if (!token.startsWith("midi:")) holdFret(b, lane, token);
       return;
     }
     const judge = b.judges.get(p.id);
     if (b.song.guitarMode === "strings" && p.id === "guitar") {
-      if (!judge || inputPitch == null || !token.startsWith("midi:") || b.demo
+      if (!judge || inputPitch == null || !(token.startsWith("midi:") || token.startsWith("cable:"))
+        || b.demo
         || b.status === "paused" || b.status === "starting" || b.feelOpen || b.libraryOpen || b.finderOpen) return;
-      const t = b.status === "playing" ? b.audio.songAt() : b.position;
+      const t = at ?? (b.status === "playing" ? b.audio.songAt() : b.position);
       const matched = b.status === "playing" && t >= -judge.windows[2]!
         ? judge.hitPitch(t, inputPitch, token) : null;
       const stringLane = matched?.lane ?? judge.notes.find((note) => note.pitch === inputPitch)?.lane;
@@ -400,7 +406,9 @@ export function StageApp() {
         b.padFlash.set(`${p.id}:${stringLane}`, now + 0.16);
         b.flashes.push({ player: p.id, lane: stringLane, until: now + 0.1, kind: "press" });
       }
-      if (b.status === "ready") setLastPlayed(`Guitar · ${noteName(inputPitch)} · MIDI pitch`);
+      if (b.status === "ready") {
+        setLastPlayed(`Guitar · ${noteName(inputPitch)} · ${token.startsWith("cable:") ? "cable pitch" : "MIDI pitch"}`);
+      }
       b.audio.monitor(token, "guitar", inputPitch, velocity, matched ? matched.duration / b.speed : 1.4);
       return;
     }
@@ -414,7 +422,7 @@ export function StageApp() {
     b.padFlash.set(`${p.id}:${lane}`, now + 0.16);
     b.pressed.set(`${p.id}:${lane}`, now + 0.18);
     b.flashes.push({ player: p.id, lane, until: now + 0.1, kind: "press" });
-    const t = b.status === "playing" ? b.audio.songAt() : b.position;
+    const t = at ?? (b.status === "playing" ? b.audio.songAt() : b.position);
     let matched = null;
     if (b.status === "playing" && t >= -judge.windows[2]! && !b.demo) matched = judge.hit(t, lane, token, inputPitch);
     if (!b.demo) {
@@ -423,9 +431,9 @@ export function StageApp() {
     }
   }
 
-  function release(b: Bag, p: Player, token: string) {
+  function release(b: Bag, p: Player, token: string, at?: number) {
     if (b.song.guitarMode === "fret-strum" && p.id === "guitar") { releaseFret(b, token); return; }
-    const t = b.status === "playing" ? b.audio.songAt() : b.position;
+    const t = at ?? (b.status === "playing" ? b.audio.songAt() : b.position);
     b.judges.get(p.id)?.release(token, t);
     b.audio.release(token);
   }
@@ -597,8 +605,9 @@ export function StageApp() {
   const startSession = useCallback(async (demo = false, repeating = false) => {
     const b = bag.current;
     if (!b || b.libraryOpen || b.status === "playing" || b.status === "starting") return;
-    if (b.song.guitarMode === "strings" && !demo && !(b.status === "paused" && b.demo) && !guitarMidiReadyRef.current) {
-      setToast("Connect a guitar MIDI input in Soundcheck, or choose Watch the house to play along.");
+    if (b.song.guitarMode === "strings" && !demo && !(b.status === "paused" && b.demo)
+      && !(guitarMidiReadyRef.current || guitarCableReadyRef.current)) {
+      setToast("Connect a guitar MIDI input or guitar cable in Soundcheck, or choose Watch the house to play along.");
       setSoundcheckOpen(true);
       return;
     }
@@ -1260,6 +1269,34 @@ export function StageApp() {
     && (midiRoutes.guitar.mode !== "device" || midi.inputs.some((input) => input.id === midiRoutes.guitar.inputId));
   useEffect(() => { guitarMidiReadyRef.current = guitarMidiReady; }, [guitarMidiReady]);
 
+  const guitarCable = useGuitarCable({
+    getAudio: () => bag.current?.audio ?? null,
+    callbacks: {
+      onOnset: (note, velocity, audioTime) => {
+        const b = bag.current;
+        const p = b?.players.find((player) => player.id === "guitar");
+        if (!b || !p || b.song.guitarMode !== "strings") return;
+        const t = b.audio.songAtAudioTime(audioTime) - cableOffsetMs.current / 1000;
+        if (cableToken.current) release(b, p, cableToken.current, t);
+        const token = `cable:${cableCount.current++}`;
+        cableToken.current = token;
+        hit(b, p, 0, token, velocity, note, t);
+      },
+      onRelease: (audioTime) => {
+        const b = bag.current;
+        const p = b?.players.find((player) => player.id === "guitar");
+        if (!b || !p || !cableToken.current) return;
+        const t = b.audio.songAtAudioTime(audioTime) - cableOffsetMs.current / 1000;
+        release(b, p, cableToken.current, t);
+        cableToken.current = null;
+      },
+      onDisconnect: () => pauseSession("Guitar cable disconnected. Reconnect in Soundcheck, or use Watch the house to play along."),
+    },
+  });
+  const cableReady = guitarCable.status === "ready";
+  useEffect(() => { guitarCableReadyRef.current = cableReady; }, [cableReady]);
+  useEffect(() => { cableOffsetMs.current = guitarCable.calibration?.offsetMs ?? 0; }, [guitarCable.calibration]);
+
   function changeMidiRoute(id: Instrument, route: MidiRoute) {
     const b = bag.current;
     if (!b || b.status === "playing" || b.status === "starting") return;
@@ -1303,6 +1340,7 @@ export function StageApp() {
       for (const j of b.judges.values()) for (const token of [...j.held.keys()]) j.release(token, b.position);
       for (const token of [...b.audio.monitorVoices.keys()]) b.audio.release(token);
       midiOwners.current.clear();
+      cableToken.current = null;
       b.canvasPtrs.clear();
       b.fretInputs.clear();
       setSelectedFrets([]);
@@ -1906,6 +1944,21 @@ export function StageApp() {
               onConnect={() => void midi.connect()}
               onRouteChange={changeMidiRoute}
               onClose={() => setSoundcheckOpen(false)}
+              cableSupported={realGuitar}
+              cable={{
+                status: guitarCable.status,
+                error: guitarCable.error,
+                devices: guitarCable.devices,
+                deviceId: guitarCable.deviceId,
+                level: guitarCable.level,
+                lastNote: guitarCable.lastNote,
+                calibration: guitarCable.calibration,
+                calibrationState: guitarCable.calibrationState,
+                onDeviceChange: guitarCable.setDeviceId,
+                onConnect: () => void guitarCable.connect(),
+                onDisconnect: guitarCable.disconnect,
+                onCalibrate: guitarCable.startCalibration,
+              }}
             />
           ) : null}
 
@@ -2028,8 +2081,9 @@ export function StageApp() {
           {realGuitar ? <GuitarStringGuide
             targets={hud.guitarShape}
             chord={hud.guitarChord}
-            connected={guitarMidiReady}
-            connecting={midi.connecting}
+            connected={guitarMidiReady || cableReady}
+            cableConnected={cableReady && !guitarMidiReady}
+            connecting={midi.connecting || guitarCable.status === "requesting"}
             onConnect={() => { if (midi.connected && !guitarMidiReady) setSoundcheckOpen(true); else void midi.connect(); }}
             onArcade={() => { const arcade = songs.find((candidate) => candidate.id === "backline-drive-arcade"); if (arcade) selectSong(arcade); }}
             disabled={busy}
