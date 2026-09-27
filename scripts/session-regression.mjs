@@ -163,6 +163,22 @@ try {
   });
   assert.equal(await page.evaluate(() => window.sessionProbe.beginCalls), 2,
     'Enter on Start must begin exactly one set');
+  for (const count of [4, 3, 2, 1]) {
+    await page.evaluate((count) => {
+      const p = window.sessionProbe;
+      p.time = -(count - 0.2) * 60 / p.audio.song.bpm;
+    }, count);
+    await page.waitForFunction((count) => document.querySelector('.stage-count-in')?.getAttribute('data-count') === String(count), count);
+    assert.equal(await page.locator('.stage-playback-state').innerText(), 'Count-in');
+    assert.match(await page.getByRole('progressbar', { name: 'Song progress', exact: true }).getAttribute('aria-valuetext'), /0%, Count-in/);
+    if (count === 4) {
+      await page.evaluate(() => { window.countInAnnouncement = document.querySelector('.stage-count-in [role="status"]'); });
+      await screenshot('session-count-in.png');
+    } else {
+      assert.equal(await page.evaluate(() => window.countInAnnouncement === document.querySelector('.stage-count-in [role="status"]')), true,
+        'count-in must not remount its phase announcement each beat');
+    }
+  }
   await page.evaluate(() => {
     const p = window.sessionProbe;
     document.body.dispatchEvent(new KeyboardEvent('keydown', { code: p.keys[0], bubbles: true }));
@@ -247,6 +263,13 @@ try {
   await page.keyboard.press('Enter');
   await resume.waitFor();
   await page.getByRole('button', { name: 'Resume set', exact: true }).waitFor();
+  await page.waitForFunction(() => document.activeElement?.matches('[data-session-overlay="paused"] h2'));
+  await page.keyboard.press('Tab');
+  assert.equal(await page.getByRole('button', { name: 'Resume set', exact: true }).evaluate((button) => button === document.activeElement), true,
+    'Tab from the paused heading must reach Resume');
+  await frames();
+  assert.equal(await page.getByRole('button', { name: 'Resume set', exact: true }).evaluate((button) => button === document.activeElement), true,
+    'HUD updates must not steal pause action focus');
   assert.equal(await page.evaluate(() => window.sessionProbe.audio.running), false,
     'Enter on Pause must pause once without toggling back to play');
   // Listening options may change while paused without resetting the session.
@@ -256,6 +279,19 @@ try {
   await resume.focus();
   await page.keyboard.press('Space');
   await page.waitForFunction(() => window.sessionProbe.audio.running);
+  // Live accessibility changes must not restart the clock or lose a held note.
+  const callsBeforeMotion = await page.evaluate(() => window.sessionProbe.beginCalls);
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.waitForFunction(() => window.sessionProbe.live.reduced === true);
+  await page.evaluate(() => {
+    const p = window.sessionProbe;
+    if (p.judge !== p.originalJudge || p.judge.stats.score !== p.score || p.note.hold !== 'held')
+      throw Error('Changing reduced motion must preserve the active scoring session and hold');
+  });
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await page.waitForFunction(() => window.sessionProbe.live.reduced === false);
+  assert.equal(await page.evaluate(() => window.sessionProbe.beginCalls), callsBeforeMotion,
+    'motion preference changes must not restart audio');
   await page.evaluate(() => {
     const p = window.sessionProbe;
     if (p.judge !== p.originalJudge || p.judge.stats.score !== p.score || p.note.hold !== 'held')
@@ -286,6 +322,7 @@ try {
   assert.match(await page.locator('.session-timing-part[data-part="keys"]').innerText(), /Not enough hits yet/,
     'one successful hit must not produce a confident timing diagnosis');
   assert.match(await page.locator('.session-timing-part[data-part="keys"]').innerText(), /1 recent hit/);
+  assert.equal(await page.getByRole('meter', { name: 'Keys near centre hits', exact: true }).getAttribute('max'), '1');
   await screenshot('session-results.png');
   // A genuine scored replay must still finish when durable best storage fails.
   await page.evaluate(() => {
@@ -398,6 +435,9 @@ try {
   await page.getByRole('button', { name: 'The room', exact: true }).click();
   await page.getByRole('dialog').waitFor();
   await resume.waitFor();
+  await frames();
+  assert.equal(await page.evaluate(() => Boolean(document.activeElement?.closest('[role="dialog"]'))), true,
+    'pause handoff must not steal focus from room settings');
   assert.equal(await page.evaluate(() => window.sessionProbe.audio.running), false,
     'opening room settings during play must pause the set');
   await page.keyboard.press('Escape');
@@ -405,7 +445,15 @@ try {
   assert.equal(await resume.isEnabled(), true, 'closing settings must preserve the paused set');
   await page.getByRole('button', { name: 'Focus stage', exact: true }).click();
   assert.equal(await page.getByRole('button', { name: 'Show setlist', exact: true }).getAttribute('aria-pressed'), 'true');
+  await page.locator('.stage-setup').scrollIntoViewIfNeeded();
+  const desktopTransport = await page.getByRole('group', { name: 'Playback controls', exact: true }).boundingBox();
+  assert.ok(desktopTransport && desktopTransport.y >= -1 && desktopTransport.y <= 1,
+    'focused playback controls must stay at the top when setup is in view');
   await page.setViewportSize({ width: 390, height: 844 });
+  await page.locator('.stage-setup').scrollIntoViewIfNeeded();
+  const mobileTransport = await page.getByRole('group', { name: 'Playback controls', exact: true }).boundingBox();
+  assert.ok(mobileTransport && mobileTransport.y >= -1 && mobileTransport.y <= 1 && mobileTransport.width <= 390,
+    'focused playback controls must remain usable after a phone resize');
   await page.getByRole('button', { name: 'Open setlist', exact: true }).click();
   const setlist = page.getByRole('complementary', { name: 'Setlist and lineup', exact: true });
   await setlist.waitFor();
@@ -434,6 +482,7 @@ try {
   assert.match(await emptyTiming.innerText(), /Not enough hits yet/);
   assert.match(await emptyTiming.innerText(), /No successful hits to review\./,
     'a no-hit take must not report perfect timing or a trend');
+  assert.equal(await emptyTiming.getByRole('meter').count(), 0, 'empty timing must not draw misleading meters');
 
   // Finish genuine keyboard takes at known offsets. The probe observes the
   // same judges drawn by the stage; scores and timing samples are never seeded.
@@ -492,6 +541,12 @@ try {
   assert.match(await page.locator('.session-run-context').innerText(), /Standard · 100% tempo · Keys/);
   assert.match(await timingPart('keys').innerText(), /Mostly early/);
   assert.match(await timingPart('keys').innerText(), /8 recent hits · 6 early · 2 near centre · 0 late/);
+  for (const [band, count] of [['early', 6], ['near centre', 2], ['late', 0]]) {
+    const meter = page.getByRole('meter', { name: `Keys ${band} hits`, exact: true });
+    assert.equal(await meter.getAttribute('value'), String(count));
+    assert.equal(await meter.getAttribute('max'), '8');
+    assert.equal(await meter.getAttribute('aria-valuetext'), `${count} of 8 recent successful hits`);
+  }
   assert.equal(await page.locator('.session-timing-part').count(), 1, 'solo results must contain only the active part');
   await assertResultsFocus();
   await screenshot('session-timing-early.png');

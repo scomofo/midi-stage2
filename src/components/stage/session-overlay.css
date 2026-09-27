@@ -325,6 +325,48 @@
   font-size: var(--session-text-sm);
   font-weight: 500;
 }
+.session-timing-distribution {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--session-space-sm);
+  margin-block: var(--session-space-sm);
+}
+.session-timing-band {
+  --timing-band-color: var(--color-tungsten);
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: var(--session-space-xs);
+  color: var(--color-muted);
+  font-size: var(--session-text-sm);
+  line-height: 1.5;
+}
+.session-timing-band--centered { --timing-band-color: var(--color-accent); }
+.session-timing-band--late { --timing-band-color: var(--color-muted); }
+.session-timing-band meter {
+  display: block;
+  width: 100%;
+  height: 8px;
+  appearance: none;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: var(--color-elevated);
+  accent-color: var(--timing-band-color);
+}
+.session-timing-band meter::-webkit-meter-bar {
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: var(--color-elevated);
+  box-shadow: none;
+}
+.session-timing-band meter::-webkit-meter-optimum-value {
+  border-radius: var(--radius-xs);
+  background: var(--timing-band-color);
+}
+.session-timing-band meter::-moz-meter-bar {
+  border-radius: var(--radius-xs);
+  background: var(--timing-band-color);
+}
 .session-timing-counts {
   font-variant-numeric: tabular-nums;
 }

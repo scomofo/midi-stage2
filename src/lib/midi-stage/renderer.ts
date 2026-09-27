@@ -448,6 +448,7 @@ export class StageRenderer {
     if (lights < 0.03) return;
     const e = Math.min(1, state.energy * 0.8 + this.cue.drive * 0.4);
     const t = state.reduced ? 0 : this.cue.clock;
+    const geometricBloom = state.reduced ? 0 : state.bloom;
     const beat = Math.PI;
     const cue = state.feel.heads ?? "fan";
     const cone = (
@@ -479,7 +480,7 @@ export class StageRenderer {
       const pulse = 0.68 + this.cue.pulse * 0.22 + this.cue.drive * 0.1;
       const tint = c.i % 2 ? this.cue.secondary : this.cue.primary;
       const a = (0.12 + e * 0.1 + state.bloom * 0.16) * lights * pulse;
-      const half = w * c.spread * (0.9 + state.bloom * 0.1);
+      const half = w * c.spread * (0.9 + geometricBloom * 0.1);
       cone(originX, aimX, landY, half * 1.32, a * 0.28, tint);
       cone(originX, aimX, landY, half, a * 0.55, tint);
       cone(originX, aimX, landY, half * 0.32, a * 0.7, tint);
@@ -494,7 +495,7 @@ export class StageRenderer {
         aimX,
         landY,
         half * 0.82,
-        13 + state.bloom * 7,
+        13 + geometricBloom * 7,
         tint,
         a,
         phase,
@@ -687,6 +688,7 @@ export class StageRenderer {
     const e = Math.min(1, state.energy * 0.8 + this.cue.drive * 0.4);
     const pulse = 0.7 + this.cue.pulse * 0.3;
     const lift = 1 + state.bloom * 0.65;
+    const geometricBloom = state.reduced ? 0 : state.bloom;
     for (const c of this.crowd) {
       const gallery = c.y < 0.55;
       const twinkle = state.reduced
@@ -722,8 +724,8 @@ export class StageRenderer {
       ctx.beginPath();
       ctx.arc(
         c.x * w,
-        c.y * h - state.bloom * (gallery ? 2 : 4),
-        c.s * (1 + state.bloom * 0.24),
+        c.y * h - geometricBloom * (gallery ? 2 : 4),
+        c.s * (1 + geometricBloom * 0.24),
         0,
         Math.PI * 2,
       );
@@ -824,7 +826,7 @@ export class StageRenderer {
         this.performerArt.set(f.id, art);
       }
       const on = state.players.some((p) => p.id === f.id && p.enabled);
-      const struck = on && state.flashes.some((fl) => fl.player === f.id && fl.until > state.now);
+      const struck = on && state.flashes.some((fl) => fl.player === f.id && fl.kind === "hit" && fl.until > state.now);
       const bob = animated && on ? Math.sin(((state.t * state.song.bpm) / 60) * Math.PI) * 1.2 : 0;
       ctx.globalAlpha = on ? 0.95 : 0.55;
       ctx.drawImage(
@@ -940,6 +942,16 @@ export class StageRenderer {
       }
       const heldLanes = new Set<number>();
       for (const n of judge.activeHolds) heldLanes.add(n.lane);
+      const laneFlashes = new Map<number, Flash>();
+      for (const flash of state.flashes) {
+        if (flash.player !== p.id || flash.until <= state.now) continue;
+        const previous = laneFlashes.get(flash.lane);
+        // A press arrives before its judgment. Show the newest outcome rather
+        // than letting that earlier press conceal a miss on the same lane.
+        if (flash.kind !== "press" || !previous || previous.kind === "press") {
+          laneFlashes.set(flash.lane, flash);
+        }
+      }
 
       for (let i = 0; i < laneCount; i++) {
         const a = point(i, 0);
@@ -956,9 +968,7 @@ export class StageRenderer {
           i % 2 ? "rgba(143,212,196,0.07)" : "rgba(0,0,0,0.18)",
         );
 
-        const flash = state.flashes.find(
-          (f) => f.player === p.id && f.lane === i && f.until > state.now,
-        );
+        const flash = laneFlashes.get(i);
         const pressing = (state.pressed.get(`${p.id}:${i}`) || 0) > state.now || heldLanes.has(i);
         const soon = Number.isFinite(nextAt[i]) ? progress(nextAt[i]!) : -1;
         if (soon > 0.55 && soon < 1.08) {
@@ -975,10 +985,9 @@ export class StageRenderer {
             hexA(lanes[i]!.color, 0.08 + k * 0.22),
           );
         }
-        if (flash || pressing) {
+        if ((flash || pressing) && flash?.kind !== "miss") {
           const aa = point(i, 0.7);
           const bb = point(i + 1, 0.7);
-          const tint = flash?.kind === "miss" ? "#d36a6a" : lanes[i]!.color;
           this.poly(
             [
               [aa.x, aa.y],
@@ -986,7 +995,7 @@ export class StageRenderer {
               [c.x, c.y],
               [d.x, d.y],
             ],
-            hexA(tint, flash ? 0.32 : 0.16),
+            hexA(lanes[i]!.color, flash ? 0.32 : 0.16),
           );
         }
       }
@@ -1046,25 +1055,30 @@ export class StageRenderer {
         const mid = point(lane + 0.5, 1);
         const lw = strikeW / laneCount;
         const rx = Math.min(lw * 0.36, laneCount === 1 ? 64 : 32);
-        const flash = state.flashes.find(
-          (f) => f.player === p.id && f.lane === lane && f.until > state.now,
-        );
+        const flash = laneFlashes.get(lane);
+        const missed = flash?.kind === "miss";
         const pressing =
           (state.pressed.get(`${p.id}:${lane}`) || 0) > state.now || heldLanes.has(lane);
         const soon = Number.isFinite(nextAt[lane]) ? progress(nextAt[lane]!) : -1;
         const live = Boolean(flash || pressing);
-        const squash = state.reduced ? 1 : live ? 1.28 : soon > 0.88 ? 1.1 : 1 + beatPulse * 0.04;
-        const tint = flash?.kind === "miss" ? "#d36a6a" : lanes[lane]!.color;
+        const squash = state.reduced || missed ? 1 : live ? 1.28 : soon > 0.88 ? 1.1 : 1 + beatPulse * 0.04;
+        const tint = missed ? GRADE_COLOR.miss : lanes[lane]!.color;
+        const housingW = Math.max(1, Math.min(rx + 5, lw * 0.46 - 0.6));
+        const housingH = Math.min(12, Math.max(5, lw * 0.35));
+        const receptorH = Math.min(8, Math.max(3, lw * 0.24));
+        const receptorW = Math.min(rx * squash, Math.max(1, lw / 2 - 1.5));
         ctx.beginPath();
-        ctx.ellipse(mid.x, hit + 4, rx + 5, 12, 0, 0, Math.PI * 2);
+        ctx.ellipse(mid.x, hit + Math.min(4, housingH / 3), housingW, housingH, 0, 0, Math.PI * 2);
         ctx.fillStyle = "#05090e";
         ctx.fill();
         ctx.strokeStyle = "#647777";
         ctx.lineWidth = 1.2;
         ctx.stroke();
         ctx.beginPath();
-        ctx.ellipse(mid.x, hit, rx * squash, 8 / squash, 0, 0, Math.PI * 2);
-        ctx.fillStyle = live
+        ctx.ellipse(mid.x, hit, receptorW, receptorH / squash, 0, 0, Math.PI * 2);
+        ctx.fillStyle = missed
+          ? "#05090e"
+          : live
           ? hexA(tint, 0.62)
           : soon > 0.82
             ? hexA(tint, 0.22)
@@ -1073,7 +1087,16 @@ export class StageRenderer {
         ctx.strokeStyle = hexA(tint, live ? 1 : soon > 0.7 ? 0.9 : 0.75);
         ctx.lineWidth = live ? 2.6 : 1.5;
         ctx.stroke();
-        if (live && !state.reduced) {
+        if (missed) {
+          // A stable minus mark distinguishes an error from a successful hit,
+          // including for players who cannot distinguish the lane colors.
+          ctx.beginPath();
+          ctx.moveTo(mid.x - rx * 0.48, hit);
+          ctx.lineTo(mid.x + rx * 0.48, hit);
+          ctx.strokeStyle = "#efe8dc";
+          ctx.lineWidth = 1.6;
+          ctx.stroke();
+        } else if (live && !state.reduced) {
           ctx.save();
           ctx.shadowColor = tint;
           ctx.shadowBlur = 18;
@@ -1090,10 +1113,18 @@ export class StageRenderer {
         // Full shortcuts remain on the pad controls; don't crowd adjacent
         // receptors with a long combined hint such as "KICK · SPACE".
         if (compactHints && ctx.measureText(hint).width > lw - 4) hint = lanes[lane]!.short;
+        if (ctx.measureText(hint).width > lw - 2) {
+          // Drum names need initials in a four-player phone layout. Pitch
+          // names keep their accidentals; removing those changes the target.
+          if (p.type === "drums") hint = lanes[lane]!.short[0]!;
+        }
+        // Stagger tight pitch labels instead of dropping meaningful sharps or
+        // squeezing them illegibly. Both rows finish above the feedback strip.
+        const hintY = hit + (active.length > 2 && lw < 14 && p.type !== "drums" ? 20 + (lane % 2) * 8 : 22);
         this.text(
           hint,
           mid.x,
-          hit + 22,
+          hintY,
           hintSize,
           lanes[lane]!.color,
           "700",
@@ -1197,7 +1228,12 @@ export class StageRenderer {
           state.strumGuide && (p.type === "guitar" || state.song.matching === "rhythm")
             ? suggestedStrum(state.song, n.time)
             : undefined;
-        const rh = Math.max(4, (strum ? 15 : 10) * pos.scale + pr * 3.2) * grow;
+        const depthHeight = Math.max(4, (strum ? 15 : 10) * pos.scale + pr * 3.2) * grow * 2.8;
+        // On compact highways, preserve a readable attack face instead of
+        // stretching narrow notes into tall columns. Strum arrows get extra
+        // vertical room, and distant notes retain a small visible silhouette.
+        const widthHeight = Math.max(strum ? 4 : 3, (strum ? 9 : 7) * pos.scale, rw * 2.4 * (strum ? 1.05 : 0.7));
+        const rh = Math.min(depthHeight, widthHeight) / 2.8;
         ctx.save();
         const artKey = `${color}:${p.type === "drums"}:${strum ?? "none"}`;
         let art = this.noteArt.get(artKey);
@@ -1231,6 +1267,32 @@ export class StageRenderer {
       }
       for (const n of judge.activeHolds) if (n.time < t - 0.5 * state.speed) drawNote(n);
       ctx.restore();
+
+      let judgment: Callout | undefined;
+      for (const callout of state.callouts) {
+        if (callout.player === p.id && callout.until > state.now && (!callout.text || callout.text === callout.grade)) {
+          judgment = callout;
+        }
+      }
+      if (judgment && (judgment.grade === "miss" || judgment.grade === "extra" || judgment.grade === "release")) {
+        // Local rail brackets keep an error with its player. They sit outside
+        // the note lanes and never wash the other highways (or the whole room).
+        ctx.save();
+        ctx.globalAlpha = clamp((judgment.until - state.now) / 0.24, 0, 1);
+        ctx.strokeStyle = GRADE_COLOR[judgment.grade];
+        ctx.lineWidth = 2.5;
+        ctx.lineCap = "round";
+        for (const side of [0, 1]) {
+          const from = rail(side, 1);
+          const to = rail(side, 1.05);
+          ctx.beginPath();
+          ctx.moveTo(from.x, from.y);
+          ctx.lineTo(to.x, to.y);
+          ctx.lineTo(to.x + (side === 0 ? 1 : -1) * Math.min(10, bw * 0.05), to.y);
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
     });
 
     this.geom = geom;
@@ -1411,14 +1473,7 @@ export class StageRenderer {
     ctx.fillStyle = bottom;
     ctx.fillRect(0, 0, w, h);
 
-    const miss = state.callouts.find(
-      (c) => (c.grade === "miss" || c.grade === "extra") && c.until > state.now,
-    );
-    if (miss) {
-      const k = clamp((miss.until - state.now) / 0.7, 0, 1);
-      ctx.fillStyle = `rgba(211,106,106,${0.1 * k})`;
-      ctx.fillRect(0, 0, w, h);
-    } else if (state.bloom > 0.15 && !state.reduced) {
+    if (state.bloom > 0.15 && !state.reduced) {
       const flash = ctx.createRadialGradient(w * 0.5, h * 0.18, 8, w * 0.5, h * 0.22, w * 0.4);
       flash.addColorStop(0, hexA("#efe8dc", state.bloom * 0.1));
       flash.addColorStop(0.45, hexA("#c4a882", state.bloom * 0.05));

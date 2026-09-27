@@ -16,6 +16,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { FeelPanel } from "@/components/stage/feel-panel";
 import { SessionOverlay, type SessionResults } from "@/components/stage/session-overlay";
+import { StageCountIn } from "@/components/stage/stage-count-in";
 import { PracticeControls } from "@/components/stage/practice-controls";
 import { loadAudioAsset, saveAudioAsset, deleteAudioAsset } from "@/lib/midi-stage/audio-assets";
 import type { AudioImportProgress } from "@/lib/midi-stage/audio-import";
@@ -155,6 +156,7 @@ export function StageApp() {
   const panelRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLElement>(null);
   const [focusStage, setFocusStage] = useState(false);
+  const transportRef = useRef<HTMLDivElement>(null);
   const bag = useRef<Bag | null>(null);
   const [ready, setReady] = useState(false);
   const [songId, setSongId] = useState("open-stage");
@@ -752,6 +754,23 @@ export function StageApp() {
   }, [strumGuide, initBag]);
 
   useEffect(() => {
+    const motion = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const applyMotion = () => {
+      const b = bag.current;
+      if (!b) return;
+      b.reduced = motion.matches;
+      if (motion.matches) {
+        b.particles = [];
+        b.trauma = 0;
+        b.bloom = 0;
+      }
+    };
+    applyMotion();
+    motion.addEventListener("change", applyMotion);
+    return () => motion.removeEventListener("change", applyMotion);
+  }, []);
+
+  useEffect(() => {
     setFeel(loadFeel());
     setFeelHydrated(true);
   }, []);
@@ -1344,8 +1363,10 @@ export function StageApp() {
   const progress = stageSong.duration > 0 ? (elapsed / stageSong.duration) * 100 : 0;
   const currentSectionIndex = timelineSections.reduce((current, section, index) => section.time <= elapsed ? index : current, 0);
   const currentSection = timelineSections[currentSectionIndex];
-  const nextSection = timelineSections[currentSectionIndex + 1];
-  const timelineStatus = results ? "Complete" : status === "ready" ? "Ready" : status === "starting" ? "Starting" : status === "paused" ? "Paused" : bag.current?.demo ? "Autoplay" : "Playing";
+  const countIn = status === "playing" && /^[1-4]$/.test(hud.countdown) ? Number(hud.countdown) as 1 | 2 | 3 | 4 : 0;
+  const currentSectionName = countIn ? "Count-in" : currentSection?.name || "Opening";
+  const nextSection = countIn ? currentSection : timelineSections[currentSectionIndex + 1];
+  const timelineStatus = results ? "Complete" : status === "ready" ? "Ready" : status === "starting" ? "Starting" : status === "paused" ? "Paused" : countIn ? "Count-in" : bag.current?.demo ? "Autoplay" : "Playing";
   // Sparse ticks stay legible for dense imported charts, while section names remain exact.
   const timelineMarkers = useMemo(() => {
     let lastPosition = 0;
@@ -1519,9 +1540,9 @@ export function StageApp() {
         ) : null}
 
         <section className="flex min-w-0 flex-col px-3 pb-4 md:px-5">
-          <div className="flex flex-wrap items-end justify-between gap-3 py-2">
+          <div className="stage-song-heading flex flex-wrap items-end justify-between gap-3 py-2">
             <div>
-              <div className="text-[10px] font-semibold tracking-[0.18em] text-subtle">
+              <div className="stage-song-category text-[10px] font-semibold tracking-[0.18em] text-subtle">
                 {song.original ? "ORIGINAL SESSION" : "YOUR COLLECTION"} / {song.tag}
               </div>
               <h2 className="font-display mt-1 text-[1.7rem] font-semibold tracking-[-0.03em]">{song.name}</h2>
@@ -1536,9 +1557,9 @@ export function StageApp() {
               </span>
             </div>
           </div>
-          <p className="mb-3 max-w-[70ch] text-[13px] text-pretty text-muted">{song.arrangementDescription}{song.audioAssetId ? " Tempo changes playback speed and pitch." : ""}</p>
+          <p className="stage-song-description mb-3 max-w-[70ch] text-[13px] text-pretty text-muted">{song.arrangementDescription}</p>
 
-          <div className="stage-transport flex flex-wrap items-center justify-between gap-2">
+          <div ref={transportRef} role="group" aria-label="Playback controls" className="stage-transport flex flex-wrap items-center justify-between gap-2">
             <div className="flex flex-wrap gap-2">
               <Button onClick={() => void startSession(false)} disabled={!ready || busy}>
                 {status === "paused" ? (
@@ -1562,7 +1583,13 @@ export function StageApp() {
               <Button variant="ghost" disabled={busy} aria-expanded={soundcheckOpen} aria-controls="soundcheck-panel" onClick={() => setSoundcheckOpen((value) => !value)}>
                 <SlidersHorizontal className="size-4" /> Soundcheck
               </Button>
-              <Button variant="ghost" aria-pressed={focusStage} onClick={() => { if (focusStage && window.innerWidth < 1024) openMenu(); else setFocusStage((v) => !v); }}>
+              <Button variant="ghost" aria-pressed={focusStage} onClick={() => {
+                if (focusStage && window.innerWidth < 1024) openMenu();
+                else {
+                  setFocusStage((value) => !value);
+                  if (!focusStage) requestAnimationFrame(() => transportRef.current?.scrollIntoView({ block: "start", behavior: "auto" }));
+                }
+              }}>
                 {focusStage ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
                 {focusStage ? "Show setlist" : "Focus stage"}
               </Button>
@@ -1664,14 +1691,7 @@ export function StageApp() {
               tabIndex={-1}
               onPointerMove={onCanvasPointerMove}
             />
-            {hud.countdown && status !== "ready" ? (
-              <div className="pointer-events-none absolute inset-x-0 top-[22%] text-center font-display text-[5.5rem] font-semibold leading-none tracking-[-0.06em] text-accent">
-                {hud.countdown === "PAUSED" ? "Ⅱ" : hud.countdown}
-                <small className="mt-3 block text-[11px] tracking-[0.28em] text-muted">
-                  {hud.countdown === "PAUSED" ? "PAUSED" : status === "playing" && bag.current?.demo ? "AUTOPLAY" : "COUNT IN"}
-                </small>
-              </div>
-            ) : null}
+            {countIn ? <StageCountIn count={countIn} demo={bag.current?.demo ?? false} /> : null}
 
             {overlay && status !== "playing" && !feelOpen ? (
               <SessionOverlay
@@ -1679,6 +1699,7 @@ export function StageApp() {
                 songName={song.name}
                 rhythm={rhythm}
                 busy={!ready || busy}
+                allowPauseFocus={!feelOpen && !libraryOpen && !menu && !soundcheckOpen}
                 demo={bag.current?.demo ?? false}
                 results={results}
                 practice={practice ? { ...practice, pass: practicePass } : undefined}
@@ -1728,13 +1749,13 @@ export function StageApp() {
                 <i aria-hidden="true" />{timelineStatus}
               </span>
               <div className="stage-section-context">
-                <span className="stage-current-section" title={currentSection?.name || "Count-in"}>
-                  <small>NOW</small> {currentSection?.name || "Count-in"}
+                <span className="stage-current-section" title={currentSectionName}>
+                  <small>NOW</small> {currentSectionName}
                 </span>
                 {nextSection ? <span className="stage-next-section" title={nextSection.name}><small>NEXT</small> {nextSection.name}</span> : null}
               </div>
             </div>
-            <div className="stage-timeline-track" role="progressbar" aria-label={practice ? "Passage progress" : "Song progress"} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(progress)} aria-valuetext={`${Math.round(progress)}%, ${currentSection?.name || "Count-in"}`}>
+            <div className="stage-timeline-track" role="progressbar" aria-label={practice ? "Passage progress" : "Song progress"} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(progress)} aria-valuetext={`${Math.round(progress)}%, ${currentSectionName}`}>
               <div className="stage-timeline-fill" style={{ width: `${progress}%` }} />
               {timelineMarkers.map((section) => (
                 <i key={section.time} className={cn("stage-timeline-marker", section.time <= elapsed && "is-passed")} style={{ left: `${section.time / stageSong.duration * 100}%` }} aria-hidden="true" />
@@ -1749,7 +1770,7 @@ export function StageApp() {
           <section className="stage-setup" aria-labelledby="stage-setup-heading">
             <div className="stage-setup-heading">
               <h3 id="stage-setup-heading">SESSION SETUP</h3>
-              <p id="stage-setup-help">{busy ? "Pause to adjust difficulty, tempo, guide or click." : "Volume can change while you play."}</p>
+              <p id="stage-setup-help">{busy ? "Pause to adjust difficulty, tempo, guide or click." : "Volume can change while you play."}{song.audioAssetId ? " Tempo changes playback speed and pitch." : ""}</p>
             </div>
             <div className="stage-setup-controls">
               <label className="stage-setup-field">
