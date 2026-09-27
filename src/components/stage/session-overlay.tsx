@@ -73,7 +73,7 @@ function TimingDistribution({ label, timing }: { label: string; timing: TimingSu
   );
 }
 
-function RecentTiming({ parts }: Pick<SessionResults, "parts">) {
+function RecentTiming({ parts, guitarMode = false, realGuitar = false }: Pick<SessionResults, "parts"> & { guitarMode?: boolean; realGuitar?: boolean }) {
   return (
     <section className="session-timing" aria-label="Recent hit timing">
       <h3>Recent hit timing</h3>
@@ -93,7 +93,15 @@ function RecentTiming({ parts }: Pick<SessionResults, "parts">) {
                 ? "No successful hits to review."
                 : `${timing.count} recent ${timing.count === 1 ? "hit" : "hits"} · ${timing.early} early · ${timing.centered} near centre · ${timing.late} late`}
             </p>
-            <p className="session-timing-tip">{TIMING_COPY[timing.tendency].tip}</p>
+            <p className="session-timing-tip">{realGuitar && timing.tendency === "early"
+              ? "Let the note reach the strike line before you pick or strum."
+              : realGuitar && timing.tendency === "late"
+                ? "Read the next string and fret early, then pick as the note reaches the line."
+                : guitarMode && timing.tendency === "early"
+              ? "Let the gem reach the strike line before you strum."
+              : guitarMode && timing.tendency === "late"
+                ? "Look farther up the highway and prepare the frets before your next strum."
+                : TIMING_COPY[timing.tendency].tip}</p>
           </li>
         ))}
       </ul>
@@ -108,6 +116,8 @@ type SessionOverlayProps = {
   busy: boolean;
   demo: boolean;
   rhythm?: boolean;
+  guitarMode?: boolean;
+  realGuitar?: boolean;
   practice?: PracticeContext;
   results?: SessionResults | null;
   controls: { label: string; keys: string[] }[];
@@ -122,7 +132,25 @@ type SessionOverlayProps = {
   allowPauseFocus?: boolean;
 };
 
-function practiceTip(results: SessionResults, rhythm: boolean) {
+function practiceTip(results: SessionResults, rhythm: boolean, guitarMode: boolean, realGuitar: boolean) {
+  if (realGuitar) {
+    if (results.demo) return "Try the riff on your guitar. The lanes show strings; each number is a fret. Connect guitar MIDI when you want pitch scoring.";
+    if (results.holdBreaks > 0) return "Let the sustained notes ring. MIDI note-off ends a hold, so check your device’s sustain tracking if tails cut short.";
+    const hits = results.perfect + results.great + results.good;
+    if (hits === 0 || results.miss > hits) return "Check your guitar MIDI connection, then slow the tempo. Prepare each string and fret before the note arrives.";
+    if (results.extra > Math.max(3, hits / 4)) return "Mute the strings you are not playing and pick once per note. MIDI scores pitch; the string and fret labels guide your fingering.";
+    if (results.miss > 0) return "Read the next fret number early and keep your picking hand on the pulse.";
+    if (results.great + results.good > 0) return "Aim your pick or strum at the centre of the strike line. Try the click for a steady pulse.";
+  }
+  if (guitarMode) {
+    if (results.demo) return "Your turn: hold every fret shown, then strum once as the gem reaches the strike line.";
+    if (results.holdBreaks > 0) return "Keep the matching frets held until the full tail passes the strike line. A tail does not need another strum.";
+    const hits = results.perfect + results.great + results.good;
+    if (hits === 0 || results.miss > hits) return "Slow the tempo. Set all the lit frets before you strum; fret presses alone do not score.";
+    if (results.extra > Math.max(3, hits / 4)) return "Strum once per gem. Set the frets first and leave space between strums.";
+    if (results.miss > 0) return "Read the next fret shape early. Hold every lit fret, with no extras, before you strum.";
+    if (results.great + results.good > 0) return "Keep the frets ready and aim your strum at the centre of the strike line. Try the click for a steady pulse.";
+  }
   if (results.demo)
     return rhythm
       ? "Your turn: tap once as each gem reaches the strike line. Any MIDI note works."
@@ -187,7 +215,22 @@ function RecommendedPractice({
   );
 }
 
-function KeyGuide({ controls, rhythm }: Pick<SessionOverlayProps, "controls" | "rhythm">) {
+function KeyGuide({ controls, rhythm, guitarMode, realGuitar }: Pick<SessionOverlayProps, "controls" | "rhythm" | "guitarMode" | "realGuitar">) {
+  if (realGuitar) return null;
+  if (guitarMode) return (
+    <div className="session-controls" aria-label="Your guitar controls">
+      <div className="session-controls-heading"><Keyboard size={14} aria-hidden="true" /> Frets, then strum</div>
+      <div className="session-control-row">
+        <span>Hold frets</span>
+        <div className="session-keys">{["Z", "X", "C", "V", "B"].map((key) => <kbd key={key}>{key}</kbd>)}</div>
+      </div>
+      <div className="session-control-row">
+        <span>Strum</span>
+        <div className="session-keys"><kbd>↓</kbd><kbd>↑</kbd><kbd>Space</kbd></div>
+      </div>
+      <p className="session-footnote">On touch, hold the fret buttons and tap a strum below.</p>
+    </div>
+  );
   if (!controls.length) return null;
   return (
     <div className="session-controls" aria-label="Your keyboard controls">
@@ -215,6 +258,8 @@ export function SessionOverlay({
   busy,
   demo,
   rhythm = false,
+  guitarMode = false,
+  realGuitar = false,
   practice,
   results,
   controls,
@@ -395,15 +440,15 @@ export function SessionOverlay({
               </div>
             </dl>
             <p className="session-detail-stats">
-              {results.extra} extra {results.extra === 1 ? "press" : "presses"}
+              {results.extra} extra {realGuitar ? results.extra === 1 ? "note" : "notes" : guitarMode ? results.extra === 1 ? "strum" : "strums" : results.extra === 1 ? "press" : "presses"}
               {!rhythm && results.holds + results.holdBreaks > 0
                 ? ` · ${results.holds} holds completed · ${results.holdBreaks} broken`
                 : ""}
             </p>
-            {!results.demo ? <RecentTiming parts={results.parts} /> : null}
+            {!results.demo ? <RecentTiming parts={results.parts} guitarMode={guitarMode} realGuitar={realGuitar} /> : null}
             <div className="session-practice-tip">
               <span>{results.demo ? "STEP INTO THE SPOTLIGHT" : results.practice ? "FOR YOUR NEXT TAKE" : "FOR YOUR NEXT SET"}</span>
-              <p>{practiceTip(results, rhythm)}</p>
+              <p>{practiceTip(results, rhythm, guitarMode, realGuitar)}</p>
             </div>
             {!results.demo && !results.practice && results.recommendation && onPractice ? (
               <RecommendedPractice recommendation={results.recommendation} busy={busy} onPractice={onPractice} />
@@ -427,9 +472,13 @@ export function SessionOverlay({
             <p className="session-song">{songName}</p>
             {practice ? <PracticeSummary practice={practice} /> : null}
             <p className="session-description" id="session-pause-description">
-              Your place is saved. Pick up the groove when you’re ready.
+              {realGuitar
+                ? "Your place is saved. Read the next string and fret before you resume. MIDI note-off ends a sustained hold."
+                : guitarMode
+                ? "Your place is saved. Resume when you’re ready, with the matching frets held before your next strum."
+                : "Your place is saved. Pick up the groove when you’re ready."}
             </p>
-            <KeyGuide controls={controls} rhythm={rhythm} />
+            <KeyGuide controls={controls} rhythm={rhythm} guitarMode={guitarMode} realGuitar={realGuitar} />
             <div className="session-actions">
               <Button type="button" onClick={onStart} disabled={busy} data-session-primary>
                 <Play size={16} aria-hidden="true" />
@@ -454,11 +503,15 @@ export function SessionOverlay({
             <p className="session-song">{songName}</p>
             {practice ? <PracticeSummary practice={practice} /> : null}
             <p className="session-description">
-              {rhythm
+              {realGuitar
+                ? "Six lanes, six strings. Play the fret number as it crosses the strike line; 0 means an open string. Let long notes ring."
+                : guitarMode
+                ? "Hold every fret in the gem, then strum as it crosses the strike line. Frets choose the shape; only a strum scores. Keep holding through long tails."
+                : rhythm
                 ? "Tap once per gem as it crosses the strike line. Use your mapped key, tap the HIT pad, or play any MIDI note. No holds needed."
                 : "Hit each gem as it crosses the strike line. Hold long notes to the end. You can use keys, MIDI, or tap the lanes."}
             </p>
-            <KeyGuide controls={controls} rhythm={rhythm} />
+            <KeyGuide controls={controls} rhythm={rhythm} guitarMode={guitarMode} realGuitar={realGuitar} />
             <div className="session-actions">
               <Button type="button" onClick={onStart} disabled={busy} data-session-primary>
                 <Play size={16} aria-hidden="true" />
@@ -471,16 +524,22 @@ export function SessionOverlay({
               </Button>
             </div>
             <div className="session-first-time">
-              <span>First time on stage?</span>
+              <span>{guitarMode || realGuitar ? "Warm up on keys instead?" : "First time on stage?"}</span>
               <Button type="button" variant="ghost" onClick={onQuickStart} disabled={busy}>
                 Try beginner rehearsal
                 <ArrowRight size={14} aria-hidden="true" />
               </Button>
             </div>
             <p className="session-footnote">
-              {practice
+              {realGuitar
+                ? "Standard tuning · E A D G B E. Connect guitar MIDI for pitch scoring, or use Watch the house to play along without scoring. MIDI cannot verify string choice."
+                : practice
                 ? "Start with a count-in. Repeat section gives you a fresh score on every take. Practice scores aren’t saved."
-                : "Solo by default. Add your band from the green room."}
+                : guitarMode
+                  ? "Arcade guitar · keyboard / touch. Choose another song to play MIDI."
+                  : "Solo by default. Add your band from the green room."}
+              {practice && guitarMode ? " Arcade guitar uses keyboard or touch. Choose another song to play MIDI." : null}
+              {practice && realGuitar ? " Each repeat starts a fresh take. Practice scores aren’t saved." : null}
             </p>
           </>
         )}

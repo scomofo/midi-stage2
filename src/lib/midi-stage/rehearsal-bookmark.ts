@@ -113,6 +113,7 @@ export function resolveRehearsalBookmark(
   if (!valid) return null;
   const song = songs.find((candidate) => candidate.id === valid.songId);
   if (!song) return null;
+  if (song.guitarMode && (valid.setup.enabledPlayers.length !== 1 || valid.setup.enabledPlayers[0] !== "guitar")) return null;
   if (!song.original && valid.setup.enabledPlayers.some((instrument) =>
     !song.parts.some((part) => part.type === instrument && part.notes.length > 0))) return null;
   const section = practiceSections(song).find((candidate) =>

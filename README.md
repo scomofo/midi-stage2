@@ -9,9 +9,9 @@ is the React rewrite of the vanilla-JS
 ## How it works
 
 - Pick a song from the setlist and a lineup of 1–4 players (drums, keys,
-  guitar, bass). Five songs ship with the game, all procedurally generated:
-  **First Rehearsal**, **Open Stage**, **Neon Circuit**, **After Hours**, and
-  **Voltage Run**.
+  guitar, bass). The five procedural songs are **First Rehearsal**, **Open Stage**,
+  **Neon Circuit**, **After Hours**, and **Voltage Run**. **Backline Drive** adds
+  an authored guitar riff, with real-string and optional arcade arrangements.
 - Notes stream down the lane highway; hit them in time. Timing windows scale
   with tempo and difficulty (chill / standard / expert); long notes are hold
   notes, and sustained holds earn extra score.
@@ -43,6 +43,7 @@ npm run dev   # serves the app on http://0.0.0.0:8082
 | `npm run test:setup` | Soundcheck, MIDI routing and saved-setup browser regression |
 | `npm run test:imports` | Chart/MIDI import, playback, saved songs and mobile regression |
 | `npm run test:audio` | Real WAV/MP3/FLAC import, backing playback, storage and rhythm-input regression |
+| `npm run test:guitar` | Authored strings/frets, exact-pitch MIDI, arcade strums, holds and touch |
 | `npm run test:graphics` | Concert rendering, lane targets, reduced motion and saved/live strum arrows |
 
 ## Player experience
@@ -106,6 +107,29 @@ npm run test:session
 - **MIDI** — hit *Connect MIDI* (no sysex). Note-on hits the lane, note-off
   releases the hold; devices plugged in after connecting are picked up
   automatically.
+
+## Real strings and frets
+
+**Backline Drive** is a 16-bar original guitar riff in standard tuning. Its six
+lanes represent strings **6 low E → 1 high E**; the number on each note is an
+actual fret, with **0 = open**. The next-shape guide shows which strings to play.
+Chill starts with single notes, Standard adds two-string power chords, and
+Expert adds three-string voicings and offbeat attacks. Passage practice and
+slower tempo retain the same physical fingerings.
+
+Connect a MIDI-capable guitar or pickup to score exact pitches and note-off
+sustains. Octave substitutions are not accepted. MIDI pitch scoring does not
+verify the physical string or fingering; the authored positions are guidance.
+A normal guitar cable/audio interface does not produce MIDI, and live audio
+pitch detection is not implemented. To play along acoustically without scoring,
+choose **Watch the house**. The backing band and guide are synthesized.
+
+**Backline Drive · Arcade** provides optional keyboard/touch play: hold
+`Z X C V B`, then strum with `↓`, `↑` or `Space`. Match every button in a chord
+and keep holding through the tail. Touch supports several fingers; keyboard or
+assistive activation of the on-screen fret buttons toggles them. These five
+buttons are not physical guitar strings or frets. MIDI remains available on
+the real-string arrangement and the existing songs.
 
 ## Imported songs
 

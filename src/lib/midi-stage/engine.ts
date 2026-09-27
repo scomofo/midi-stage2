@@ -3,6 +3,7 @@ import type {
   ChartNote,
   Difficulty,
   Grade,
+  GuitarPosition,
   Instrument,
   JudgeResult,
   JudgeStats,
@@ -100,6 +101,22 @@ function sourceFor(song: Song, player: Player) {
 }
 
 export function lanesFor(song: Song, player: Player): Lane[] {
+  if (player.type === "guitar" && song.guitarMode === "strings") {
+    const tuning = song.guitarTuning ?? [40, 45, 50, 55, 59, 64];
+    if (!Array.isArray(tuning) || tuning.length !== 6
+      || ![...tuning].every((pitch) => Number.isInteger(pitch) && pitch >= 0 && pitch <= 127)) {
+      throw new RangeError("Guitar tuning must contain six open-string MIDI pitches, from string 6 to string 1.");
+    }
+    return tuning.map((pitch, index) => ({
+      name: `String ${6 - index} · ${noteName(pitch)}`, short: `${6 - index} ${PC[pc(pitch)]}`,
+      pitch, pc: pc(pitch), color: LANE_COLORS[index]!, guitarString: (6 - index) as GuitarPosition["string"],
+    }));
+  }
+  if (player.type === "guitar" && song.guitarMode === "fret-strum") {
+    return [52, 55, 57, 59, 62].map((pitch, index) => ({
+      name: `Fret ${index + 1}`, short: String(index + 1), pitch, pc: pc(pitch), color: LANE_COLORS[index]!,
+    }));
+  }
   if (song.matching === "rhythm") {
     return sourceFor(song, player).notes.length
       ? [{ name: "RHYTHM HIT", short: "HIT", pitch: 60, pc: 0, color: LANE_COLORS[2]!, any: true }]
@@ -116,6 +133,9 @@ export function lanesFor(song: Song, player: Player): Lane[] {
 }
 
 export function laneForPitch(pitch: number, player: Player, lanes: Lane[]) {
+  // The same pitch can be played on several strings. Use Judge.hitPitch for
+  // authored string targets instead of assigning a string by its open pitch.
+  if (lanes.some((lane) => lane.guitarString !== undefined)) return -1;
   const any = lanes.findIndex((lane) => lane.any);
   if (any >= 0) return any;
   if (player.type === "drums") return lanes.findIndex((l) => l.notes?.includes(pitch));
@@ -150,20 +170,33 @@ function chordName(pitches: number[]) {
 export function makeChart(song: Song, player: Player, start = 0, end = song.duration): Chart {
   const lanes = lanesFor(song, player);
   const part = sourceFor(song, player);
+  const fretStrum = player.type === "guitar" && song.guitarMode === "fret-strum";
+  const strings = player.type === "guitar" && song.guitarMode === "strings";
   const notes: ChartNote[] = part.notes
     .filter((n) => n.time >= start - 1e-6 && n.time < end - 1e-6)
-    .map((n, id): ChartNote => ({
-      ...n,
-      id,
-      lane: laneForPitch(n.pitch, player, lanes),
-      duration: Math.min(n.duration, end - n.time),
-      state: 0,
-      hold: null,
-    }))
+    .map((n, id): ChartNote => {
+      const position = n.guitarPosition;
+      if (strings && (!position || !Number.isInteger(position.string) || position.string < 1 || position.string > 6
+        || !Number.isInteger(position.fret) || position.fret < 0 || position.fret > 24
+        || !Number.isInteger(n.pitch) || n.pitch < 0 || n.pitch > 127
+        || n.pitch !== lanes[6 - position.string]!.pitch + position.fret)) {
+        throw new RangeError(`Guitar note at ${n.time} must have an authored string, fret 0–24, and matching tuned pitch.`);
+      }
+      return {
+        ...n,
+        id,
+        lane: strings ? 6 - position!.string : fretStrum
+          ? (Number.isInteger(n.arcadeFret) && n.arcadeFret! >= 0 && n.arcadeFret! < 5 ? n.arcadeFret! : -1)
+          : laneForPitch(n.pitch, player, lanes),
+        duration: Math.min(n.duration, end - n.time),
+        state: 0,
+        hold: null,
+      };
+    })
     .filter((n) => n.lane >= 0)
-    .sort((a, b) => a.time - b.time || a.pitch - b.pitch);
+    .sort((a, b) => a.time - b.time || (fretStrum || strings ? a.lane - b.lane : a.pitch - b.pitch));
 
-  if (song.matching === "rhythm") {
+  if (song.matching === "rhythm" && !fretStrum && !strings) {
     // One onset is one target, regardless of how many source pitches formed it.
     // Detection durations are not authored sustains, so rhythm targets are taps.
     const taps = new Map<number, ChartNote>();
@@ -178,7 +211,7 @@ export function makeChart(song: Song, player: Player, start = 0, end = song.dura
   if (player.type === "keys" || player.type === "guitar") {
     const grouped = new Map<number, ChartNote[]>();
     for (const n of notes) {
-      const key = Math.round(n.time * 1000);
+      const key = fretStrum || strings ? n.time : Math.round(n.time * 1000);
       const list = grouped.get(key) || [];
       list.push(n);
       grouped.set(key, list);
@@ -187,12 +220,12 @@ export function makeChart(song: Song, player: Player, start = 0, end = song.dura
       if (group.length < 2) continue;
       const pitches = group.map((n) => n.pitch);
       const name = chordName(pitches);
-      if (!name) continue;
+      if (!name && !fretStrum && !strings) continue;
       const laneIds = [...new Set(group.map((n) => n.lane))];
       const roman = song.harmony?.find((h) => Math.abs(h.time - group[0]!.time) < 0.08)?.roman;
       for (const n of group) {
         n.chord = true;
-        n.name = name;
+        n.name = name ?? undefined;
         n.roman = roman;
         n.lanes = laneIds;
         n.pitches = pitches;
@@ -202,9 +235,9 @@ export function makeChart(song: Song, player: Player, start = 0, end = song.dura
 
   if (player.type === "drums") return { lanes, notes };
 
-  // Melodic lanes represent pitch classes, so an octave-doubled chord must
-  // remain playable with one press per visible lane. Keep its full voicing
-  // above for the guide, and keep the longest tail for that lane. The source
+  // One attack per visible lane: melodic octave doubles share a pitch-class
+  // lane, while authored buttons and physical strings stay separate at the same pitch.
+  // Keep full voicing above and the longest tail for each lane. The source
   // arrangement remains untouched for backing audio and piano guidance.
   const playable: ChartNote[] = [];
   const byTime = new Map<number, Map<number, ChartNote>>();
@@ -216,6 +249,9 @@ export function makeChart(song: Song, player: Player, start = 0, end = song.dura
     }
     const existing = atTime.get(note.lane);
     if (existing) {
+      if (strings && existing.pitch !== note.pitch) {
+        throw new RangeError(`Guitar notes at ${note.time} cannot require two frets on the same string.`);
+      }
       existing.duration = Math.max(existing.duration, note.duration);
       existing.velocity = Math.max(existing.velocity, note.velocity);
       if (!existing.pitches) existing.pitches = [existing.pitch];
@@ -301,6 +337,8 @@ export class Judge {
       const n = this.notes[i]!;
       if (n.time > t + this.windows[2]! + 1e-8) break;
       if (n.lane !== lane) continue;
+      const positioned = this.lanes[n.lane]?.guitarString !== undefined;
+      if (positioned && inputPitch !== n.pitch) continue;
       const d = Math.abs(n.time - t);
       if (n.state) {
         // A real keyboard can play the source chord's octave doubles even
@@ -309,7 +347,7 @@ export class Judge {
         // Repeated pitches and unrelated octaves are still extra presses.
         // The first strike retains ownership of the lane's sustain.
         if (
-          !this.drums && inputPitch != null && n.state === 1 && n.hitAt != null &&
+          !this.drums && !positioned && inputPitch != null && n.state === 1 && n.hitAt != null &&
           Math.abs(t - n.hitAt) <= 0.04 * this.speed + 1e-8 &&
           d <= this.windows[2]! + 1e-8 && d < voicedDistance &&
           n.pitches?.includes(inputPitch) && pc(inputPitch) === pc(n.pitch) &&
@@ -363,6 +401,71 @@ export class Judge {
     return closest;
   }
 
+  /** Pitch input can match an authored target, but cannot verify its physical string. */
+  hitPitch(t: number, pitch: number, token = "midi"): ChartNote | null {
+    this.tick(t);
+    let closest: ChartNote | null = null;
+    let best = Infinity;
+    for (let i = this.cursor; i < this.notes.length; i++) {
+      const note = this.notes[i]!;
+      if (note.time > t + this.windows[2]! + 1e-8) break;
+      if (note.state || this.lanes[note.lane]?.guitarString === undefined || note.pitch !== pitch) continue;
+      const distance = Math.abs(note.time - t);
+      if (distance <= this.windows[2]! + 1e-8 && distance < best) {
+        closest = note;
+        best = distance;
+      }
+    }
+    if (closest) return this.hit(t, closest.lane, token, pitch);
+    this.stats.extra++;
+    this.stats.combo = 0;
+    this.onJudge({ grade: "extra", delta: 0 });
+    return null;
+  }
+
+  /** Fret selection is silent; one strum must match one complete authored onset. */
+  strum(t: number, frets: readonly number[], tokenForLane: (lane: number) => string = (lane) => `strum:${lane}`): ChartNote[] {
+    this.tick(t);
+    let closestStart = -1;
+    let closestEnd = -1;
+    let best = Infinity;
+    for (let start = this.cursor; start < this.notes.length;) {
+      const time = this.notes[start]!.time;
+      if (time > t + this.windows[2]! + 1e-8) break;
+      let end = start;
+      let unresolved = false;
+      while (end < this.notes.length && this.notes[end]!.time === time) {
+        if (!this.notes[end]!.state) unresolved = true;
+        end++;
+      }
+      const distance = Math.abs(time - t);
+      // Earlier onsets win exact ties, matching hit's existing candidate order.
+      if (unresolved && distance <= this.windows[2]! + 1e-8 && distance < best) {
+        closestStart = start;
+        closestEnd = end;
+        best = distance;
+      }
+      start = end;
+    }
+
+    const group = closestStart < 0 ? [] : this.notes.slice(closestStart, closestEnd);
+    const held = new Set(frets);
+    const required = new Set(group.map((note) => note.lane));
+    const validLane = (lane: number) => Number.isInteger(lane) && lane >= 0 && lane < this.lanes.length;
+    if (!group.length || !held.size || held.size !== frets.length || ![...held].every(validLane)
+      || held.size !== required.size || [...required].some((lane) => !held.has(lane))
+      || group.some((note) => note.state !== 0 || this.lanes[note.lane]?.guitarString !== undefined)) {
+      this.stats.extra++;
+      this.stats.combo = 0;
+      this.onJudge({ grade: "extra", lane: frets.find(validLane), delta: 0 });
+      return [];
+    }
+
+    // Every gem shares the globally closest unresolved onset, so hit cannot
+    // choose a different group. Reuse its grading and stable per-lane holds.
+    return group.map((note) => this.hit(t, note.lane, tokenForLane(note.lane))!);
+  }
+
   finishHold(n: ChartNote, success: boolean) {
     if (n.hold !== "held") return;
     n.hold = success ? "complete" : "broken";
@@ -406,7 +509,7 @@ export class Judge {
       const n = this.notes[this.demoCursor++]!;
       releaseThrough(n.time);
       const token = `demo:${playerId}:${n.id}`;
-      this.hit(n.time, n.lane, token);
+      this.hit(n.time, n.lane, token, this.lanes[n.lane]?.guitarString !== undefined ? n.pitch : undefined);
       this.demoReleases.push({ token, at: n.time + n.duration });
     }
     releaseThrough(t);

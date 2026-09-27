@@ -857,6 +857,7 @@ export class StageRenderer {
       if (!judge) return;
       const lanes = judge.lanes;
       const laneCount = lanes.length;
+      const strings = p.type === "guitar" && state.song.guitarMode === "strings";
       const cx = pw * (pi + 0.5);
       const bw = Math.min(
         active.length === 1 ? w * 0.72 : pw * 0.9,
@@ -995,6 +996,16 @@ export class StageRenderer {
             hexA(lanes[i]!.color, flash ? 0.32 : 0.16),
           );
         }
+        if (strings) {
+          const stringTop = point(i + 0.5, 0);
+          const stringBottom = point(i + 0.5, 1.14);
+          ctx.beginPath();
+          ctx.moveTo(stringTop.x, stringTop.y);
+          ctx.lineTo(stringBottom.x, stringBottom.y);
+          ctx.strokeStyle = hexA(lanes[i]!.color, 0.48);
+          ctx.lineWidth = 0.75 + (lanes[i]!.guitarString ?? 1) * 0.13;
+          ctx.stroke();
+        }
       }
 
       for (let i = 0; i <= laneCount; i++) {
@@ -1100,7 +1111,7 @@ export class StageRenderer {
           ctx.fill();
           ctx.restore();
         }
-        const code = active.length < 3 ? KEYS[p.id][lane] : undefined;
+        const code = !strings && active.length < 3 ? KEYS[p.id][lane] : undefined;
         const hintSize = active.length > 2 ? 8 : 10;
         let hint = compactHints && code ? `${lanes[lane]!.short} · ${keyLabel(code)}` : lanes[lane]!.short;
         ctx.font = `700 ${hintSize}px 'IBM Plex Sans', system-ui, sans-serif`;
@@ -1136,6 +1147,11 @@ export class StageRenderer {
         cx,
         far - 14,
       );
+      if (strings && pw >= 280) {
+        const standard = lanes.every((lane, index) => lane.pitch === [40, 45, 50, 55, 59, 64][index]);
+        const tuning = lanes.map((lane) => lane.short.replace(/^\d+\s*/, "")).join("  ");
+        this.text(`${standard ? "STANDARD" : "TUNING"}  ${tuning}`, cx, far - 29, 9, "#c4a882", "600");
+      }
       if (state.status === "playing") {
         ctx.fillStyle = judge.stats.combo >= 10 ? "#c4a882" : "#8fd4c4";
         ctx.font = "600 9px 'IBM Plex Mono', ui-monospace, monospace";
@@ -1220,7 +1236,7 @@ export class StageRenderer {
             this.text(
               `${n.roman ? n.roman + "  " : ""}${n.name}`,
               center,
-              mates[0]!.y - 16,
+              mates[0]!.y - (strings ? 30 : 16),
               active.length > 2 ? 11 : 14,
               n.state === 2 ? "rgba(211,106,106,0.55)" : "#efe8dc",
               "700",
@@ -1231,8 +1247,32 @@ export class StageRenderer {
         const alpha = n.state === 2 ? 0.22 : isPop ? 0.95 * (1 - popK) : 0.95;
         const grow = state.reduced ? 1 : isPop ? 1 + popK * 0.55 : pr > 0.82 && n.state === 0 ? 1.06 : 1;
         const rw = Math.min(laneCount === 1 ? 70 : 42, Math.max(4.5, lw * 0.37)) * pos.scale * grow;
+        if (strings && n.guitarPosition) {
+          // Authored fret numbers are the target; zero is an open string.
+          // Keep the face upright so perspective never distorts the number.
+          const fret = String(n.guitarPosition.fret);
+          const faceW = Math.min(lw * 0.86, Math.max(12, rw * 2.3));
+          const fontSize = Math.max(7, Math.min(24, faceW / (fret.length * 0.68 + 0.3)));
+          const faceH = fontSize + Math.max(4, 8 * pos.scale);
+          ctx.save();
+          ctx.globalAlpha = alpha;
+          ctx.beginPath();
+          ctx.roundRect(pos.x - faceW / 2, pos.y - faceH / 2, faceW, faceH, Math.min(5, faceW / 4));
+          ctx.fillStyle = isHeld ? "#14272b" : "#0a1017";
+          ctx.fill();
+          ctx.strokeStyle = color;
+          ctx.lineWidth = isHeld ? 2.5 : Math.max(1.2, 2 * pos.scale);
+          ctx.stroke();
+          ctx.fillStyle = "#efe8dc";
+          ctx.font = `700 ${fontSize}px 'IBM Plex Mono', ui-monospace, monospace`;
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText(fret, pos.x, pos.y, Math.max(4, faceW - 3));
+          ctx.restore();
+          return;
+        }
         const strum =
-          state.strumGuide && (p.type === "guitar" || state.song.matching === "rhythm")
+          !strings && state.strumGuide && (p.type === "guitar" || state.song.matching === "rhythm")
             ? suggestedStrum(state.song, n.time)
             : undefined;
         const depthHeight = Math.max(4, (strum ? 15 : 10) * pos.scale + pr * 3.2) * grow * 2.8;
