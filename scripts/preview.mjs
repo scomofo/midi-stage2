@@ -301,6 +301,8 @@ async function restart() {
     cwd: ROOT,
     detached: true,
     stdio: ["ignore", log, log],
+    // On Windows "npm" is an .cmd shim; spawn needs a shell to resolve it.
+    shell: process.platform === "win32",
   });
   child.unref();
   writeFileSync(PID_FILE, `${child.pid}\n`);
