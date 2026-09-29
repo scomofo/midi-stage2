@@ -29,7 +29,7 @@ import type { AudioImportProgress } from "@/lib/midi-stage/audio-import";
 import { SongLibraryPanel } from "@/components/stage/song-library-panel";
 import { addLibraryEntry, chartIdentity, loadSongLibrary, MAX_CHART_IMPORT_BYTES, prepareChartImport, saveSongLibrary, songFromSavedChart, type SavedChart } from "@/lib/midi-stage/song-library";
 import { SoundcheckPanel } from "@/components/stage/soundcheck-panel";
-import { defaultMidiRoutes, loadMidiRoutes, saveMidiRoutes, resolveMidiPlayer, type MidiRoute } from "@/lib/midi-stage/midi-routing";
+import { defaultMidiRoutes, loadMidiRoutes, remapMidiRouteInputIds, saveMidiRoutes, resolveMidiPlayer, type MidiRoute } from "@/lib/midi-stage/midi-routing";
 import { loadSessionPreferences, saveSessionPreferences } from "@/lib/midi-stage/preferences";
 import { clearRehearsalBookmark, loadRehearsalBookmark, resolveRehearsalBookmark, saveRehearsalBookmark, type RehearsalBookmark } from "@/lib/midi-stage/rehearsal-bookmark";
 import { useStageMidi } from "@/components/stage/use-stage-midi";
@@ -1286,6 +1286,20 @@ export function StageApp() {
   }
 
   useEffect(() => { if (midi.error) setToast(midi.error); }, [midi.error]);
+
+  // Re-link saved per-device assignments when the browser reports a new opaque
+  // id for a remembered device (for example after an OS MIDI backend update).
+  // The remap is idempotent, so this settles after one pass.
+  useEffect(() => {
+    if (!preferencesHydrated || midi.inputs.length === 0) return;
+    const { routes, changed, remapped } = remapMidiRouteInputIds(midiRoutes, midi.inputs);
+    if (!changed) return;
+    setMidiRoutes(routes);
+    if (remapped.length > 0) {
+      const names = [...new Set(remapped.map((entry) => entry.name))];
+      setToast(`MIDI device re-linked: ${names.join(", ")}.`);
+    }
+  }, [preferencesHydrated, midi.inputs, midiRoutes]);
 
   useEffect(() => {
     const interrupt = () => {

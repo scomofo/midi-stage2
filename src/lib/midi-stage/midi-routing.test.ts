@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
-  defaultMidiRoutes, loadMidiRoutes, MIDI_ROUTES_KEY, resolveMidiPlayer, saveMidiRoutes,
+  defaultMidiRoutes, loadMidiRoutes, MIDI_ROUTES_KEY, remapMidiRouteInputIds, resolveMidiPlayer, saveMidiRoutes,
   type MidiRoute,
 } from "./midi-routing.ts";
 import { INSTRUMENTS, type Player } from "./types.ts";
@@ -111,5 +111,78 @@ describe("saved MIDI routing", () => {
   it("keeps storage failures from interrupting play", () => {
     assert.deepEqual(loadMidiRoutes({ getItem() { throw new Error("blocked"); } }), defaultMidiRoutes());
     assert.equal(saveMidiRoutes(defaultMidiRoutes(), { setItem() { throw new Error("quota"); } }), false);
+  });
+});
+
+describe("MIDI device id remapping", () => {
+  const live = (id: string, name: string, manufacturer = "") => ({ id, name, manufacturer });
+  const namedDevice = (inputId: string, inputName: string, inputManufacturer = ""): MidiRoute => ({
+    mode: "device", inputId, channel: null, inputName, ...(inputManufacturer ? { inputManufacturer } : {}),
+  });
+
+  it("remembers the device identity while the stored id is still live", () => {
+    const routes = defaultMidiRoutes();
+    routes.keys = device("new-id");
+    const result = remapMidiRouteInputIds(routes, [live("new-id", "KeyLab 49", "Arturia")]);
+    assert.equal(result.changed, true);
+    assert.deepEqual(result.remapped, []);
+    assert.equal(result.routes.keys.inputId, "new-id");
+    assert.equal(result.routes.keys.inputName, "KeyLab 49");
+    assert.equal(result.routes.keys.inputManufacturer, "Arturia");
+  });
+
+  it("re-links a saved assignment when exactly one live input matches the remembered identity", () => {
+    const routes = defaultMidiRoutes();
+    routes.keys = namedDevice("old-id", "KeyLab 49", "Arturia");
+    const result = remapMidiRouteInputIds(routes, [live("fresh-id", "KeyLab 49", "Arturia")]);
+    assert.equal(result.changed, true);
+    assert.equal(result.routes.keys.inputId, "fresh-id");
+    assert.deepEqual(result.remapped, [{ instrument: "keys", name: "KeyLab 49" }]);
+  });
+
+  it("leaves the assignment alone when no live input matches the remembered identity", () => {
+    const routes = defaultMidiRoutes();
+    routes.keys = namedDevice("old-id", "KeyLab 49", "Arturia");
+    const result = remapMidiRouteInputIds(routes, [live("other-id", "Launchpad", "Novation")]);
+    assert.equal(result.changed, false);
+    assert.equal(result.routes.keys.inputId, "old-id");
+    assert.deepEqual(result.remapped, []);
+  });
+
+  it("leaves the assignment alone when several live inputs match the remembered identity", () => {
+    const routes = defaultMidiRoutes();
+    routes.keys = namedDevice("old-id", "USB MIDI", "");
+    const result = remapMidiRouteInputIds(routes, [
+      live("a", "USB MIDI", ""),
+      live("b", "USB MIDI", ""),
+    ]);
+    assert.equal(result.changed, false);
+    assert.equal(result.routes.keys.inputId, "old-id");
+  });
+
+  it("never re-links a device assignment that has no remembered identity", () => {
+    const routes = defaultMidiRoutes();
+    routes.keys = device("old-id");
+    const result = remapMidiRouteInputIds(routes, [live("fresh-id", "KeyLab 49", "Arturia")]);
+    assert.equal(result.changed, false);
+    assert.equal(result.routes.keys.inputId, "old-id");
+  });
+
+  it("round-trips the remembered identity through save and load", () => {
+    const routes = defaultMidiRoutes();
+    routes.keys = namedDevice("id-1", "KeyLab 49", "Arturia");
+    let saved = "";
+    assert.equal(saveMidiRoutes(routes, { setItem: (_key, value) => { saved = value; } }), true);
+    const loaded = loadMidiRoutes({ getItem: () => saved });
+    assert.equal(loaded.keys.inputName, "KeyLab 49");
+    assert.equal(loaded.keys.inputManufacturer, "Arturia");
+    assert.equal(loaded.keys.inputId, "id-1");
+  });
+
+  it("ignores automatic and off assignments", () => {
+    const routes = defaultMidiRoutes();
+    const result = remapMidiRouteInputIds(routes, [live("x", "KeyLab 49", "Arturia")]);
+    assert.equal(result.changed, false);
+    assert.deepEqual(result.remapped, []);
   });
 });
