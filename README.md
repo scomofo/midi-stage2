@@ -114,15 +114,19 @@ npm run test:session
 lanes represent strings **6 low E → 1 high E**; the number on each note is an
 actual fret, with **0 = open**. The next-shape guide shows which strings to play.
 Chill starts with single notes, Standard adds two-string power chords, and
-Expert adds three-string voicings and offbeat attacks. Passage practice and
-slower tempo retain the same physical fingerings.
+Expert adds three-string voicings and offbeat attacks. A spatial fretboard shows
+the next fingering and previews the following shape, with open/skip markers and
+explicitly cropped fret ranges. It sits beside the highway during desktop play.
+Passage practice and slower tempo retain the same physical fingerings.
 
 Connect a MIDI-capable guitar or pickup to score exact pitches and note-off
 sustains. Octave substitutions are not accepted. MIDI pitch scoring does not
 verify the physical string or fingering; the authored positions are guidance.
 A normal guitar cable/audio interface does not produce MIDI, and live audio
-pitch detection is not implemented. To play along acoustically without scoring,
-choose **Watch the house**. The backing band and guide are synthesized.
+pitch detection is not implemented. Choose **Play along** to follow the
+synthesized band and guide without scoring. **Connect guitar MIDI** brings
+Soundcheck into view; connecting does not start a take. See
+[Guitar cockpit](docs/guitar-cockpit.md) for presentation and acceptance details.
 
 **Backline Drive · Arcade** provides optional keyboard/touch play: hold
 `Z X C V B`, then strum with `↓`, `↑` or `Space`. Match every button in a chord

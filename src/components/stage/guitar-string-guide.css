@@ -3,6 +3,10 @@
   --string-guide-space-sm: 8px;
   --string-guide-space-md: 12px;
   --string-guide-space-lg: 16px;
+  --fretboard-row-height: 26px;
+  --fretboard-label-width: 38px;
+  --fretboard-open-width: 32px;
+  --fretboard-dot-size: 22px;
   display: grid;
   gap: var(--string-guide-space-sm);
   min-width: 0;
@@ -45,6 +49,147 @@
   color: var(--color-fg);
   font-weight: 500;
   overflow-wrap: anywhere;
+}
+.guitar-fretboard {
+  overflow: hidden;
+  min-width: 0;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+}
+.guitar-fretboard-row {
+  display: grid;
+  grid-template-columns: var(--fretboard-label-width) var(--fretboard-open-width) repeat(var(--fret-columns), minmax(0, 1fr));
+  min-width: 0;
+}
+.guitar-fretboard-axis {
+  min-height: 22px;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-elevated);
+  color: var(--color-muted);
+  font: 500 0.625rem var(--font-mono);
+  text-align: center;
+}
+.guitar-fretboard-axis > span {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+.guitar-fretboard-axis > span:first-child,
+.guitar-fretboard-axis > span:nth-child(2) { font: 500 0.4375rem var(--font-sans); letter-spacing: 0.04em; }
+.guitar-fretboard-axis i { font-style: normal; color: var(--color-tungsten); }
+.guitar-fretboard-string { height: var(--fretboard-row-height); }
+.guitar-fretboard-string > span {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-width: 0;
+}
+.guitar-fretboard-string-name {
+  gap: 4px;
+  color: var(--color-fg);
+  font: 500 0.6875rem var(--font-mono);
+}
+.guitar-fretboard-string-name small { color: var(--color-muted); font-size: 0.5rem; }
+.guitar-fretboard-open {
+  border-right: 3px solid var(--color-tungsten);
+  color: var(--color-subtle);
+  font: 500 0.6875rem var(--font-mono);
+}
+.guitar-fretboard-open[data-active="true"] { color: var(--color-accent); }
+/* A shifted window is separated from OPEN by an omission seam, never a nut
+   that would falsely make the first shown high fret adjacent to the headstock. */
+.guitar-fretboard[data-shifted="true"] .guitar-fretboard-open { border-right: 0; }
+.guitar-fretboard-open b {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: var(--fretboard-dot-size);
+  height: var(--fretboard-dot-size);
+  border: 1px solid var(--color-accent);
+  border-radius: 50%;
+  background: var(--color-surface);
+  font-weight: 500;
+}
+.guitar-fretboard-cell {
+  border-right: 1px solid var(--color-border-strong);
+  background: color-mix(in oklab, var(--color-tungsten) 3%, var(--color-bg));
+}
+.guitar-fretboard-cell:last-child { border-right: 0; }
+.guitar-fretboard-cell::before {
+  content: "";
+  position: absolute;
+  inset-inline: 0;
+  top: 50%;
+  height: 1px;
+  background: color-mix(in oklab, var(--color-tungsten) 55%, var(--color-muted));
+  opacity: 0.5;
+}
+.guitar-fretboard-string[data-string="4"] .guitar-fretboard-cell::before,
+.guitar-fretboard-string[data-string="5"] .guitar-fretboard-cell::before { height: 2px; }
+.guitar-fretboard-string[data-string="6"] .guitar-fretboard-cell::before { height: 3px; }
+.guitar-fretboard-cell[data-gap="true"] { border-left: 2px dashed var(--color-tungsten); }
+.guitar-fretboard-cell[data-target="true"] { background: color-mix(in oklab, var(--color-accent) 7%, var(--color-bg)); }
+.guitar-fretboard-note {
+  z-index: 1;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: var(--fretboard-dot-size);
+  height: var(--fretboard-dot-size);
+  border: 1px solid color-mix(in oklab, var(--color-accent) 55%, var(--color-fg));
+  border-radius: 50%;
+  background: var(--color-accent);
+  color: var(--color-bg);
+  font: 600 0.6875rem var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+.guitar-string-guide-preview {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 12px;
+}
+.guitar-string-guide-window,
+.guitar-string-guide-following {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: 0.625rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.guitar-string-guide-following { color: var(--color-fg); }
+.guitar-string-guide-following > span {
+  margin-right: 4px;
+  color: var(--color-tungsten);
+  font-size: 0.5rem;
+  letter-spacing: 0.1em;
+}
+.guitar-string-guide-following strong { font-weight: 500; }
+.guitar-string-guide[data-performing="true"] {
+  --fretboard-row-height: 19px;
+  --fretboard-dot-size: 17px;
+  gap: 4px;
+  padding-block: 8px;
+  margin-block: 4px 8px;
+}
+.guitar-string-guide[data-performing="true"] .guitar-string-guide-heading { gap: 4px 12px; }
+.guitar-string-guide[data-performing="true"] .guitar-fretboard-note { font-size: 0.5625rem; }
+.guitar-string-guide[data-performing="true"] .guitar-fretboard-axis { min-height: 17px; }
+.guitar-string-guide[data-performing="true"] .guitar-string-guide-help {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
 }
 .guitar-string-guide-strings {
   display: grid;

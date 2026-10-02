@@ -227,6 +227,10 @@ validate them.
 
 ## Authored guitar arrangements
 
+The [Guitar cockpit](guitar-cockpit.md) adds a spatial next-fingering preview,
+following-shape guidance and an explicit **Play along** action. A missing or
+disabled MIDI route offers **Connect guitar MIDI** before a scored start.
+
 Backline Drive is a 38.4-second, 100 BPM original riff with four practice sections.
 The primary arrangement authors each guitar note's string and fret in standard
 E–A–D–G–B–E tuning. String 1 is high E; string 6 is low E. Six fixed highway lanes

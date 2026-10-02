@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent } from "react";
 import {
   Lamp,
+  Cable,
   SlidersHorizontal,
   Upload,
   Maximize2,
@@ -22,6 +23,7 @@ import { StageFinder, type StageFinderItem } from "@/components/stage/stage-find
 import { RehearsalBookmarkCard } from "@/components/stage/rehearsal-bookmark-card";
 import { GuitarController } from "@/components/stage/guitar-controller";
 import { GuitarStringGuide } from "@/components/stage/guitar-string-guide";
+import { getGuitarPreview } from "@/lib/midi-stage/guitar-preview";
 import "./stage-launcher.css";
 import { PracticeControls } from "@/components/stage/practice-controls";
 import { loadAudioAsset, saveAudioAsset, deleteAudioAsset } from "@/lib/midi-stage/audio-assets";
@@ -210,6 +212,8 @@ export function StageApp() {
     guitarTarget: "",
     guitarShape: [] as GuitarPosition[],
     guitarChord: "",
+    followingGuitarShape: [] as GuitarPosition[],
+    followingGuitarChord: "",
   });
   const [overlay, setOverlay] = useState(true);
   const [results, setResults] = useState<SessionResults | null>(null);
@@ -594,12 +598,20 @@ export function StageApp() {
     return decoded;
   }
 
+  function focusSoundcheck() {
+    requestAnimationFrame(() => {
+      document.getElementById("soundcheck-panel")?.scrollIntoView({ block: "start", behavior: "auto" });
+      document.getElementById("soundcheck-title")?.focus({ preventScroll: true });
+    });
+  }
+
   const startSession = useCallback(async (demo = false, repeating = false) => {
     const b = bag.current;
     if (!b || b.libraryOpen || b.status === "playing" || b.status === "starting") return;
     if (b.song.guitarMode === "strings" && !demo && !(b.status === "paused" && b.demo) && !guitarMidiReadyRef.current) {
-      setToast("Connect a guitar MIDI input in Soundcheck, or choose Watch the house to play along.");
+      setToast("Connect a guitar MIDI input in Soundcheck, or choose Play along without scoring.");
       setSoundcheckOpen(true);
+      focusSoundcheck();
       return;
     }
     if (b.practice && ![...b.judges.values()].some((judge) => judge.notes.length > 0)) {
@@ -1076,10 +1088,10 @@ export function StageApp() {
         const strumJudge = strumPlayer ? b.judges.get(strumPlayer.id) : undefined;
         const strum = strumJudge ? nextStrum(b.song, strumJudge.notes, Math.max(0, sessionTime), strumJudge.windows[2]!) : null;
         const guitarJudge = b.song.guitarMode ? b.judges.get("guitar") : undefined;
-        const nextGuitarNote = guitarJudge?.notes.find((note) => note.state === 0 && note.time >= sessionTime - guitarJudge.windows[2]!);
-        const nextGuitarGroup = nextGuitarNote ? guitarJudge!.notes.filter((note) => note.time === nextGuitarNote.time) : [];
-        const nextFrets = [...new Set(nextGuitarGroup.map((note) => note.lane + 1))].sort().join(" + ");
-        const guitarShape = nextGuitarGroup.flatMap((note) => note.guitarPosition ? [note.guitarPosition] : []);
+        const guitarPreview = guitarJudge ? getGuitarPreview(guitarJudge.notes, sessionTime, guitarJudge.windows[2]!) : null;
+        const nextGuitarShape = guitarPreview?.current;
+        const nextFrets = nextGuitarShape?.lanes.map((lane) => lane + 1).sort().join(" + ") ?? "";
+        const guitarShape = nextGuitarShape?.targets ?? [];
         setHud((prev) => ({
           score,
           combo,
@@ -1096,10 +1108,12 @@ export function StageApp() {
           bloom: b.bloom,
           trauma: b.trauma,
           guitarShape,
-          guitarChord: nextGuitarNote?.name ?? "",
+          guitarChord: nextGuitarShape?.name ?? "",
+          followingGuitarShape: guitarPreview?.following?.targets ?? [],
+          followingGuitarChord: guitarPreview?.following?.name ?? "",
           guitarTarget: b.song.guitarMode === "strings"
             ? guitarShape.map((position) => `S${position.string} · ${position.fret === 0 ? "OPEN" : `FRET ${position.fret}`}`).join(" / ") || "RIFF COMPLETE"
-            : nextGuitarNote ? `${nextGuitarNote.name ? nextGuitarNote.name + " · " : ""}FRETS ${nextFrets}` : "RIFF COMPLETE",
+            : nextGuitarShape ? `${nextGuitarShape.name ? nextGuitarShape.name + " · " : ""}FRETS ${nextFrets}` : "RIFF COMPLETE",
           nextStrum: strum === "down" ? "↓ DOWN" : strum === "up" ? "↑ UP" : "",
         }));
         const expected = new Set<number>();
@@ -1253,7 +1267,7 @@ export function StageApp() {
       if (b && p && owner) release(b, p, owner.token);
     },
     onDisconnect: () => pauseSession(bag.current?.song.guitarMode === "strings"
-      ? "Guitar MIDI disconnected. Reconnect in Soundcheck, or use Watch the house to play along."
+      ? "Guitar MIDI disconnected. Reconnect in Soundcheck, or reset and choose Play along without scoring."
       : "MIDI disconnected. Reconnect your instrument or continue on keyboard."),
   });
   const guitarMidiReady = midi.connected && midiRoutes.guitar.mode !== "off"
@@ -1613,7 +1627,9 @@ export function StageApp() {
   const busy = status === "playing" || status === "starting";
   const guitarMode = song.guitarMode === "fret-strum";
   const realGuitar = song.guitarMode === "strings";
-  const setupLabel = `${enabled.map((player) => player.label).join(" + ")} · ${difficulty[0]!.toUpperCase()}${difficulty.slice(1)} · ${Math.round(speed * 100)}% tempo · ${realGuitar ? "Real strings + frets" : guitarMode ? "Fret + strum" : midi.connected ? "MIDI connected" : "Keyboard ready"}`;
+  const needsGuitarMidi = realGuitar && !guitarMidiReady && status !== "playing" && !(status === "paused" && bag.current?.demo);
+  const connectGuitar = () => { setSoundcheckOpen(true); focusSoundcheck(); if (!midi.connected) void midi.connect(); };
+  const setupLabel = `${enabled.map((player) => player.label).join(" + ")} · ${difficulty[0]!.toUpperCase()}${difficulty.slice(1)} · ${Math.round(speed * 100)}% tempo · ${realGuitar ? guitarMidiReady ? "Guitar MIDI ready" : "Play along · MIDI needed for scoring" : guitarMode ? "Fret + strum" : midi.connected ? "MIDI connected" : "Keyboard ready"}`;
   const rehearsalSetupLabel = savedRehearsal ? `${savedRehearsal.bookmark.setup.enabledPlayers.map((id) => players.find((player) => player.id === id)?.label ?? id).join(" + ")} · ${savedRehearsal.bookmark.setup.difficulty} · ${Math.round(savedRehearsal.bookmark.setup.speed * 100)}% tempo` : "";
   const finderItems: StageFinderItem[] = finderOpen ? [
     ...(savedRehearsal ? [{ id: "continue-rehearsal", group: "Stage" as const, icon: "passage" as const, label: "Continue last rehearsal", detail: `${savedRehearsal.song.name} · ${savedRehearsal.section.name} · ${rehearsalSetupLabel}`, keywords: ["saved", "continue", "practice", "bookmark", "return"], disabled: !ready || busy, onSelect: continueRehearsal }] : []),
@@ -1626,7 +1642,7 @@ export function StageApp() {
     } },
     { id: "explore", group: "Stage", icon: "passage", label: "Explore this song", detail: `${passages.length} passages · choose exactly what to rehearse`, keywords: ["map", "section", "practice"], onSelect: openSongMap },
     { id: "beginner", group: "Stage", icon: "play", label: "Try beginner rehearsal", detail: "Solo keys · Chill · 75% tempo · guide and click", keywords: ["learn", "easy", "first"], disabled: !ready, onSelect: () => { quickStart(); setFocusStage(true); setSongMapOpen(false); focusTransport(true); } },
-    { id: "soundcheck", group: "Controls", icon: "sound", label: "Check my sound and input", detail: "Audition keys and review MIDI routing", keywords: ["soundcheck", "audio", "midi", "keyboard"], onSelect: () => { setSoundcheckOpen(true); requestAnimationFrame(() => { document.getElementById("soundcheck-panel")?.scrollIntoView({ block: "start", behavior: "auto" }); document.getElementById("soundcheck-title")?.focus({ preventScroll: true }); }); } },
+    { id: "soundcheck", group: "Controls", icon: "sound", label: "Check my sound and input", detail: "Audition keys and review MIDI routing", keywords: ["soundcheck", "audio", "midi", "keyboard"], onSelect: () => { setSoundcheckOpen(true); focusSoundcheck(); } },
     { id: "room", group: "Controls", icon: "room", label: "Shape the room", detail: "Lights, crowd and effects", keywords: ["feel", "lights", "vfx", "calm"], onSelect: () => { setFeelTap(true); setFeelOpen(true); } },
     { id: "import", group: "Controls", icon: "import", label: "Bring your own song", detail: "Import audio, MIDI or a Stage chart", keywords: ["import", "library", "upload"], onSelect: openSongLibrary },
     { id: "reset", group: "Controls", icon: "reset", label: "Reset this set", detail: "Return to ready with a fresh score", keywords: ["restart", "clear"], onSelect: () => { resetReady(); focusTransport(); } },
@@ -1868,8 +1884,8 @@ export function StageApp() {
 
           <div ref={transportRef} role="group" aria-label="Playback controls" className="stage-transport flex flex-wrap items-center justify-between gap-2">
             <div className="flex flex-wrap gap-2">
-              <Button onClick={() => void startSession(false)} disabled={!ready || busy}>
-                {status === "paused" ? (
+              <Button onClick={needsGuitarMidi ? connectGuitar : () => void startSession(false)} disabled={!ready || busy || midi.connecting}>
+                {needsGuitarMidi ? <><Cable className="size-4" /> Connect guitar MIDI</> : status === "paused" ? (
                   <>
                     <Play className="size-4 translate-x-px" /> Resume
                   </>
@@ -1879,6 +1895,7 @@ export function StageApp() {
                   </>
                 )}
               </Button>
+              {realGuitar && status === "ready" ? <Button variant="secondary" onClick={() => void startSession(true)} disabled={!ready || busy}>Play along</Button> : null}
               <Button variant="secondary" onClick={() => pauseSession()} disabled={status !== "playing"}>
                 <Pause className="size-4" /> Pause
               </Button>
@@ -1991,6 +2008,20 @@ export function StageApp() {
             <span className="text-tungsten">{hud.section}</span>
           </div>
 
+          <div className={cn("stage-playfield", realGuitar && "guitar-playfield")}>
+          {realGuitar ? <GuitarStringGuide
+            targets={hud.guitarShape}
+            chord={hud.guitarChord}
+            followingTargets={hud.followingGuitarShape}
+            followingChord={hud.followingGuitarChord}
+            performing={status === "playing"}
+            connected={guitarMidiReady}
+            connecting={midi.connecting}
+            onConnect={connectGuitar}
+            onArcade={() => { const arcade = songs.find((candidate) => candidate.id === "backline-drive-arcade"); if (arcade) selectSong(arcade); }}
+            disabled={busy}
+          /> : null}
+
           <div className="stage-viewport relative isolate min-h-[420px] flex-1 overflow-hidden rounded-b-2xl bg-[#07060a] shadow-[0_0_0_1px_rgba(239,232,220,0.08)] md:min-h-[520px]">
             <canvas
               ref={canvasRef}
@@ -2012,6 +2043,9 @@ export function StageApp() {
                 rhythm={rhythm}
                 guitarMode={guitarMode}
                 realGuitar={realGuitar}
+                guitarMidiReady={guitarMidiReady}
+                guitarConnecting={midi.connecting}
+                onConnectGuitar={connectGuitar}
                 busy={!ready || busy}
                 allowPauseFocus={!feelOpen && !libraryOpen && !menu && !soundcheckOpen && !finderOpen}
                 demo={bag.current?.demo ?? false}
@@ -2038,16 +2072,7 @@ export function StageApp() {
               <span>{speed.toFixed(2)}× TEMPO</span>
             </div>
           </div>
-
-          {realGuitar ? <GuitarStringGuide
-            targets={hud.guitarShape}
-            chord={hud.guitarChord}
-            connected={guitarMidiReady}
-            connecting={midi.connecting}
-            onConnect={() => { if (midi.connected && !guitarMidiReady) setSoundcheckOpen(true); else void midi.connect(); }}
-            onArcade={() => { const arcade = songs.find((candidate) => candidate.id === "backline-drive-arcade"); if (arcade) selectSong(arcade); }}
-            disabled={busy}
-          /> : null}
+          </div>
 
           {guitarMode ? <GuitarController
             selected={selectedFrets}
@@ -2237,7 +2262,7 @@ export function StageApp() {
             })}
           </div>
           <p className="mt-3 text-[11px] text-subtle">
-            <kbd className="rounded bg-elevated px-1">ENTER</kbd> start / pause · <kbd className="rounded bg-elevated px-1">SHIFT + R</kbd> reset set while paused or ready · {realGuitar ? "Follow the string and fret numbers. MIDI scores exact pitches; Watch the house lets you play along without scoring." : guitarMode ? "Hold matching frets, then strum with ↓ / ↑ or Space. Keep frets held through long tails." : rhythm ? `Press ${spaceToHit ? "the shown key or Space" : "the shown keys"}, play any MIDI note, or tap the hit pad. Tap once per gem; no holds.` : "Tap the strike line, pads, or piano. Hold melodic notes through their tails."}
+            <kbd className="rounded bg-elevated px-1">ENTER</kbd> start / pause · <kbd className="rounded bg-elevated px-1">SHIFT + R</kbd> reset set while paused or ready · {realGuitar ? "Follow the string and fret numbers. MIDI scores exact pitches; Play along runs the guide without scoring." : guitarMode ? "Hold matching frets, then strum with ↓ / ↑ or Space. Keep frets held through long tails." : rhythm ? `Press ${spaceToHit ? "the shown key or Space" : "the shown keys"}, play any MIDI note, or tap the hit pad. Tap once per gem; no holds.` : "Tap the strike line, pads, or piano. Hold melodic notes through their tails."}
           </p>
         </section>
       </div>

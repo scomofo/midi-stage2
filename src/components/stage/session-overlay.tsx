@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { ArrowRight, Eye, Keyboard, Pause, Play, RotateCcw, Star, Trophy } from "lucide-react";
+import { ArrowRight, Cable, Eye, Keyboard, Pause, Play, RotateCcw, Star, Trophy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { Difficulty, Instrument } from "@/lib/midi-stage/types";
 import { TIMING_CENTER_MS, type TimingSummary } from "@/lib/midi-stage/timing-summary";
@@ -118,6 +118,9 @@ type SessionOverlayProps = {
   rhythm?: boolean;
   guitarMode?: boolean;
   realGuitar?: boolean;
+  guitarMidiReady?: boolean;
+  guitarConnecting?: boolean;
+  onConnectGuitar?: () => void;
   practice?: PracticeContext;
   results?: SessionResults | null;
   controls: { label: string; keys: string[] }[];
@@ -260,6 +263,9 @@ export function SessionOverlay({
   rhythm = false,
   guitarMode = false,
   realGuitar = false,
+  guitarMidiReady = false,
+  guitarConnecting = false,
+  onConnectGuitar,
   practice,
   results,
   controls,
@@ -274,6 +280,7 @@ export function SessionOverlay({
 }: SessionOverlayProps) {
   const isResults = mode === "results" && results;
   const isPaused = mode === "paused";
+  const needsGuitarMidi = realGuitar && !guitarMidiReady;
   const resultsVisible = Boolean(isResults);
   const runContext = results
     ? `${DIFFICULTY_LABELS[results.difficulty]} · ${Math.round(results.speed * 100)}% tempo · ${results.parts.map((part) => part.label).join(" + ")}`
@@ -405,9 +412,9 @@ export function SessionOverlay({
               </div>
             </dl>
             <div className="session-actions">
-              <Button type="button" onClick={onRestart} disabled={busy} data-session-primary>
+              <Button type="button" onClick={realGuitar && results.demo ? onDemo : needsGuitarMidi ? onConnectGuitar : onRestart} disabled={busy || guitarConnecting} data-session-primary>
                 <RotateCcw size={16} aria-hidden="true" />
-                {busy ? "Preparing…" : "Play again"}
+                {busy ? "Preparing…" : realGuitar && results.demo ? "Play along again" : needsGuitarMidi ? "Connect guitar MIDI" : "Play again"}
               </Button>
               <Button
                 type="button"
@@ -480,14 +487,14 @@ export function SessionOverlay({
             </p>
             <KeyGuide controls={controls} rhythm={rhythm} guitarMode={guitarMode} realGuitar={realGuitar} />
             <div className="session-actions">
-              <Button type="button" onClick={onStart} disabled={busy} data-session-primary>
+              <Button type="button" onClick={needsGuitarMidi && !demo ? onConnectGuitar : onStart} disabled={busy || guitarConnecting} data-session-primary>
                 <Play size={16} aria-hidden="true" />
-                {busy ? "Preparing…" : "Resume set"}
+                {busy ? "Preparing…" : needsGuitarMidi && !demo ? "Connect guitar MIDI" : "Resume set"}
                 <kbd aria-hidden="true">ENTER</kbd>
               </Button>
-              <Button type="button" variant="secondary" onClick={onRestart} disabled={busy}>
+              <Button type="button" variant="secondary" onClick={needsGuitarMidi ? onConnectGuitar : onRestart} disabled={busy || guitarConnecting}>
                 <RotateCcw size={16} aria-hidden="true" />
-                Restart set
+                {needsGuitarMidi ? "Set up pitch scoring" : "Restart set"}
               </Button>
             </div>
             <p className="session-footnote">
@@ -513,14 +520,14 @@ export function SessionOverlay({
             </p>
             <KeyGuide controls={controls} rhythm={rhythm} guitarMode={guitarMode} realGuitar={realGuitar} />
             <div className="session-actions">
-              <Button type="button" onClick={onStart} disabled={busy} data-session-primary>
-                <Play size={16} aria-hidden="true" />
-                {busy ? "Preparing…" : "Start set"}
-                <kbd>ENTER</kbd>
+              <Button type="button" onClick={needsGuitarMidi ? onConnectGuitar : onStart} disabled={busy || guitarConnecting} data-session-primary>
+                {needsGuitarMidi ? <Cable size={16} aria-hidden="true" /> : <Play size={16} aria-hidden="true" />}
+                {busy ? "Preparing…" : guitarConnecting ? "Connecting…" : needsGuitarMidi ? "Connect guitar MIDI" : "Start set"}
+                {!needsGuitarMidi ? <kbd>ENTER</kbd> : null}
               </Button>
               <Button type="button" variant="secondary" onClick={onDemo} disabled={busy}>
                 <Eye size={16} aria-hidden="true" />
-                Watch the house
+                {realGuitar ? "Play along" : "Watch the house"}
               </Button>
             </div>
             <div className="session-first-time">
@@ -532,7 +539,7 @@ export function SessionOverlay({
             </div>
             <p className="session-footnote">
               {realGuitar
-                ? "Standard tuning · E A D G B E. Connect guitar MIDI for pitch scoring, or use Watch the house to play along without scoring. MIDI cannot verify string choice."
+                ? "Standard tuning · E A D G B E. Play along runs the guide without scoring. A guitar MIDI device enables pitch scoring; a regular guitar cable does not send MIDI. String choice is not verified."
                 : practice
                 ? "Start with a count-in. Repeat section gives you a fresh score on every take. Practice scores aren’t saved."
                 : guitarMode
