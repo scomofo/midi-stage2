@@ -13,6 +13,11 @@ cache; an unchanged viewport reuses it. There are no external graphics assets,
 network dependencies, or renderer-library changes. Reduced motion freezes ambient
 lighting and performer/crowd motion, hides particles, and keeps moving notes.
 
+Authored real-string guitar charts add a quiet neck surface, projected metallic
+string gauges, a timing strike plate, tuning labels and open-note rings retaining
+the explicit zero. Scrolling beat lines remain rhythmic divisions. The spatial
+fretboard and launch flow are documented in [Guitar cockpit](guitar-cockpit.md).
+
 ## Song lighting
 
 Beat pulses follow the chart’s beat grid and bar accents. Fixtures, crowd motion

@@ -78,7 +78,7 @@ try {
   const begin = async (demo = false) => {
     await setTime(-1);
     const before = await page.evaluate(() => window.guitarProbe.begins);
-    await (demo ? page.getByRole('button', { name: 'Watch the house', exact: true }) : start).click();
+    await (demo ? page.getByRole('button', { name: /^(Watch the house|Play along)$/ }).last() : start).click();
     await page.waitForFunction((before) => window.guitarProbe.begins === before + 1
       && window.guitarProbe.live.status === 'playing' && window.guitarProbe.audio.running, before);
     await canvas.focus();
@@ -109,10 +109,20 @@ try {
   phase = 'real-guitar scored start requires a usable MIDI route';
   console.log(`Guitar check: ${phase}`);
   await command('song:backline-drive');
+  assert.equal(await start.count(), 0, 'Disconnected guitar should offer setup before a scored take');
+  await page.locator('.session-actions').getByRole('button', { name: 'Connect guitar MIDI', exact: true }).waitFor();
+  await page.locator('.session-actions').getByRole('button', { name: 'Play along', exact: true }).waitFor();
+  await begin(true);
+  assert.equal(await page.evaluate(() => window.guitarProbe.live.demo), true, 'Play along must be unscored autoplay');
+  await pause.click();
+  await resume.click();
+  await page.waitForFunction(() => window.guitarProbe.live.status === 'playing' && window.guitarProbe.live.demo);
+  await reset.click();
   const assertGatedStart = async () => {
     const before = await page.evaluate(() => window.guitarProbe.begins);
-    await start.click();
-    await page.getByText('Connect a guitar MIDI input in Soundcheck, or choose Watch the house to play along.', { exact: true }).first().waitFor();
+    await canvas.focus();
+    await page.keyboard.press('Enter');
+    await page.getByText('Connect a guitar MIDI input in Soundcheck, or choose Play along without scoring.', { exact: true }).first().waitFor();
     await page.locator('#soundcheck-panel').waitFor();
     await frames();
     assert.equal(await page.evaluate(() => window.guitarProbe.live.status), 'ready');
@@ -122,9 +132,12 @@ try {
   };
   await assertGatedStart();
   await page.getByRole('button', { name: 'Close soundcheck', exact: true }).click();
-  await page.getByRole('button', { name: 'Connect MIDI', exact: true }).click();
+  const beforeConnect = await page.evaluate(() => window.guitarProbe.begins);
+  await page.locator('.session-actions').getByRole('button', { name: 'Connect guitar MIDI', exact: true }).click();
   await page.getByRole('button', { name: 'MIDI connected', exact: true }).waitFor();
-  await command('soundcheck');
+  await page.waitForFunction(() => document.activeElement?.id === 'soundcheck-title');
+  assert.equal(await page.evaluate(() => window.guitarProbe.live.status), 'ready', 'Connecting must not start playback');
+  assert.equal(await page.evaluate(() => window.guitarProbe.begins), beforeConnect);
   await page.getByRole('combobox', { name: 'Guitar MIDI input', exact: true }).selectOption('off');
   await page.getByRole('button', { name: 'Close soundcheck', exact: true }).click();
   await assertGatedStart();
@@ -396,6 +409,70 @@ try {
   assert.equal((await stats()).perfect, beforeReal.perfect + 1);
   assert.ok((await stats()).score > beforeReal.score);
 
+  phase = 'live spatial fingering preview retains a partially played chord';
+  console.log(`Guitar check: ${phase}`);
+  await reset.click();
+  await begin();
+  const realChord = await page.evaluate(() => {
+    const notes = window.guitarProbe.live.judges.get('guitar').notes;
+    const first = notes.find((note) => {
+      const group = notes.filter((mate) => mate.time === note.time);
+      const next = notes.find((mate) => mate.time > note.time);
+      const following = next ? notes.filter((mate) => mate.time === next.time) : [];
+      return group.length > 1 && following.length > 0 && JSON.stringify(group.map((mate) => mate.guitarPosition)) !== JSON.stringify(following.map((mate) => mate.guitarPosition));
+    });
+    if (!first) throw Error('The real guitar fixture needs a chord');
+    return { time: first.time, notes: notes.filter((note) => note.time === first.time).map((note) => ({ pitch: note.pitch, position: note.guitarPosition })) };
+  });
+  await setTime(realChord.time);
+  await page.waitForTimeout(150);
+  const currentShape = () => stringGuide.locator('.guitar-string-guide-string[data-active="true"]').evaluateAll((items) => items.map((item) => item.getAttribute('aria-label')));
+  const beforeShape = await currentShape();
+  assert.equal(beforeShape.length, realChord.notes.length);
+  await page.evaluate((pitch) => { window.sendGuitarQaMidi(pitch); }, realChord.notes[0].pitch);
+  await page.waitForTimeout(150);
+  assert.deepEqual(await currentShape(), beforeShape, 'One MIDI chord tone must not remove its fingering from the guide');
+  for (const target of realChord.notes.slice(1)) await page.evaluate((pitch) => { window.sendGuitarQaMidi(pitch); }, target.pitch);
+  await page.waitForTimeout(150);
+  assert.notDeepEqual(await currentShape(), beforeShape, 'The next shape appears after the whole chord is played');
+  for (const target of realChord.notes) await page.evaluate((pitch) => { window.sendGuitarQaMidi(pitch, 0); }, target.pitch);
+
+  phase = 'high frets, open strings and desktop guitar cockpit';
+  console.log(`Guitar check: ${phase}`);
+  await reset.click();
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await begin();
+  // Rendering fixture through the real React HUD and Canvas2D renderer. These
+  // positions are not added to the authored setlist or used as scoring evidence.
+  await page.evaluate(() => {
+    const judge = window.guitarProbe.live.judges.get('guitar');
+    const positions = [{ string: 6, fret: 0 }, { string: 5, fret: 5 }, { string: 4, fret: 9 },
+      { string: 3, fret: 13 }, { string: 2, fret: 17 }, { string: 1, fret: 24 }];
+    const fixture = (position, id, time) => ({ id, time, duration: 0.5, velocity: 90,
+      pitch: [64, 59, 55, 50, 45, 40][position.string - 1] + position.fret,
+      lane: 6 - position.string, guitarPosition: position, state: 0, hold: null, name: 'Fretboard fixture' });
+    judge.notes = [...positions.map((position, id) => fixture(position, id, 20)), fixture({ string: 1, fret: 20 }, 6, 21)];
+    window.guitarProbe.time = 20;
+  });
+  await page.waitForFunction(() => document.querySelector('.guitar-string-guide-following')?.textContent.includes('High E fret 20'));
+  assert.deepEqual(await stringGuide.locator('.guitar-fretboard-string').evaluateAll((rows) => rows.map((row) => row.dataset.string)), ['1', '2', '3', '4', '5', '6']);
+  assert.equal(await stringGuide.locator('[data-string="1"] .guitar-fretboard-cell[data-target="true"] b').innerText(), '24');
+  assert.equal(await stringGuide.locator('[data-string="6"] .guitar-fretboard-open[data-active="true"] b').innerText(), '0');
+  assert.match(await stringGuide.locator('.guitar-string-guide-window').innerText(), /collapsed/);
+  assert.equal(await page.locator('.stage-shell').evaluate((shell) => shell.classList.contains('stage-focused')), true,
+    'Starting a guitar take must already focus the stage');
+  await stringGuide.scrollIntoViewIfNeeded();
+  const guideBox = await stringGuide.boundingBox();
+  const highwayBox = await canvas.boundingBox();
+  assert.ok(guideBox.x >= highwayBox.x + highwayBox.width, 'The desktop guide sits beside the highway during play');
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false);
+  await screenshot('guitar-cockpit-desktop');
+  if (output) await page.screenshot({ path: `${output}/guitar-cockpit-desktop-viewport.png`, fullPage: false });
+  await page.setViewportSize({ width: 390, height: 844 });
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false);
+  await stringGuide.scrollIntoViewIfNeeded();
+  await screenshot('guitar-cockpit-mobile');
+
   phase = 'other songs retain immediate keyboard play';
   console.log(`Guitar check: ${phase}`);
   await reset.click();
@@ -427,7 +504,7 @@ try {
   await page.evaluate((pitch) => { window.sendGuitarQaMidi(pitch); window.sendGuitarQaMidi(pitch, 0); }, normalMidi.pitch);
   assert.equal(await page.evaluate((id) => window.guitarProbe.live.judges.get('keys').notes.find((note) => note.id === id).state, normalMidi.id), 1);
   assert.deepEqual(errors, []);
-  console.log('PASS: real-guitar scored start requires a connected usable MIDI route; solo five-fret arcade chart; silent frets and isolated MIDI; atomic chords/repeat suppression; sustains and pause/resume ownership; finder/blur/reset cleanup; practice bookmark/demo isolation; phone multi-touch/latching/targets; real guitar has six authored strings with exact MIDI-pitch scoring and mobile guide; other songs retain keyboard and MIDI play');
+  console.log('PASS: explicit MIDI setup and unscored play-along/resume; scored guitar still requires a usable MIDI route; arcade strums, holds and input cleanup; rehearsal/demo isolation; touch/latching; exact guitar pitches; stable partial-chord preview; fret 24/open strings/collapsed gaps; desktop cockpit and narrow layout; existing keyboard/MIDI play');
 } catch (error) {
   console.error('Guitar strum regression failed during:', phase, error);
   console.error(await page.locator('body').innerText().catch(() => 'Page unavailable'));

@@ -24,6 +24,8 @@ const GRADE_LABEL: Record<Grade, string> = {
   release: "HOLD IT",
 };
 
+const STRING_GAUGES = [0, 1, 1.15, 1.3, 1.7, 2.1, 2.6] as const;
+
 type Geom = {
   point: (
     lane: number,
@@ -892,9 +894,9 @@ export class StageRenderer {
 
       const hot = state.combo >= 20;
       const track = ctx.createLinearGradient(0, far, 0, hit);
-      track.addColorStop(0, "#24343d");
-      track.addColorStop(0.3, "#101c26");
-      track.addColorStop(1, "#070d16");
+      track.addColorStop(0, strings ? "#303330" : "#24343d");
+      track.addColorStop(0.3, strings ? "#1c2221" : "#101c26");
+      track.addColorStop(1, strings ? "#0e1518" : "#070d16");
       this.poly(
         [
           [tl.x, tl.y],
@@ -907,16 +909,33 @@ export class StageRenderer {
         1.6,
       );
 
+      if (strings) {
+        // Quiet, lengthwise ebony grain gives the strings a physical surface.
+        // This remains a time highway: no decorative fret wires or inlays
+        // compete with its moving beat grid or the authored fret numbers.
+        ctx.strokeStyle = "rgba(196,168,130,0.045)";
+        ctx.lineWidth = 0.7;
+        ctx.beginPath();
+        for (let grain = 0; grain < 18; grain++) {
+          const lane = (grain + 0.45 + noise(grain + 4) * 0.2) / 18 * laneCount;
+          const distant = point(lane, 0);
+          const near = point(lane, 1.14);
+          ctx.moveTo(distant.x, distant.y);
+          ctx.lineTo(near.x, near.y);
+        }
+        ctx.stroke();
+      }
+
       // Machined rail edges have physical width without moving the hit line.
       for (const side of [0, 1]) {
         const near = rail(side, 1.14);
         const distant = rail(side, 0);
         const out = side === 0 ? -1 : 1;
         const metal = ctx.createLinearGradient(distant.x, distant.y, near.x, near.y);
-        metal.addColorStop(0, "#53696d");
-        metal.addColorStop(0.5, "#1c303c");
-        metal.addColorStop(0.85, "#8aafa9");
-        metal.addColorStop(1, "#243943");
+        metal.addColorStop(0, strings ? "#7d847a" : "#53696d");
+        metal.addColorStop(0.5, strings ? "#29302e" : "#1c303c");
+        metal.addColorStop(0.85, strings ? "#b1b8a7" : "#8aafa9");
+        metal.addColorStop(1, strings ? "#414941" : "#243943");
         this.poly(
           [
             [distant.x, distant.y],
@@ -963,7 +982,9 @@ export class StageRenderer {
             [c.x, c.y],
             [d.x, d.y],
           ],
-          i % 2 ? "rgba(143,212,196,0.07)" : "rgba(0,0,0,0.18)",
+          strings
+            ? i % 2 ? "rgba(239,232,220,0.018)" : "rgba(0,0,0,0.035)"
+            : i % 2 ? "rgba(143,212,196,0.07)" : "rgba(0,0,0,0.18)",
         );
 
         const flash = laneFlashes.get(i);
@@ -999,11 +1020,32 @@ export class StageRenderer {
         if (strings) {
           const stringTop = point(i + 0.5, 0);
           const stringBottom = point(i + 0.5, 1.14);
+          const string = lanes[i]!.guitarString ?? 1;
+          const gauge = STRING_GAUGES[string];
+          const wound = string >= 4;
+          const steel = ctx.createLinearGradient(0, far, 0, stringBottom.y);
+          steel.addColorStop(0, wound ? "#706b55" : "#657477");
+          steel.addColorStop(0.65, wound ? "#ae9974" : "#b3c5c5");
+          steel.addColorStop(1, wound ? "#d8c39c" : "#e0e9e5");
+          // Project the gauge as well as the string's position. Low strings
+          // are thicker and warmer; plain high strings have a silver edge.
+          this.poly([
+            [stringTop.x - gauge * 0.24, stringTop.y],
+            [stringTop.x + gauge * 0.24, stringTop.y],
+            [stringBottom.x + gauge * 0.72, stringBottom.y],
+            [stringBottom.x - gauge * 0.72, stringBottom.y],
+          ], "rgba(0,0,0,0.6)");
+          this.poly([
+            [stringTop.x - gauge * 0.12, stringTop.y],
+            [stringTop.x + gauge * 0.12, stringTop.y],
+            [stringBottom.x + gauge * 0.5, stringBottom.y],
+            [stringBottom.x - gauge * 0.5, stringBottom.y],
+          ], steel);
           ctx.beginPath();
-          ctx.moveTo(stringTop.x, stringTop.y);
-          ctx.lineTo(stringBottom.x, stringBottom.y);
-          ctx.strokeStyle = hexA(lanes[i]!.color, 0.48);
-          ctx.lineWidth = 0.75 + (lanes[i]!.guitarString ?? 1) * 0.13;
+          ctx.moveTo(stringTop.x - gauge * 0.09, stringTop.y);
+          ctx.lineTo(stringBottom.x - gauge * 0.28, stringBottom.y);
+          ctx.strokeStyle = wound ? "rgba(239,232,220,0.48)" : "rgba(239,232,220,0.7)";
+          ctx.lineWidth = 0.55;
           ctx.stroke();
         }
       }
@@ -1014,8 +1056,9 @@ export class StageRenderer {
         ctx.beginPath();
         ctx.moveTo(a.x, a.y);
         ctx.lineTo(b.x, b.y);
-        ctx.strokeStyle =
-          i === 0 || i === laneCount ? "rgba(239,232,220,0.32)" : "rgba(239,232,220,0.1)";
+        ctx.strokeStyle = i === 0 || i === laneCount
+          ? "rgba(239,232,220,0.32)"
+          : strings ? "rgba(239,232,220,0.025)" : "rgba(239,232,220,0.1)";
         ctx.lineWidth = i === 0 || i === laneCount ? 1.8 : 0.9;
         ctx.stroke();
       }
@@ -1041,6 +1084,23 @@ export class StageRenderer {
 
       const a = rail(0, 1);
       const b = rail(1, 1);
+      if (strings) {
+        // The brushed strike plate belongs to the timing receptor, not a
+        // numbered physical fret. Its position never changes the hit line.
+        const plateTopLeft = rail(0, 0.982);
+        const plateTopRight = rail(1, 0.982);
+        const plateBottomLeft = rail(0, 1.03);
+        const plateBottomRight = rail(1, 1.03);
+        const plate = ctx.createLinearGradient(0, plateTopLeft.y, 0, plateBottomLeft.y);
+        plate.addColorStop(0, "#7b847b");
+        plate.addColorStop(0.15, "#353e3c");
+        plate.addColorStop(0.7, "#141d21");
+        plate.addColorStop(1, "#6b7670");
+        this.poly([
+          [plateTopLeft.x, plateTopLeft.y], [plateTopRight.x, plateTopRight.y],
+          [plateBottomRight.x, plateBottomRight.y], [plateBottomLeft.x, plateBottomLeft.y],
+        ], plate, "rgba(239,232,220,0.28)", 0.8);
+      }
       ctx.save();
       ctx.shadowColor = hot ? "#c4a882" : "#8fd4c4";
       ctx.shadowBlur =
@@ -1113,7 +1173,8 @@ export class StageRenderer {
         }
         const code = !strings && active.length < 3 ? KEYS[p.id][lane] : undefined;
         const hintSize = active.length > 2 ? 8 : 10;
-        let hint = compactHints && code ? `${lanes[lane]!.short} · ${keyLabel(code)}` : lanes[lane]!.short;
+        let hint = strings ? compactHints ? lanes[lane]!.short : `S${lanes[lane]!.guitarString}`
+          : compactHints && code ? `${lanes[lane]!.short} · ${keyLabel(code)}` : lanes[lane]!.short;
         ctx.font = `700 ${hintSize}px 'IBM Plex Sans', system-ui, sans-serif`;
         // Full shortcuts remain on the pad controls; don't crowd adjacent
         // receptors with a long combined hint such as "KICK · SPACE".
@@ -1134,6 +1195,10 @@ export class StageRenderer {
           lanes[lane]!.color,
           "700",
         );
+        if (strings && !compactHints) {
+          const tuning = lanes[lane]!.name.split(" · ")[1] ?? lanes[lane]!.short.replace(/^\d+\s*/, "");
+          this.text(tuning, mid.x, hit + 35, 8, "rgba(239,232,220,0.68)", "500");
+        }
         if (active.length < 3 && !compactHints) {
           if (code) this.text(keyLabel(code), mid.x, hit + 36, 8, "rgba(239,232,220,0.45)", "500");
         }
@@ -1251,18 +1316,34 @@ export class StageRenderer {
           // Authored fret numbers are the target; zero is an open string.
           // Keep the face upright so perspective never distorts the number.
           const fret = String(n.guitarPosition.fret);
+          const open = n.guitarPosition.fret === 0;
           const faceW = Math.min(lw * 0.86, Math.max(12, rw * 2.3));
           const fontSize = Math.max(7, Math.min(24, faceW / (fret.length * 0.68 + 0.3)));
           const faceH = fontSize + Math.max(4, 8 * pos.scale);
           ctx.save();
           ctx.globalAlpha = alpha;
           ctx.beginPath();
-          ctx.roundRect(pos.x - faceW / 2, pos.y - faceH / 2, faceW, faceH, Math.min(5, faceW / 4));
+          if (open) {
+            // A ring is the open-string convention; retain the explicit 0
+            // so its meaning remains clear without learning a color code.
+            const radius = Math.min(faceW, faceH + 4 * pos.scale) / 2;
+            ctx.arc(pos.x, pos.y, radius, 0, Math.PI * 2);
+          } else {
+            ctx.roundRect(pos.x - faceW / 2, pos.y - faceH / 2, faceW, faceH, Math.min(5, faceW / 4));
+          }
           ctx.fillStyle = isHeld ? "#14272b" : "#0a1017";
           ctx.fill();
           ctx.strokeStyle = color;
           ctx.lineWidth = isHeld ? 2.5 : Math.max(1.2, 2 * pos.scale);
           ctx.stroke();
+          if (!open) {
+            ctx.beginPath();
+            ctx.moveTo(pos.x - faceW * 0.28, pos.y - faceH / 2 + 2);
+            ctx.lineTo(pos.x + faceW * 0.28, pos.y - faceH / 2 + 2);
+            ctx.strokeStyle = "rgba(239,232,220,0.45)";
+            ctx.lineWidth = Math.max(0.7, pos.scale);
+            ctx.stroke();
+          }
           ctx.fillStyle = "#efe8dc";
           ctx.font = `700 ${fontSize}px 'IBM Plex Mono', ui-monospace, monospace`;
           ctx.textAlign = "center";
