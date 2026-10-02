@@ -397,6 +397,7 @@ try {
   assert.ok(exactNote, 'Real guitar fixture needs an isolated note for exact-pitch acceptance');
   await begin();
   await setTime(exactNote.time);
+  await page.waitForTimeout(180);
   const beforeReal = await stats();
   await page.keyboard.press('z');
   assert.deepEqual(await stats(), beforeReal, 'Computer-key audition must not score a real guitar pitch');
@@ -404,10 +405,53 @@ try {
   assert.equal((await stats()).extra, beforeReal.extra + 1, 'An octave substitution is one extra, not a matching real-guitar note');
   assert.equal((await stats()).score, beforeReal.score);
   assert.equal(await page.evaluate((id) => window.guitarProbe.live.judges.get('guitar').notes.find((note) => note.id === id).state, exactNote.id), 0);
+  const pitchFeedback = stringGuide.locator('.guitar-pitch-feedback');
+  await page.waitForFunction(() => document.querySelector('.guitar-pitch-feedback')?.dataset.kind === 'octave');
+  assert.match(await pitchFeedback.innerText(), /Octave differs/);
+  const pitchNames = await page.evaluate(async (pitch) => {
+    const { noteName } = await import('/src/lib/midi-stage/engine.ts');
+    return { played: noteName(pitch + 12), target: noteName(pitch) };
+  }, exactNote.pitch);
+  assert.match(await pitchFeedback.innerText(), new RegExp(pitchNames.played));
+  assert.match(await pitchFeedback.innerText(), new RegExp(pitchNames.target));
+  assert.deepEqual(await page.evaluate(() => window.guitarProbe.live.flashes.map(({ lane, kind }) => ({ lane, kind }))), [],
+    'A rejected pitch cannot flash an inferred guitar string');
   await page.evaluate((pitch) => { window.sendGuitarQaMidi(pitch); window.sendGuitarQaMidi(pitch, 0); }, exactNote.pitch);
   assert.equal(await page.evaluate((id) => window.guitarProbe.live.judges.get('guitar').notes.find((note) => note.id === id).state, exactNote.id), 1);
   assert.equal((await stats()).perfect, beforeReal.perfect + 1);
   assert.ok((await stats()).score > beforeReal.score);
+  await page.waitForFunction(() => document.querySelector('.guitar-pitch-feedback')?.dataset.kind === 'matched');
+  assert.match(await pitchFeedback.innerText(), /Perfect/);
+  await screenshot('guitar-pitch-matched-mobile');
+  await pause.click();
+  assert.equal(await pitchFeedback.count(), 0, 'Pause must hide recent scored input');
+  await resume.click();
+  await page.waitForFunction(() => window.guitarProbe.live.status === 'playing');
+  assert.equal(await pitchFeedback.getAttribute('data-kind'), 'listening', 'Resume must not repeat the old pitch diagnostic');
+
+  phase = 'between-target and unrelated pitch feedback stays neutral';
+  console.log(`Guitar check: ${phase}`);
+  await reset.click();
+  await begin();
+  const firstRealTime = realChart.notes[0].time;
+  const secondRealTime = realChart.notes.find((note) => note.time > firstRealTime).time;
+  await setTime((firstRealTime + secondRealTime) / 2);
+  await page.evaluate((pitch) => { window.sendGuitarQaMidi(pitch); window.sendGuitarQaMidi(pitch, 0); }, realChart.notes[0].pitch);
+  await page.waitForFunction(() => document.querySelector('.guitar-pitch-feedback')?.dataset.kind === 'between');
+  assert.match(await pitchFeedback.innerText(), /Between targets/);
+  await reset.click();
+  await begin();
+  await setTime(exactNote.time);
+  await page.waitForTimeout(180);
+  const beforeUnrelated = await stats();
+  await page.evaluate(() => { window.sendGuitarQaMidi(127); window.sendGuitarQaMidi(127, 0); });
+  await page.waitForFunction(() => document.querySelector('.guitar-pitch-feedback')?.dataset.kind === 'different');
+  assert.match(await pitchFeedback.innerText(), /Different pitch/);
+  assert.equal((await stats()).extra, beforeUnrelated.extra + 1);
+  assert.equal((await stats()).score, beforeUnrelated.score);
+  assert.equal(await stringGuide.locator('[data-hit="true"]').count(), 0);
+  assert.deepEqual(await page.evaluate(() => window.guitarProbe.live.flashes), [], 'An unrelated pitch has no string receptor');
+  await page.waitForFunction(() => document.querySelector('.guitar-pitch-feedback')?.dataset.kind === 'listening');
 
   phase = 'live spatial fingering preview retains a partially played chord';
   console.log(`Guitar check: ${phase}`);
@@ -426,16 +470,46 @@ try {
   });
   await setTime(realChord.time);
   await page.waitForTimeout(150);
-  const currentShape = () => stringGuide.locator('.guitar-string-guide-string[data-active="true"]').evaluateAll((items) => items.map((item) => item.getAttribute('aria-label')));
+  const currentShape = () => stringGuide.locator('.guitar-string-guide-string[data-active="true"]').evaluateAll((items) => items.map((item) => ({
+    string: item.dataset.string, fret: item.querySelector('.guitar-string-guide-fret')?.textContent,
+  })));
   const beforeShape = await currentShape();
   assert.equal(beforeShape.length, realChord.notes.length);
   await page.evaluate((pitch) => { window.sendGuitarQaMidi(pitch); }, realChord.notes[0].pitch);
   await page.waitForTimeout(150);
   assert.deepEqual(await currentShape(), beforeShape, 'One MIDI chord tone must not remove its fingering from the guide');
+  assert.match(await stringGuide.locator('.guitar-pitch-progress').innerText(), new RegExp(`1 / ${realChord.notes.length} pitches matched`));
+  const hitPosition = realChord.notes[0].position;
+  const hitRow = stringGuide.locator(`.guitar-fretboard-string[data-string="${hitPosition.string}"]`);
+  assert.equal(await hitRow.locator('[data-hit="true"]').count(), 1, 'Only the actually judged target gains a matched mark');
+  const beforeRepeat = await stats();
+  await page.evaluate((pitch) => { window.sendGuitarQaMidi(pitch, 0); window.sendGuitarQaMidi(pitch); }, realChord.notes[0].pitch);
+  await page.waitForFunction(() => document.querySelector('.guitar-pitch-feedback')?.dataset.kind === 'repeat');
+  assert.match(await pitchFeedback.innerText(), /Already matched/);
+  assert.equal((await stats()).extra, beforeRepeat.extra + 1);
+  assert.equal((await stats()).score, beforeRepeat.score, 'Repeated chord tones cannot add score');
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await stringGuide.scrollIntoViewIfNeeded();
+  await screenshot('guitar-pitch-chord-desktop');
+  if (output) await page.screenshot({ path: `${output}/guitar-pitch-chord-desktop-viewport.png`, fullPage: false });
   for (const target of realChord.notes.slice(1)) await page.evaluate((pitch) => { window.sendGuitarQaMidi(pitch); }, target.pitch);
   await page.waitForTimeout(150);
   assert.notDeepEqual(await currentShape(), beforeShape, 'The next shape appears after the whole chord is played');
   for (const target of realChord.notes) await page.evaluate((pitch) => { window.sendGuitarQaMidi(pitch, 0); }, target.pitch);
+  await reset.click();
+  assert.equal(await pitchFeedback.count(), 0, 'Reset leaves no scored pitch feedback');
+  await page.getByRole('button', { name: 'Soundcheck', exact: true }).click();
+  const readyBefore = await stats();
+  await page.evaluate(() => { window.sendGuitarQaMidi(40); window.sendGuitarQaMidi(40, 0); });
+  await page.waitForFunction(() => document.querySelector('output[aria-label="Soundcheck feedback"]')?.textContent === 'Guitar · E2 · MIDI pitch');
+  assert.deepEqual(await stats(), readyBefore, 'Ready Soundcheck notes remain unscored');
+  assert.equal(await pitchFeedback.count(), 0);
+  await page.getByRole('button', { name: 'Close soundcheck', exact: true }).click();
+  await begin(true);
+  await setTime(realChord.time);
+  assert.equal(await pitchFeedback.count(), 0, 'Play along cannot present human pitch diagnostics');
+  assert.equal(await stringGuide.locator('.guitar-pitch-progress').count(), 0);
+  assert.equal(await stringGuide.locator('[data-hit="true"]').count(), 0, 'Demo note state is not personal performance feedback');
 
   phase = 'high frets, open strings and desktop guitar cockpit';
   console.log(`Guitar check: ${phase}`);
@@ -504,7 +578,7 @@ try {
   await page.evaluate((pitch) => { window.sendGuitarQaMidi(pitch); window.sendGuitarQaMidi(pitch, 0); }, normalMidi.pitch);
   assert.equal(await page.evaluate((id) => window.guitarProbe.live.judges.get('keys').notes.find((note) => note.id === id).state, normalMidi.id), 1);
   assert.deepEqual(errors, []);
-  console.log('PASS: explicit MIDI setup and unscored play-along/resume; scored guitar still requires a usable MIDI route; arcade strums, holds and input cleanup; rehearsal/demo isolation; touch/latching; exact guitar pitches; stable partial-chord preview; fret 24/open strings/collapsed gaps; desktop cockpit and narrow layout; existing keyboard/MIDI play');
+  console.log('PASS: explicit MIDI setup and unscored play-along/resume; scored guitar MIDI gate; arcade strums, holds and input cleanup; rehearsal/demo isolation; touch/latching; exact guitar pitches; received pitch/octave/duplicate/between-target feedback without inferred strings; actual partial-chord progress; reset/pause/ready/demo isolation; fret 24/open strings/collapsed gaps; desktop cockpit and narrow layout; existing keyboard/MIDI play');
 } catch (error) {
   console.error('Guitar strum regression failed during:', phase, error);
   console.error(await page.locator('body').innerText().catch(() => 'Page unavailable'));

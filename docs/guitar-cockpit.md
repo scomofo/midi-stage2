@@ -17,6 +17,26 @@ all its tones are judged, the preview advances to the next unresolved attack,
 even while sustained notes ring. Preview lookup uses the same late-hit window
 as the judge, respects pause/count-in/passage time, and does not consume notes.
 
+During scored play, a matched chord tone keeps its fret numeral and gains a
+check badge. **1 / 3 pitches matched** describes the attack's progress, not
+sustain completion or verified physical string choice. Once the whole attack
+resolves, its acknowledgment gives way to the next shape.
+
+The recent-input readout names the received MIDI note with its octave and the
+actual judgment. Rejected notes distinguish a different pitch, an octave
+difference, an already matched tone and input between target windows. Target
+names come from the nearest unresolved attack inside the judge's timing window;
+input outside that window is not called a pitch mistake. A rejection still
+counts as an extra under the existing scoring rules.
+
+Unmatched pitches receive neutral feedback. They never flash a string inferred
+from another occurrence of the pitch in the chart. Only an actual judged target
+can acknowledge its authored lane. The readout returns to listening after two
+seconds and clears on pause, fresh take, reset, completion or chart change.
+Ready Soundcheck remains unscored, and Play along suppresses personal progress
+and pitch diagnostics. This is a MIDI pitch check, not an acoustic tuner: it
+does not measure cents, physical string identity or hardware latency.
+
 During desktop play, the preview sits beside the highway. Narrow windows place
 it above the highway. Focused play hides the song introduction, search launcher
 and passage choices while keeping transport and session feedback available.
@@ -46,12 +66,17 @@ rules.
 
 `guitar-preview.test.ts` covers partial chords through a real Judge, inclusive
 late boundaries, settled groups, count-in, arcade metadata, long-chart lookup,
-open strings, fret 24 and wide shapes. It runs in `npm test`.
+open strings, fret 24, wide shapes and individually matched equal pitches on
+different authored strings. `guitar-pitch-feedback.test.ts` uses real Judge
+results for retry, duplicate, overlapping target, octave and timing-window
+boundaries across difficulties and tempos, with long-chart lookup and mutation
+checks. Both run in `npm test`.
 
 `npm run test:guitar` exercises the actual launch choices and keyboard fallback
 gate, connection focus, unscored play-along/resume, partial MIDI chord preview,
 six-string scoring, open/high-fret rendering fixtures, desktop docking and narrow
-layouts, alongside the existing arcade/hold/input-cleanup checks. Rendering
+layouts, live pitch/partial-chord diagnostics, neutral rejected-note feedback,
+and pause/reset/Soundcheck/demo isolation alongside the existing arcade/hold/input-cleanup checks. Rendering
 fixtures do not modify the authored setlist or establish playable wide voicings.
 
 Graphics, session, navigation, practice, soundcheck, import and production render

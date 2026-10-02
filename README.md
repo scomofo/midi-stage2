@@ -120,7 +120,8 @@ explicitly cropped fret ranges. It sits beside the highway during desktop play.
 Passage practice and slower tempo retain the same physical fingerings.
 
 Connect a MIDI-capable guitar or pickup to score exact pitches and note-off
-sustains. Octave substitutions are not accepted. MIDI pitch scoring does not
+sustains. The cockpit shows received notes, octave/pitch/repeat feedback and
+individual chord tones already matched. Octave substitutions are not accepted. MIDI pitch scoring does not
 verify the physical string or fingering; the authored positions are guidance.
 A normal guitar cable/audio interface does not produce MIDI, and live audio
 pitch detection is not implemented. Choose **Play along** to follow the

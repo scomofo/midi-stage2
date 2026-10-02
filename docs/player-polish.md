@@ -245,7 +245,9 @@ releases the owning sustain. Each chord tone is judged independently so a physic
 strum can arrive as several successive note-ons. Pitch-only MIDI cannot prove which
 string or fingering was used. Per-string channel validation, audio-interface pitch
 detection, bends, slides, hammer-ons and latency calibration are not implemented.
-Watch the house provides an unscored play-along with the synthesized guide.
+Play along provides an unscored take with the synthesized guide. Scored play
+shows received MIDI pitches and partial chord progress in the guitar cockpit;
+rejected pitches never infer a physical string for their feedback.
 
 The Arcade variant shares the authored music but uses five separate button lanes.
 Fret selection is silent; a strum must match the entire nearest unresolved shape.
