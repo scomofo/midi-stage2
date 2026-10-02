@@ -97,11 +97,11 @@ export function GuitarStringGuide({
         })}
       </div>
       {performing && scored ? <>
-        {targets.length ? <p className="guitar-pitch-progress"><strong>{matchedCount} / {targets.length}</strong> pitches matched</p> : null}
+        {targets.length ? <p className="guitar-pitch-progress">This shape · <strong>{matchedCount} / {targets.length}</strong> pitches matched</p> : null}
         <div className="guitar-pitch-feedback" data-kind={feedback?.kind ?? "listening"}>
           {!feedback ? <div className="guitar-pitch-placeholder"><strong>Listening for your guitar</strong><span>Play a target at the strike line</span></div> : null}
           <output className="guitar-pitch-announcement" role="status" aria-live="polite" aria-atomic="true">
-            {feedback ? <><span className="guitar-pitch-received">Received <strong>{noteName(feedback.pitch)}</strong></span><span className="guitar-pitch-detail">{feedback.detail}</span></> : null}
+            {feedback ? <><span className="guitar-pitch-received">Last input · Received <strong>{noteName(feedback.pitch)}</strong></span><span className="guitar-pitch-detail">{feedback.detail}</span></> : null}
           </output>
         </div>
       </> : null}
