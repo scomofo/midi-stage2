@@ -24,6 +24,7 @@ import { RehearsalBookmarkCard } from "@/components/stage/rehearsal-bookmark-car
 import { GuitarController } from "@/components/stage/guitar-controller";
 import { GuitarStringGuide } from "@/components/stage/guitar-string-guide";
 import { getGuitarPreview } from "@/lib/midi-stage/guitar-preview";
+import { getGuitarPitchFeedback, type GuitarPitchFeedback } from "@/lib/midi-stage/guitar-pitch-feedback";
 import "./stage-launcher.css";
 import { PracticeControls } from "@/components/stage/practice-controls";
 import { loadAudioAsset, saveAudioAsset, deleteAudioAsset } from "@/lib/midi-stage/audio-assets";
@@ -108,6 +109,7 @@ type Bag = {
   libraryOpen: boolean;
   finderOpen: boolean;
   feelLane: number;
+  guitarFeedback: { value: GuitarPitchFeedback; until: number } | null;
 };
 
 function loadBest(key: string) {
@@ -214,6 +216,8 @@ export function StageApp() {
     guitarChord: "",
     followingGuitarShape: [] as GuitarPosition[],
     followingGuitarChord: "",
+    hitGuitarTargets: [] as GuitarPosition[],
+    guitarFeedback: null as GuitarPitchFeedback | null,
   });
   const [overlay, setOverlay] = useState(true);
   const [results, setResults] = useState<SessionResults | null>(null);
@@ -294,6 +298,7 @@ export function StageApp() {
       libraryOpen: bag.current?.libraryOpen ?? false,
       finderOpen: bag.current?.finderOpen ?? false,
       feelLane: bag.current?.feelLane ?? 0,
+      guitarFeedback: null,
     };
     bag.current = b;
     setSelectedFrets([]);
@@ -317,13 +322,13 @@ export function StageApp() {
           difficulty: b.difficulty,
           speed: b.speed,
           drums: p.type === "drums",
-          onJudge: (r) => onJudge(b, p, r.grade, r.note?.lane ?? r.lane ?? 0, r.delta, r.note?.pitch, r.score),
+          onJudge: (r) => onJudge(b, p, r.grade, r.note?.lane ?? r.lane, r.delta, r.note?.pitch, r.score),
         }),
       );
     }
   }
 
-  function onJudge(b: Bag, p: Player, grade: Grade, lane: number, delta: number, pitch?: number, score = 0) {
+  function onJudge(b: Bag, p: Player, grade: Grade, lane: number | undefined, delta: number, pitch?: number, score = 0) {
     const now = performance.now() / 1000;
     const feelNow = b.feel;
     b.callouts = b.callouts.filter((c) => c.until > now);
@@ -348,8 +353,10 @@ export function StageApp() {
       });
     }
     if (grade === "perfect" || grade === "great" || grade === "good") {
-      b.flashes.push({ player: p.id, lane, until: now + 0.16, kind: "hit" });
-      b.padFlash.set(`${p.id}:${lane}`, now + 0.16);
+      if (lane !== undefined) {
+        b.flashes.push({ player: p.id, lane, until: now + 0.16, kind: "hit" });
+        b.padFlash.set(`${p.id}:${lane}`, now + 0.16);
+      }
       b.energy = Math.min(1, b.energy + (grade === "perfect" ? 0.045 : grade === "great" ? 0.025 : 0.012));
       b.bloom = Math.max(b.bloom, (grade === "perfect" ? 0.42 : grade === "great" ? 0.28 : 0.16) * feelNow.bloom);
       if (feelNow.hitsShake && feelNow.shake > 0) {
@@ -361,7 +368,7 @@ export function StageApp() {
       const pi = Math.max(0, active.findIndex((x) => x.id === p.id));
       const x = (rect?.width || 800) * ((pi + 0.5) / Math.max(1, active.length));
       const y = (rect?.height || 480) * 0.78;
-      const color = judge?.lanes[lane]?.color || "#8fd4c4";
+      const color = (lane === undefined ? undefined : judge?.lanes[lane]?.color) || "#8fd4c4";
       spawnHitJuice(b.particles, grade, x, y, color, b.reduced, p.id, lane, feelNow.floaters ? score : 0, feelNow.juice, feelNow.floaters);
       if (pitch != null) {
         b.sounding.add(pitch);
@@ -370,7 +377,9 @@ export function StageApp() {
     } else if (grade === "miss" || grade === "extra") {
       b.energy = Math.max(0.08, b.energy - 0.05);
       if (feelNow.shake > 0) b.trauma = Math.min(0.55, b.trauma + 0.28 * feelNow.shake);
-      b.flashes.push({ player: p.id, lane, until: now + 0.12, kind: "miss" });
+      // Pitch-only MIDI cannot tell us which physical string was played.
+      // An extra without an authored lane gets neutral feedback, not low E.
+      if (lane !== undefined) b.flashes.push({ player: p.id, lane, until: now + 0.12, kind: "miss" });
       const canvas = canvasRef.current;
       const rect = canvas?.getBoundingClientRect();
       const active = b.players.filter((x) => x.enabled);
@@ -396,9 +405,15 @@ export function StageApp() {
       if (!judge || inputPitch == null || !token.startsWith("midi:") || b.demo
         || b.status === "paused" || b.status === "starting" || b.feelOpen || b.libraryOpen || b.finderOpen) return;
       const t = b.status === "playing" ? b.audio.songAt() : b.position;
-      const matched = b.status === "playing" && t >= -judge.windows[2]!
+      const scoring = b.status === "playing" && t >= -judge.windows[2]!;
+      const matched = scoring
         ? judge.hitPitch(t, inputPitch, token) : null;
-      const stringLane = matched?.lane ?? judge.notes.find((note) => note.pitch === inputPitch)?.lane;
+      if (scoring) b.guitarFeedback = {
+        value: getGuitarPitchFeedback(judge.notes, t, judge.windows[2]!, inputPitch, matched),
+        until: performance.now() / 1000 + 2,
+      };
+      // Only an actual match can acknowledge an authored string target.
+      const stringLane = matched?.lane;
       if (stringLane !== undefined) {
         const now = performance.now() / 1000;
         b.padFlash.set(`${p.id}:${stringLane}`, now + 0.16);
@@ -620,6 +635,7 @@ export function StageApp() {
     }
     const ticket = ++startTicket.current;
     const resuming = b.status === "paused" && !demo;
+    b.guitarFeedback = null;
     if (!resuming) {
       if (!repeating) {
         b.practicePass = 1;
@@ -717,6 +733,7 @@ export function StageApp() {
     if (!b || b.status !== "playing") return;
     b.position = b.audio.songAt();
     b.status = "paused";
+    b.guitarFeedback = null;
     b.audio.stop();
     setStatus("paused");
     setOverlay(true);
@@ -730,6 +747,7 @@ export function StageApp() {
     b.audio.stop();
     b.status = "ready";
     b.demo = false;
+    b.guitarFeedback = null;
     b.practicePass = 1;
     b.position = 0;
     b.particles = [];
@@ -759,6 +777,7 @@ export function StageApp() {
       setSelectedFrets([]);
     }
     b.status = "ready";
+    b.guitarFeedback = null;
     setStatus("ready");
     let score = 0;
     let perfect = 0;
@@ -1111,6 +1130,9 @@ export function StageApp() {
           guitarChord: nextGuitarShape?.name ?? "",
           followingGuitarShape: guitarPreview?.following?.targets ?? [],
           followingGuitarChord: guitarPreview?.following?.name ?? "",
+          hitGuitarTargets: nextGuitarShape?.hitTargets ?? [],
+          guitarFeedback: b.status === "playing" && !b.demo && b.guitarFeedback && b.guitarFeedback.until > now
+            ? b.guitarFeedback.value : null,
           guitarTarget: b.song.guitarMode === "strings"
             ? guitarShape.map((position) => `S${position.string} · ${position.fret === 0 ? "OPEN" : `FRET ${position.fret}`}`).join(" / ") || "RIFF COMPLETE"
             : nextGuitarShape ? `${nextGuitarShape.name ? nextGuitarShape.name + " · " : ""}FRETS ${nextFrets}` : "RIFF COMPLETE",
@@ -2014,6 +2036,9 @@ export function StageApp() {
             chord={hud.guitarChord}
             followingTargets={hud.followingGuitarShape}
             followingChord={hud.followingGuitarChord}
+            hitTargets={hud.hitGuitarTargets}
+            feedback={bag.current?.guitarFeedback ? hud.guitarFeedback : null}
+            scored={!bag.current?.demo}
             performing={status === "playing"}
             connected={guitarMidiReady}
             connecting={midi.connecting}

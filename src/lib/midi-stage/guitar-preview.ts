@@ -4,6 +4,8 @@ export type GuitarPreviewShape = {
   time: number;
   name?: string;
   targets: GuitarPosition[];
+  /** Pitches matched to these authored targets, not verified physical strings. */
+  hitTargets: GuitarPosition[];
   lanes: number[];
 };
 
@@ -32,6 +34,7 @@ export function getGuitarPreview(
     let unresolved = false;
     let name: string | undefined;
     const targets: GuitarPosition[] = [];
+    const hitTargets: GuitarPosition[] = [];
     const lanes = new Set<number>();
     for (let index = start; index < end; index++) {
       const note = notes[index]!;
@@ -41,8 +44,11 @@ export function getGuitarPreview(
       if (note.guitarPosition && !targets.some((position) => position.string === note.guitarPosition!.string && position.fret === note.guitarPosition!.fret)) {
         targets.push({ ...note.guitarPosition });
       }
+      if (note.state === 1 && note.guitarPosition && !hitTargets.some((position) => position.string === note.guitarPosition!.string && position.fret === note.guitarPosition!.fret)) {
+        hitTargets.push({ ...note.guitarPosition });
+      }
     }
-    if (unresolved) shapes.push({ time: groupTime, name, targets, lanes: [...lanes].sort((a, b) => a - b) });
+    if (unresolved) shapes.push({ time: groupTime, name, targets, hitTargets, lanes: [...lanes].sort((a, b) => a - b) });
     start = end;
   }
   return { current: shapes[0] ?? null, following: shapes[1] ?? null };

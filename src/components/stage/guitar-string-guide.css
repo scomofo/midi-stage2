@@ -104,6 +104,7 @@
    that would falsely make the first shown high fret adjacent to the headstock. */
 .guitar-fretboard[data-shifted="true"] .guitar-fretboard-open { border-right: 0; }
 .guitar-fretboard-open b {
+  position: relative;
   display: flex;
   justify-content: center;
   align-items: center;
@@ -134,6 +135,7 @@
 .guitar-fretboard-cell[data-gap="true"] { border-left: 2px dashed var(--color-tungsten); }
 .guitar-fretboard-cell[data-target="true"] { background: color-mix(in oklab, var(--color-accent) 7%, var(--color-bg)); }
 .guitar-fretboard-note {
+  position: relative;
   z-index: 1;
   display: flex;
   justify-content: center;
@@ -147,6 +149,56 @@
   font: 600 0.6875rem var(--font-mono);
   font-variant-numeric: tabular-nums;
 }
+.guitar-fretboard-cell[data-hit="true"] .guitar-fretboard-note,
+.guitar-fretboard-open[data-hit="true"] b {
+  border: 2px solid var(--color-accent);
+  background: var(--color-surface);
+  color: var(--color-fg);
+}
+.guitar-fretboard-check {
+  position: absolute;
+  inset-block-start: -3px;
+  inset-inline-end: -5px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  color: var(--color-bg);
+}
+.guitar-fretboard-check svg { width: 6px; height: 6px; stroke-width: 3; }
+.guitar-pitch-progress {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: 0.625rem;
+  line-height: 1.5;
+}
+.guitar-pitch-progress strong { color: var(--color-fg); font-weight: 500; font-variant-numeric: tabular-nums; }
+.guitar-pitch-feedback {
+  min-width: 0;
+  min-height: 66px;
+  padding: 8px 10px;
+  border: 1px solid var(--color-border-strong);
+  border-inline-start: 2px solid var(--color-muted);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+  color: var(--color-fg);
+  font-size: 0.625rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.guitar-pitch-feedback[data-kind="matched"] { border-inline-start-color: var(--color-accent); }
+.guitar-pitch-feedback[data-kind="octave"],
+.guitar-pitch-feedback[data-kind="different"],
+.guitar-pitch-feedback[data-kind="repeat"] { border-inline-start-color: var(--color-tungsten); }
+.guitar-pitch-announcement,
+.guitar-pitch-placeholder { display: flex; flex-direction: column; gap: 2px; }
+.guitar-pitch-placeholder strong,
+.guitar-pitch-received { color: var(--color-muted); font-weight: 500; }
+.guitar-pitch-received strong { margin-left: 4px; color: var(--color-fg); font: 600 0.875rem var(--font-mono); }
 .guitar-string-guide-preview {
   display: flex;
   flex-wrap: wrap;

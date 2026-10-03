@@ -21,12 +21,15 @@ describe("guitar shape preview", () => {
     };
     const judge = new Judge(chart, { difficulty: "standard", speed: 1, drums: false, onJudge: () => {} });
     const original = getGuitarPreview(judge.notes, 1, judge.windows[2]!).current;
+    assert.deepEqual(original?.hitTargets, []);
     assert.equal(judge.hitPitch(1, 40, "low-e")?.lane, 0);
-    assert.deepEqual(getGuitarPreview(judge.notes, 1.02, judge.windows[2]!).current, original,
+    assert.deepEqual(getGuitarPreview(judge.notes, 1.02, judge.windows[2]!).current,
+      { ...original, hitTargets: [{ string: 6, fret: 0 }] },
       "the first chord tone must not change the displayed fingering mid-strum");
     assert.equal(judge.hitPitch(1.02, 47, "a-string")?.lane, 1);
     const next = getGuitarPreview(judge.notes, 1.02, judge.windows[2]!);
     assert.equal(next.current?.time, 2);
+    assert.deepEqual(next.current?.hitTargets, [], "a fresh shape starts with no acknowledgments");
     assert.equal(next.following, null);
     assert.deepEqual(judge.notes.slice(0, 2).map((target) => target.hold), ["held", "held"],
       "held tails do not block the preview of the next attack");
@@ -40,10 +43,51 @@ describe("guitar shape preview", () => {
     const before = structuredClone(notes);
     const preview = getGuitarPreview(notes, 1, 0.15);
     assert.deepEqual(preview.current?.targets, [{ string: 6, fret: 0 }, { string: 5, fret: 2 }]);
+    assert.deepEqual(preview.current?.hitTargets, [{ string: 6, fret: 0 }]);
     assert.deepEqual(preview.current?.lanes, [0, 1]);
     assert.equal(preview.following?.time, 3);
     assert.deepEqual(preview.following?.targets, [{ string: 4, fret: 2 }]);
     assert.deepEqual(notes, before, "preview must not mutate judging or hold state");
+  });
+
+  it("acknowledges only the distinct target actually matched when pitches are equal", () => {
+    const chart: Chart = {
+      notes: [note(1, 6, 5), note(1, 5, 0), note(1, 4, 2), note(2, 1, 3)],
+      lanes: [40, 45, 50, 55, 59, 64].map((pitch, lane) => ({
+        name: `String ${6 - lane}`, short: String(6 - lane), pitch, pc: pitch % 12, color: "#8fd4c4", guitarString: 6 - lane as GuitarPosition["string"],
+      })),
+    };
+    const judge = new Judge(chart, { difficulty: "standard", speed: 1, drums: false, onJudge: () => {} });
+    assert.equal(judge.hitPitch(1, 45, "first-equal-pitch")?.lane, 0);
+    const first = getGuitarPreview(judge.notes, 1, judge.windows[2]!).current;
+    assert.deepEqual(first?.targets, [{ string: 6, fret: 5 }, { string: 5, fret: 0 }, { string: 4, fret: 2 }]);
+    assert.deepEqual(first?.hitTargets, [{ string: 6, fret: 5 }],
+      "one note-on cannot visually claim both equal-pitch authored targets");
+    assert.equal(judge.hitPitch(1.01, 45, "second-equal-pitch")?.lane, 1);
+    assert.deepEqual(getGuitarPreview(judge.notes, 1.01, judge.windows[2]!).current?.hitTargets,
+      [{ string: 6, fret: 5 }, { string: 5, fret: 0 }]);
+    assert.equal(judge.hitPitch(1.02, 57, "wrong-octave"), null);
+    assert.deepEqual(getGuitarPreview(judge.notes, 1.02, judge.windows[2]!).current?.hitTargets,
+      [{ string: 6, fret: 5 }, { string: 5, fret: 0 }], "an extra pitch does not acknowledge a target");
+    assert.equal(judge.hitPitch(1.03, 52, "last-chord-tone")?.lane, 2);
+    const next = getGuitarPreview(judge.notes, 1.03, judge.windows[2]!).current;
+    assert.equal(next?.time, 2);
+    assert.deepEqual(next?.hitTargets, []);
+  });
+
+  it("does not count missed notes or infer successful holds from pitch acknowledgments", () => {
+    const notes = [note(1, 6), note(1, 5, 2), note(1, 4, 2)];
+    notes[0]!.state = 1;
+    notes[0]!.hold = "broken";
+    notes[1]!.state = 2;
+    const before = structuredClone(notes);
+    const preview = getGuitarPreview(notes, 1, 0.15).current;
+    assert.deepEqual(preview?.hitTargets, [{ string: 6, fret: 0 }],
+      "pitch progress reports a successful attack even when its separate hold later breaks");
+    assert.equal(preview?.targets.length, 3, "the full authored group remains visible");
+    assert.deepEqual(notes, before);
+    notes[2]!.state = 2;
+    assert.equal(getGuitarPreview(notes, 1, 0.15).current, null, "a fully resolved group does not block the next preview");
   });
 
   it("matches the inclusive late edge, including the judge's floating-point tolerance", () => {

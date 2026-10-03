@@ -1,7 +1,9 @@
 import { useId, type CSSProperties } from "react";
-import { Cable, Guitar } from "lucide-react";
+import { Cable, Check, Guitar } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { noteName } from "@/lib/midi-stage/engine";
 import { getFretboardWindow } from "@/lib/midi-stage/guitar-preview";
+import type { GuitarPitchFeedback } from "@/lib/midi-stage/guitar-pitch-feedback";
 import type { GuitarPosition } from "@/lib/midi-stage/types";
 import "./guitar-string-guide.css";
 
@@ -16,6 +18,9 @@ const STRINGS = [
 
 export type GuitarStringGuideProps = {
   targets: GuitarPosition[];
+  hitTargets?: GuitarPosition[];
+  feedback?: GuitarPitchFeedback | null;
+  scored?: boolean;
   chord?: string;
   followingTargets?: GuitarPosition[];
   followingChord?: string;
@@ -29,6 +34,9 @@ export type GuitarStringGuideProps = {
 
 export function GuitarStringGuide({
   targets,
+  hitTargets = [],
+  feedback = null,
+  scored = false,
   chord,
   followingTargets = [],
   followingChord,
@@ -50,13 +58,16 @@ export function GuitarStringGuide({
     return `${string.label} ${target.fret === 0 ? "open" : `fret ${target.fret}`}`;
   };
   const followingLabel = followingTargets.map(positionLabel).join(" · ");
+  const targetHit = (target: GuitarPosition | undefined) => scored && target !== undefined
+    && hitTargets.some((hit) => hit.string === target.string && hit.fret === target.fret);
+  const matchedCount = targets.filter(targetHit).length;
 
   return (
     <section className="guitar-string-guide" data-performing={performing} aria-label="Real guitar guide" aria-describedby={`${id}-window ${id}-help`}>
       <div className="guitar-string-guide-heading">
         <p><Guitar size={16} aria-hidden="true" /> Real guitar</p>
         <span className="guitar-string-guide-status" data-connected={connected}>
-          {connected ? "Pitch scoring" : "Play along"}
+          {performing && !scored ? "Play along" : connected ? "Pitch scoring" : "Play along"}
         </span>
       </div>
       <div className="guitar-string-guide-caption">
@@ -73,17 +84,27 @@ export function GuitarStringGuide({
         </div>
         {[...STRINGS].reverse().map(({ string, name, label }) => {
           const target = targets.find((note) => note.string === string);
+          const hit = targetHit(target);
           return <div className="guitar-fretboard-row guitar-fretboard-string" data-string={string} key={string}>
             <span className="guitar-fretboard-string-name" title={label}>{name}<small>{string}</small></span>
-            <span className="guitar-fretboard-open" data-active={target?.fret === 0}>
-              {target?.fret === 0 ? <b>0</b> : target ? "—" : "×"}
+            <span className="guitar-fretboard-open" data-active={target?.fret === 0} data-hit={target?.fret === 0 && hit}>
+              {target?.fret === 0 ? <b>0{hit ? <span className="guitar-fretboard-check"><Check aria-hidden="true" /></span> : null}</b> : target ? "—" : "×"}
             </span>
-            {columns.map((fret) => <span className="guitar-fretboard-cell" key={fret} data-gap={hasGapBefore(fret)} data-target={target?.fret === fret}>
-              {target?.fret === fret ? <b className="guitar-fretboard-note">{fret}</b> : null}
+            {columns.map((fret) => <span className="guitar-fretboard-cell" key={fret} data-gap={hasGapBefore(fret)} data-target={target?.fret === fret} data-hit={target?.fret === fret && hit}>
+              {target?.fret === fret ? <b className="guitar-fretboard-note">{fret}{hit ? <span className="guitar-fretboard-check"><Check aria-hidden="true" /></span> : null}</b> : null}
             </span>)}
           </div>;
         })}
       </div>
+      {performing && scored ? <>
+        {targets.length ? <p className="guitar-pitch-progress">This shape · <strong>{matchedCount} / {targets.length}</strong> pitches matched</p> : null}
+        <div className="guitar-pitch-feedback" data-kind={feedback?.kind ?? "listening"}>
+          {!feedback ? <div className="guitar-pitch-placeholder"><strong>Listening for your guitar</strong><span>Play a target at the strike line</span></div> : null}
+          <output className="guitar-pitch-announcement" role="status" aria-live="polite" aria-atomic="true">
+            {feedback ? <><span className="guitar-pitch-received">Last input · Received <strong>{noteName(feedback.pitch)}</strong></span><span className="guitar-pitch-detail">{feedback.detail}</span></> : null}
+          </output>
+        </div>
+      </> : null}
       <div className="guitar-string-guide-preview">
         <p className="guitar-string-guide-window" id={`${id}-window`}>Frets {columns[0]}–{columns.at(-1)}{omittedBefore > 0 ? ` · ${omittedBefore === 1 ? "fret 1" : `frets 1–${omittedBefore}`} omitted` : ""}{fretWindow.gaps.length ? " · skipped frets collapsed" : ""}</p>
         {followingTargets.length ? <p className="guitar-string-guide-following"><span>THEN</span> {followingChord ? <strong>{followingChord} · </strong> : null}{followingLabel}</p> : <p className="guitar-string-guide-following"><span>THEN</span> {targets.length ? "Final shape" : "No more targets"}</p>}
@@ -99,7 +120,7 @@ export function GuitarStringGuide({
               className="guitar-string-guide-string"
               data-string={string}
               data-active={active}
-              aria-label={`String ${string}, ${label}: ${target ? target.fret === 0 ? "open" : `fret ${target.fret}` : "do not play"}`}
+              aria-label={`String ${string}, ${label}: ${target ? target.fret === 0 ? "open" : `fret ${target.fret}` : "do not play"}${targetHit(target) ? ", pitch matched" : ""}`}
             >
               <span className="guitar-string-guide-tuning" aria-hidden="true">{name}<small>{string}</small></span>
               <strong className="guitar-string-guide-fret" aria-hidden="true">{target?.fret ?? "—"}</strong>
