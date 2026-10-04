@@ -831,7 +831,7 @@ export class StageRenderer {
       const on = state.players.some((p) => p.id === f.id && p.enabled);
       const struck = on && state.flashes.some((fl) => fl.player === f.id && fl.kind === "hit" && fl.until > state.now);
       const bob = animated && on ? Math.sin(((state.t * state.song.bpm) / 60) * Math.PI) * 1.2 : 0;
-      ctx.globalAlpha = on ? 0.95 : 0.55;
+      ctx.globalAlpha = on ? 0.95 : 0.68;
       ctx.drawImage(
         art,
         w * f.x - size / 2,
@@ -1429,10 +1429,21 @@ export class StageRenderer {
     if (harm && t > 0) {
       // Song-level harmony sits top-center where the eye rests between
       // phrases, not orphaned in the corner away from the play action.
+      // A soft pill behind it keeps it readable over the performers.
+      const label = `${harm.roman}   ${harm.name}`;
       ctx.font = "700 14px Syne, sans-serif";
+      const tw = ctx.measureText(label).width;
+      const px = w / 2, py = h * 0.045;
+      const padX = 14, padY = 7;
+      ctx.fillStyle = "rgba(8,10,14,0.55)";
+      ctx.beginPath();
+      ctx.roundRect(px - tw / 2 - padX, py - 7 - padY, tw + padX * 2, 14 + padY * 2, 11);
+      ctx.fill();
       ctx.fillStyle = "rgba(239,232,220,0.85)";
       ctx.textAlign = "center";
-      ctx.fillText(`${harm.roman}   ${harm.name}`, w / 2, h * 0.045);
+      ctx.textBaseline = "middle";
+      ctx.fillText(label, px, py);
+      ctx.textBaseline = "alphabetic";
     }
 
     return geom;
