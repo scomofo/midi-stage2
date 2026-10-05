@@ -66,6 +66,7 @@ export function GuitarStringGuide({
   const targetHit = (target: GuitarPosition | undefined) => scored && target !== undefined
     && hitTargets.some((hit) => hit.string === target.string && hit.fret === target.fret);
   const matchedCount = targets.filter(targetHit).length;
+  const attacksComplete = attackCue?.kind === "complete";
   const beats = attackCue ? Math.ceil(attackCue.beats * 10) / 10 : 0;
   const timingLabel = attackCue?.kind === "complete" ? "No more attacks"
     : attackCue?.kind === "window" ? "Strike window" : "Prepare shape";
@@ -83,7 +84,7 @@ export function GuitarStringGuide({
       </div>
       <div className="guitar-string-guide-caption">
         <p>High E at top · low E at bottom</p>
-        <strong>{chord ? `Next · ${chord}` : targets.length ? "Next notes" : "Listen for the next phrase"}</strong>
+        <strong>{attacksComplete ? "Attacks complete" : chord ? `Next · ${chord}` : targets.length ? "Next notes" : "Listen for the next phrase"}</strong>
       </div>
 
       {(performing || paused) && attackCue ? <div className="guitar-attack-cue" data-kind={attackCue.kind} data-paused={paused}>
@@ -115,7 +116,7 @@ export function GuitarStringGuide({
       {performing && scored ? <>
         {targets.length ? <p className="guitar-pitch-progress">This shape · <strong>{matchedCount} / {targets.length}</strong> pitches matched</p> : null}
         <div className="guitar-pitch-feedback" data-kind={feedback?.kind ?? "listening"}>
-          {!feedback ? <div className="guitar-pitch-placeholder"><strong>Listening for your guitar</strong><span>Play a target at the strike line</span></div> : null}
+          {!feedback ? <div className="guitar-pitch-placeholder"><strong>{attacksComplete ? "No further pitches to match" : "Listening for your guitar"}</strong><span>{attacksComplete ? "Follow any remaining sustain tails" : "Play a target at the strike line"}</span></div> : null}
           <output className="guitar-pitch-announcement" role="status" aria-live="polite" aria-atomic="true">
             {feedback ? <><span className="guitar-pitch-received">Last input · Received <strong>{noteName(feedback.pitch)}</strong></span><span className="guitar-pitch-detail">{feedback.detail}</span></> : null}
           </output>

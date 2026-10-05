@@ -579,6 +579,10 @@ try {
   await page.waitForFunction(() => document.querySelector('.guitar-attack-cue')?.dataset.kind === 'complete');
   assert.match(await attackCue.innerText(), /No more attacks.*Follow sustain tails/s);
   assert.ok(await page.evaluate(() => window.guitarProbe.live.judges.get('guitar').activeHolds.size) > 0, 'No more attacks must not imply releasing the final sustain');
+  assert.match(await stringGuide.locator('.guitar-string-guide-caption').innerText(), /Attacks complete/);
+  await page.waitForFunction(() => document.querySelector('.guitar-pitch-feedback')?.dataset.kind === 'listening');
+  assert.match(await stringGuide.locator('.guitar-pitch-placeholder').innerText(), /No further pitches to match/);
+  assert.doesNotMatch(await stringGuide.innerText(), /Play a target|Listen for the next phrase/);
   await screenshot('guitar-timing-final-mobile');
 
   phase = 'high frets, open strings and desktop guitar cockpit';
