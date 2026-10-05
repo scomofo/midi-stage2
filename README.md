@@ -118,6 +118,8 @@ Expert adds three-string voicings and offbeat attacks. A spatial fretboard shows
 the next fingering and previews the following shape, with open/skip markers and
 explicitly cropped fret ranges. It sits beside the highway during desktop play.
 Passage practice and slower tempo retain the same physical fingerings.
+During play, a musical beat readout and approach track help you prepare each
+shape for the strike line. Pausing freezes the cue; final sustains stay separate.
 
 Connect a MIDI-capable guitar or pickup to score exact pitches and note-off
 sustains. The cockpit shows received notes, octave/pitch/repeat feedback and

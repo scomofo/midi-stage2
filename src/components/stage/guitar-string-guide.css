@@ -7,6 +7,7 @@
   --fretboard-label-width: 38px;
   --fretboard-open-width: 32px;
   --fretboard-dot-size: 22px;
+  --guitar-attack-cue-height: 32px;
   display: grid;
   gap: var(--string-guide-space-sm);
   min-width: 0;
@@ -170,6 +171,49 @@
   color: var(--color-bg);
 }
 .guitar-fretboard-check svg { width: 6px; height: 6px; stroke-width: 3; }
+.guitar-attack-cue {
+  display: grid;
+  align-content: center;
+  gap: var(--string-guide-space-xs);
+  min-width: 0;
+  min-height: var(--guitar-attack-cue-height);
+  color: var(--color-muted);
+  font-size: 0.625rem;
+  line-height: 1.4;
+}
+.guitar-attack-copy {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--string-guide-space-sm);
+  min-width: 0;
+  margin: 0;
+}
+.guitar-attack-copy strong { color: var(--color-fg); font-weight: 500; }
+.guitar-attack-copy > span {
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+.guitar-attack-track {
+  overflow: hidden;
+  height: var(--string-guide-space-xs);
+  border-radius: var(--radius-sm);
+  background: var(--color-border-strong);
+}
+.guitar-attack-track > i {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: var(--color-tungsten);
+  transform-origin: left center;
+}
+.guitar-attack-cue[data-kind="approach"] .guitar-attack-track > i {
+  background: color-mix(in oklab, var(--color-accent) 65%, var(--color-tungsten));
+}
+.guitar-attack-cue[data-kind="window"] .guitar-attack-copy strong { color: var(--color-accent); }
+.guitar-attack-cue[data-kind="window"] .guitar-attack-track > i { background: var(--color-accent); }
+.guitar-attack-cue[data-kind="complete"] .guitar-attack-track { visibility: hidden; }
 .guitar-pitch-progress {
   margin: 0;
   color: var(--color-muted);
