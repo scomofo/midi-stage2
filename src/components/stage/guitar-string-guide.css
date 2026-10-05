@@ -214,6 +214,56 @@
 .guitar-attack-cue[data-kind="window"] .guitar-attack-copy strong { color: var(--color-accent); }
 .guitar-attack-cue[data-kind="window"] .guitar-attack-track > i { background: var(--color-accent); }
 .guitar-attack-cue[data-kind="complete"] .guitar-attack-track { visibility: hidden; }
+.guitar-picking-cue {
+  display: grid;
+  gap: var(--string-guide-space-xs);
+  min-width: 0;
+  font-size: 0.625rem;
+  line-height: 1.4;
+}
+.guitar-picking-heading,
+.guitar-picking-current,
+.guitar-picking-following,
+.guitar-picking-help { margin: 0; }
+.guitar-picking-heading { color: var(--color-tungsten); font-weight: 500; }
+.guitar-picking-strokes {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--string-guide-space-xs) var(--string-guide-space-md);
+  min-width: 0;
+}
+.guitar-picking-current,
+.guitar-picking-following {
+  display: flex;
+  align-items: center;
+  gap: var(--string-guide-space-xs);
+}
+.guitar-picking-current > span,
+.guitar-picking-following > span {
+  color: var(--color-muted);
+  font-size: 0.5rem;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+.guitar-picking-current > strong,
+.guitar-picking-following > strong {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--string-guide-space-xs);
+  font-weight: 500;
+  white-space: nowrap;
+}
+.guitar-picking-current > strong { color: var(--color-accent); }
+.guitar-picking-following > strong { color: var(--color-fg); }
+.guitar-picking-strokes svg {
+  flex-shrink: 0;
+  width: var(--string-guide-space-md);
+  height: var(--string-guide-space-md);
+  stroke-width: 2;
+}
+.guitar-picking-help { color: var(--color-muted); font-size: 0.5625rem; line-height: 1.5; }
 .guitar-pitch-progress {
   margin: 0;
   color: var(--color-muted);

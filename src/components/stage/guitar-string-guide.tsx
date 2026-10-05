@@ -1,10 +1,11 @@
 import { useId, type CSSProperties } from "react";
-import { Cable, Check, Guitar } from "lucide-react";
+import { ArrowDown, ArrowUp, Cable, Check, Guitar } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { noteName } from "@/lib/midi-stage/engine";
 import { getFretboardWindow } from "@/lib/midi-stage/guitar-preview";
 import type { GuitarPitchFeedback } from "@/lib/midi-stage/guitar-pitch-feedback";
 import type { GuitarAttackCue } from "@/lib/midi-stage/guitar-attack-cue";
+import type { StrumDirection } from "@/lib/midi-stage/strum-guide";
 import type { GuitarPosition } from "@/lib/midi-stage/types";
 import "./guitar-string-guide.css";
 
@@ -22,6 +23,8 @@ export type GuitarStringGuideProps = {
   hitTargets?: GuitarPosition[];
   feedback?: GuitarPitchFeedback | null;
   attackCue?: GuitarAttackCue | null;
+  pickingDirection?: StrumDirection | null;
+  followingPickingDirection?: StrumDirection | null;
   paused?: boolean;
   scored?: boolean;
   chord?: string;
@@ -40,6 +43,8 @@ export function GuitarStringGuide({
   hitTargets = [],
   feedback = null,
   attackCue = null,
+  pickingDirection = null,
+  followingPickingDirection = null,
   paused = false,
   scored = false,
   chord,
@@ -113,6 +118,20 @@ export function GuitarStringGuide({
           </div>;
         })}
       </div>
+      {pickingDirection && targets.length > 0 ? <div className="guitar-picking-cue" role="group" aria-label="Suggested picking" aria-describedby={`${id}-picking-help`}>
+        <p className="guitar-picking-heading">Suggested picking</p>
+        <div className="guitar-picking-strokes">
+          <p className="guitar-picking-current"><span>THIS SHAPE</span><strong data-direction={pickingDirection}>
+            {pickingDirection === "down" ? <ArrowDown aria-hidden="true" /> : <ArrowUp aria-hidden="true" />}
+            {pickingDirection === "down" ? "Downstroke" : "Upstroke"}
+          </strong></p>
+          {followingPickingDirection && followingTargets.length > 0 ? <p className="guitar-picking-following"><span>THEN</span><strong data-direction={followingPickingDirection}>
+            {followingPickingDirection === "down" ? <ArrowDown aria-hidden="true" /> : <ArrowUp aria-hidden="true" />}
+            {followingPickingDirection === "down" ? "Downstroke" : "Upstroke"}
+          </strong></p> : null}
+        </div>
+        <p className="guitar-picking-help" id={`${id}-picking-help`}>Eighth-note suggestion · direction isn’t scored.</p>
+      </div> : null}
       {performing && scored ? <>
         {targets.length ? <p className="guitar-pitch-progress">This shape · <strong>{matchedCount} / {targets.length}</strong> pitches matched</p> : null}
         <div className="guitar-pitch-feedback" data-kind={feedback?.kind ?? "listening"}>

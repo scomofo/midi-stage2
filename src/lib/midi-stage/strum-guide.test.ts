@@ -1,8 +1,10 @@
 import { it } from "node:test";
 import assert from "node:assert/strict";
-import { Judge } from "./engine.ts";
+import { defaultPlayers, Judge, makeChart } from "./engine.ts";
 import { suggestedStrum, nextStrum } from "./strum-guide.ts";
-import type { Chart, ChartNote, Difficulty } from "./types.ts";
+import { getGuitarPreview } from "./guitar-preview.ts";
+import { practiceSong } from "./practice.ts";
+import type { Chart, ChartNote, Difficulty, Song } from "./types.ts";
 
 const chart = { bpm: 120, beats: [0.2, 0.7, 1.2, 1.7].map((time) => ({ time, bar: false })) };
 
@@ -108,4 +110,46 @@ it("stays fixed at paused song time and clears after the last note expires", () 
   judge.tick(1.45 + lateWindow + 1e-6);
   assert.equal(nextStrum(chart, judge.notes, 2, lateWindow), null);
   assert.equal(judge.stats.miss, 2);
+});
+
+it("retains an upbeat picking shape and its following downbeat in rebased 75% guitar practice", () => {
+  const song: Song = {
+    id: "offset-guitar", name: "Offset guitar", subtitle: "Picking practice", tag: "GUITAR",
+    bpm: 100, duration: 6, original: true, art: "voltage", guitarMode: "strings",
+    guitarTuning: [40, 45, 50, 55, 59, 64],
+    beats: Array.from({ length: 11 }, (_, index) => ({ time: 0.2 + index * 0.6, bar: index % 4 === 0 })),
+    sections: [{ time: 0, name: "Song" }],
+    parts: [{ id: "guitar", name: "Guitar", type: "guitar", channel: 2, notes: [
+      { time: 3.5, duration: 0.2, pitch: 40, velocity: 90, guitarPosition: { string: 6, fret: 0 } },
+      { time: 3.5, duration: 0.2, pitch: 47, velocity: 90, guitarPosition: { string: 5, fret: 2 } },
+      { time: 3.8, duration: 0.2, pitch: 43, velocity: 90, guitarPosition: { string: 6, fret: 3 } },
+    ] }],
+  };
+  const selected = { id: "offset", name: "Offbeat entry", start: 3.5, end: 4.2 };
+  const local = practiceSong(song, selected);
+  const guitar = defaultPlayers().find((player) => player.id === "guitar")!;
+  const judge = new Judge(makeChart(local, guitar), {
+    difficulty: "standard", speed: 0.75, drums: false, onJudge: () => {},
+  });
+  const directions = (time: number) => {
+    const preview = getGuitarPreview(judge.notes, time, judge.windows[2]!);
+    return {
+      current: preview.current ? suggestedStrum(local, preview.current.time) : null,
+      following: preview.following ? suggestedStrum(local, preview.following.time) : null,
+      targets: preview.current?.targets ?? [],
+    };
+  };
+  assert.ok(local.beats[0]!.time < 0, "the preceding original beat remains timing context");
+  assert.equal(suggestedStrum(song, selected.start), "up");
+  const entry = directions(-0.6);
+  assert.deepEqual({ current: entry.current, following: entry.following }, { current: "up", following: "down" },
+    "a section's zero must not invent a downstroke or derive the next stroke from the count-in clock");
+  judge.hitPitch(0, 40);
+  assert.deepEqual(directions(0), entry, "a partial chord keeps the same picking attack and entire shape");
+  judge.hitPitch(0, 47);
+  assert.equal(directions(0).current, "down", "the next authored attack advances only after the chord resolves");
+  assert.equal(directions(0).following, null);
+  const localTime = judge.notes.at(-1)!.time;
+  assert.equal(suggestedStrum(local, localTime), suggestedStrum(song, localTime + selected.start),
+    "tempo and section rebasing preserve the original picking phase");
 });

@@ -397,6 +397,73 @@ try {
   assert.ok(exactNote, 'Real guitar fixture needs an isolated note for exact-pitch acceptance');
   const attackCue = stringGuide.locator('.guitar-attack-cue');
   assert.equal(await attackCue.count(), 0, 'Ready Soundcheck must not imply an active strike window');
+  const pickingGuide = page.getByRole('checkbox', { name: 'Picking guide', exact: true });
+  const pickingCue = stringGuide.locator('.guitar-picking-cue');
+  const pickingDirectionsAt = (time) => page.evaluate(async (time) => {
+    const { getGuitarPreview } = await import('/src/lib/midi-stage/guitar-preview.ts');
+    const { suggestedStrum } = await import('/src/lib/midi-stage/strum-guide.ts');
+    const state = window.guitarProbe.live;
+    const judge = state.judges.get('guitar');
+    const preview = getGuitarPreview(judge.notes, time, judge.windows[2]);
+    return {
+      current: preview.current ? suggestedStrum(state.song, preview.current.time) : null,
+      following: preview.following ? suggestedStrum(state.song, preview.following.time) : null,
+      currentTime: preview.current?.time ?? null,
+      followingTime: preview.following?.time ?? null,
+    };
+  }, time);
+  const assertPicking = async (expected) => {
+    await page.waitForFunction(({ current, following }) => {
+      const region = document.querySelector('.guitar-picking-cue');
+      const shownCurrent = region?.querySelector('.guitar-picking-current strong[data-direction]');
+      const shownFollowing = region?.querySelector('.guitar-picking-following strong[data-direction]');
+      return current === null ? !region : shownCurrent?.dataset.direction === current
+        && (following === null ? !shownFollowing : shownFollowing?.dataset.direction === following);
+    }, expected);
+    if (expected.current === null) return;
+    assert.equal(await pickingCue.isVisible(), true);
+    assert.match(await pickingCue.locator('.guitar-picking-current strong').innerText(),
+      new RegExp(expected.current === 'down' ? 'Downstroke' : 'Upstroke'));
+    if (expected.following) assert.match(await pickingCue.locator('.guitar-picking-following strong').innerText(),
+      new RegExp(expected.following === 'down' ? 'Downstroke' : 'Upstroke'));
+    assert.equal(await pickingCue.locator('[aria-live], [role="status"]').count(), 0,
+      'Changing picking targets must not create a rapid live announcement');
+  };
+  const pickingSession = () => page.evaluate(() => {
+    const judge = window.guitarProbe.live.judges.get('guitar');
+    return {
+      stats: { ...judge.stats }, notes: judge.notes.map((note) => ({ id: note.id, state: note.state, hold: note.hold })),
+      holds: [...judge.activeHolds].map((note) => note.id),
+      status: window.guitarProbe.live.status, time: window.guitarProbe.time,
+      begins: window.guitarProbe.begins, running: window.guitarProbe.audio.running,
+    };
+  });
+  const assertSavedPicking = async (enabled) => {
+    await page.waitForFunction((enabled) =>
+      JSON.parse(localStorage.getItem('midi-stage/session-preferences') ?? 'null')?.strumGuide === enabled, enabled);
+    assert.equal(await page.evaluate(() =>
+      JSON.parse(localStorage.getItem('midi-stage/session-preferences')).strumGuide), enabled,
+    'Picking uses the existing persisted strumGuide preference');
+  };
+  assert.equal(await pickingGuide.isChecked(), false, 'Real guitar picking remains optional and off by default');
+  assert.equal(await pickingCue.count(), 0, 'Disabled picking must not add a cue');
+  const readyPickingStats = await stats();
+  await pickingGuide.check();
+  const readyPicking = await pickingDirectionsAt(0);
+  await assertPicking(readyPicking);
+  await assertSavedPicking(true);
+  assert.equal(readyPicking.current, 'down', 'The first authored guitar attack is on a full beat');
+  assert.deepEqual(await stats(), readyPickingStats, 'Enabling ready picking is unscored');
+  assert.match(await pickingCue.innerText(), /suggested|suggestion/i);
+  await screenshot('guitar-picking-ready-mobile');
+  const firstUpstroke = await page.evaluate(async () => {
+    const { suggestedStrum } = await import('/src/lib/midi-stage/strum-guide.ts');
+    const { song, judges } = window.guitarProbe.live;
+    const notes = judges.get('guitar').notes;
+    const upbeat = notes.find((note) => suggestedStrum(song, note.time) === 'up');
+    return upbeat ? { time: upbeat.time, previousTime: notes.filter((note) => note.time < upbeat.time).at(-1)?.time } : null;
+  });
+  assert.ok(firstUpstroke && Number.isFinite(firstUpstroke.previousTime), 'The authored arrangement must exercise downbeat-to-upbeat picking');
 
   phase = 'guitar approach cue follows musical time and freezes on pause';
   console.log(`Guitar check: ${phase}`);
@@ -414,15 +481,18 @@ try {
   assert.equal(await attackCue.locator('i').evaluate((bar) => bar.style.transform), 'scaleX(0)');
   await cueAt(firstAttack - 2 * beatLength, 'approach', 'In 2.0 beats');
   assert.equal(await attackCue.locator('i').evaluate((bar) => bar.style.transform), 'scaleX(0.5)');
+  await assertPicking(readyPicking);
   await pause.click();
   await page.waitForFunction(() => document.querySelector('.guitar-attack-cue')?.dataset.paused === 'true');
   const pausedCue = await attackCue.innerText();
   const pausedTrack = await attackCue.locator('i').getAttribute('style');
+  const pausedPicking = await pickingCue.innerText();
   assert.match(pausedCue, /Paused/);
-  await setTime(firstAttack);
+  await setTime(firstUpstroke.time);
   await page.waitForTimeout(180);
   assert.equal(await attackCue.innerText(), pausedCue, 'A moving underlying test clock must not advance paused guidance');
   assert.equal(await attackCue.locator('i').getAttribute('style'), pausedTrack);
+  assert.equal(await pickingCue.innerText(), pausedPicking, 'Pause freezes both current and following picking directions');
   await setTime(firstAttack - 2 * beatLength);
   await resume.click();
   await page.waitForFunction(() => document.querySelector('.guitar-attack-cue')?.dataset.paused === 'false');
@@ -463,6 +533,9 @@ try {
   assert.match(await pitchFeedback.innerText(), /Perfect/);
   await page.waitForFunction(() => document.querySelector('.guitar-attack-cue')?.dataset.kind === 'approach');
   assert.match(await attackCue.innerText(), /Prepare shape/, 'A matched attack advances timing to the next unresolved shape');
+  const pickingAfterHit = await pickingDirectionsAt(exactNote.time);
+  assert.ok(pickingAfterHit.currentTime > exactNote.time, 'The picking cue must advance beyond the actually matched attack');
+  await assertPicking(pickingAfterHit);
   await screenshot('guitar-pitch-matched-mobile');
   await pause.click();
   assert.equal(await pitchFeedback.count(), 0, 'Pause must hide recent scored input');
@@ -480,6 +553,15 @@ try {
   await page.evaluate((pitch) => { window.sendGuitarQaMidi(pitch); window.sendGuitarQaMidi(pitch, 0); }, realChart.notes[0].pitch);
   await page.waitForFunction(() => document.querySelector('.guitar-pitch-feedback')?.dataset.kind === 'between');
   assert.match(await pitchFeedback.innerText(), /Between targets/);
+  await setTime(firstUpstroke.previousTime);
+  const prepareUpstroke = await pickingDirectionsAt(firstUpstroke.previousTime);
+  assert.deepEqual({ current: prepareUpstroke.current, following: prepareUpstroke.following }, { current: 'down', following: 'up' });
+  await assertPicking(prepareUpstroke);
+  await setTime(firstUpstroke.time);
+  const upbeatPicking = await pickingDirectionsAt(firstUpstroke.time);
+  assert.equal(upbeatPicking.current, 'up');
+  await assertPicking(upbeatPicking);
+  await screenshot('guitar-picking-upstroke-mobile');
   await reset.click();
   await begin();
   await setTime(exactNote.time);
@@ -515,15 +597,28 @@ try {
     string: item.dataset.string, fret: item.querySelector('.guitar-string-guide-fret')?.textContent,
   })));
   const beforeShape = await currentShape();
+  const chordPicking = await pickingDirectionsAt(realChord.time);
+  await assertPicking(chordPicking);
   assert.equal(beforeShape.length, realChord.notes.length);
   await page.evaluate((pitch) => { window.sendGuitarQaMidi(pitch); }, realChord.notes[0].pitch);
   await page.waitForTimeout(150);
   assert.deepEqual(await currentShape(), beforeShape, 'One MIDI chord tone must not remove its fingering from the guide');
+  await assertPicking(chordPicking);
   assert.equal(await attackCue.getAttribute('data-kind'), 'window', 'Partial chords retain their current attack window');
   assert.match(await stringGuide.locator('.guitar-pitch-progress').innerText(), new RegExp(`1 / ${realChord.notes.length} pitches matched`));
   const hitPosition = realChord.notes[0].position;
   const hitRow = stringGuide.locator(`.guitar-fretboard-string[data-string="${hitPosition.string}"]`);
   assert.equal(await hitRow.locator('[data-hit="true"]').count(), 1, 'Only the actually judged target gains a matched mark');
+  const beforePickingToggle = await pickingSession();
+  assert.ok(beforePickingToggle.holds.length > 0, 'Live picking-toggle coverage must include a real owned sustain');
+  await pickingGuide.uncheck();
+  await pickingCue.waitFor({ state: 'hidden' });
+  await assertSavedPicking(false);
+  assert.deepEqual(await pickingSession(), beforePickingToggle, 'Disabling picking preserves score, held targets, audio and take');
+  await pickingGuide.check();
+  await assertPicking(chordPicking);
+  await assertSavedPicking(true);
+  assert.deepEqual(await pickingSession(), beforePickingToggle, 'Enabling picking preserves score, held targets, audio and take');
   const beforeRepeat = await stats();
   await page.evaluate((pitch) => { window.sendGuitarQaMidi(pitch, 0); window.sendGuitarQaMidi(pitch); }, realChord.notes[0].pitch);
   await page.waitForFunction(() => document.querySelector('.guitar-pitch-feedback')?.dataset.kind === 'repeat');
@@ -537,6 +632,9 @@ try {
   for (const target of realChord.notes.slice(1)) await page.evaluate((pitch) => { window.sendGuitarQaMidi(pitch); }, target.pitch);
   await page.waitForTimeout(150);
   assert.notDeepEqual(await currentShape(), beforeShape, 'The next shape appears after the whole chord is played');
+  const nextChordPicking = await pickingDirectionsAt(realChord.time);
+  assert.ok(nextChordPicking.currentTime > chordPicking.currentTime);
+  await assertPicking(nextChordPicking);
   for (const target of realChord.notes) await page.evaluate((pitch) => { window.sendGuitarQaMidi(pitch, 0); }, target.pitch);
   await reset.click();
   assert.equal(await pitchFeedback.count(), 0, 'Reset leaves no scored pitch feedback');
@@ -553,6 +651,7 @@ try {
   assert.equal(await stringGuide.locator('.guitar-pitch-progress').count(), 0);
   assert.equal(await stringGuide.locator('[data-hit="true"]').count(), 0, 'Demo note state is not personal performance feedback');
   assert.ok(await attackCue.count() > 0, 'Play along retains musical approach guidance without personal scoring');
+  await assertPicking(await pickingDirectionsAt(realChord.time));
 
   phase = 'practice timing uses passage-local attacks and tempo preserves musical beats';
   console.log(`Guitar check: ${phase}`);
@@ -568,6 +667,29 @@ try {
   await cueAt(localAttack - 2 * beatLength, 'approach', 'In 2.0 beats');
   assert.equal(await attackCue.locator('i').evaluate((bar) => bar.style.transform), 'scaleX(0.5)', 'Tempo changes wall time, not musical beat distance');
   await cueAt(localAttack, 'window', 'Aim for the strike line');
+  await assertPicking(await pickingDirectionsAt(localAttack));
+  const localUpstroke = await page.evaluate(async () => {
+    const { suggestedStrum } = await import('/src/lib/midi-stage/strum-guide.ts');
+    const { song, judges } = window.guitarProbe.live;
+    return judges.get('guitar').notes.find((note) => suggestedStrum(song, note.time) === 'up')?.time ?? null;
+  });
+  assert.notEqual(localUpstroke, null, 'The selected passage must contain an offbeat picking attack');
+  await setTime(localUpstroke);
+  const localPicking = await pickingDirectionsAt(localUpstroke);
+  assert.equal(localPicking.current, 'up');
+  await assertPicking(localPicking);
+  const originalPracticeDirections = await page.evaluate(async ({ currentTime, followingTime }) => {
+    const { makeBacklineDrive } = await import('/src/lib/midi-stage/guitar-song.ts');
+    const { suggestedStrum } = await import('/src/lib/midi-stage/strum-guide.ts');
+    const start = Number(document.querySelector('.practice-section-field select').value.split(':')[1]);
+    const full = makeBacklineDrive(window.guitarProbe.live.song.arrangement);
+    return {
+      current: suggestedStrum(full, currentTime + start),
+      following: followingTime === null ? null : suggestedStrum(full, followingTime + start),
+    };
+  }, localPicking);
+  assert.deepEqual({ current: localPicking.current, following: localPicking.following }, originalPracticeDirections,
+    '75% practice picking retains the original full-song beat phase after rebasing');
   await reset.click();
   await tempo.selectOption('1');
   await section.selectOption('');
@@ -577,6 +699,8 @@ try {
   const finalPitches = await page.evaluate((time) => window.guitarProbe.live.judges.get('guitar').notes.filter((note) => note.time === time).map((note) => note.pitch), lastAttack);
   for (const pitch of finalPitches) await page.evaluate((pitch) => window.sendGuitarQaMidi(pitch), pitch);
   await page.waitForFunction(() => document.querySelector('.guitar-attack-cue')?.dataset.kind === 'complete');
+  await pickingCue.waitFor({ state: 'hidden' });
+  assert.equal(await pickingGuide.isChecked(), true, 'Resolving the final attack hides suggestions without changing the saved choice');
   assert.match(await attackCue.innerText(), /No more attacks.*Follow sustain tails/s);
   assert.ok(await page.evaluate(() => window.guitarProbe.live.judges.get('guitar').activeHolds.size) > 0, 'No more attacks must not imply releasing the final sustain');
   assert.match(await stringGuide.locator('.guitar-string-guide-caption').innerText(), /Attacks complete/);
@@ -652,7 +776,7 @@ try {
   await page.evaluate((pitch) => { window.sendGuitarQaMidi(pitch); window.sendGuitarQaMidi(pitch, 0); }, normalMidi.pitch);
   assert.equal(await page.evaluate((id) => window.guitarProbe.live.judges.get('keys').notes.find((note) => note.id === id).state, normalMidi.id), 1);
   assert.deepEqual(errors, []);
-  console.log('PASS: explicit MIDI setup and unscored play-along/resume; scored guitar MIDI gate; arcade strums, holds and input cleanup; rehearsal/demo isolation; touch/latching; exact guitar pitches; received pitch/octave/duplicate/between-target feedback without inferred strings; actual partial-chord progress; musical beat approach, frozen pause, passage-local timing, tempo and final-sustain cues; reset/pause/ready/demo isolation; fret 24/open strings/collapsed gaps; desktop cockpit and narrow layout; existing keyboard/MIDI play');
+  console.log('PASS: explicit MIDI setup and unscored play-along/resume; scored guitar MIDI gate; arcade strums, holds and input cleanup; rehearsal/demo isolation; touch/latching; exact guitar pitches; received pitch/octave/duplicate/between-target feedback without inferred strings; actual partial-chord progress; musical beat approach, frozen pause, passage-local timing, tempo and final-sustain cues; optional real-string down/up picking with retained partial chords, following attacks and safe live toggles; reset/pause/ready/demo isolation; fret 24/open strings/collapsed gaps; desktop cockpit and narrow layout; existing keyboard/MIDI play');
 } catch (error) {
   console.error('Guitar strum regression failed during:', phase, error);
   console.error(await page.locator('body').innerText().catch(() => 'Page unavailable'));
