@@ -79,6 +79,8 @@ club scenery, song-synced lighting, section color fades and backing-audio respon
 A next-strum cue stays readable above the highway. **Strum arrows** offers an optional, saved ↓ down / ↑ up practice
 pattern on guitar and rhythm charts. These are beat-grid suggestions, not
 directions detected from imported recordings or an additional scoring rule.
+On real-string arrangements, **Picking guide** shows the current and following
+suggested strokes in the cockpit while the highway keeps its fret numbers.
 
 The full acceptance loop from `docs/session-stability.md`:
 

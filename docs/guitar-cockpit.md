@@ -58,6 +58,23 @@ Follow sustain tails** preserves the distinction between a completed attack and
 an ongoing hold. The track has no independent animation or live announcement of
 each beat update.
 
+Enable **Picking guide** in Session setup for optional **Suggested picking** in
+the cockpit. **This shape** and **Then** show a downstroke or upstroke for the
+same current and following fingerings already previewed. Fretted and open-string
+targets keep their fret numerals. The directions use the existing eighth-note
+beat-grid suggestion, not an authored picking transcription or detected hand
+motion; MIDI pitch scoring does not judge direction. Arrows describe the picking
+hand: downstroke toward high E, upstroke toward low E, irrespective of the tab
+view's high-E-at-top orientation.
+
+The suggestion keeps the current stroke throughout a partially matched chord,
+then advances when that shape resolves or its late window expires. Negative
+count-in clocks, passage offsets and slower tempo retain the song's original beat
+phase. Pausing freezes the current and following suggestions. Play along can show
+them without personal scoring, and the final sustain has no further picking suggestion.
+Toggle the guide while playing without resetting scores, held notes or playback.
+The saved preference is shared with **Strum arrows** on other guitar/rhythm charts.
+
 The highway uses a quiet neck surface, metallic strings with distinct gauges,
 a timing strike plate, tuning labels and open-note rings. Note numbers remain
 upright and visible; scoring, string order, sustain ownership and hit geometry
@@ -104,3 +121,6 @@ are automated evidence; physical instrument timing still needs the procedure in
 difficulty and tempo, count-in, partial chords and ringing sustains. The guitar
 browser regression also checks clock-driven progress, pause freezing, ready/reset
 isolation, Play along, passage-local attacks, 75% tempo and final sustain guidance.
+It also checks the real-guitar picking toggle, both stroke directions, current and
+following shape linkage, partial-chord retention, paused/slow practice guidance,
+final-attack clearing and saved state without changing scoring or held notes.

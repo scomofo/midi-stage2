@@ -54,7 +54,7 @@ import {
 import { loadFeel, saveFeel, FEEL_COPY, withPreset, type Feel } from "@/lib/midi-stage/feel";
 import { catalog } from "@/lib/midi-stage/songs";
 import { StageRenderer, spawnHitJuice } from "@/lib/midi-stage/renderer";
-import { nextStrum } from "@/lib/midi-stage/strum-guide";
+import { nextStrum, suggestedStrum, type StrumDirection } from "@/lib/midi-stage/strum-guide";
 import { summarizeTiming } from "@/lib/midi-stage/timing-summary";
 import { practiceSections, practiceSong, type PracticeSection } from "@/lib/midi-stage/practice";
 import { recommendPractice } from "@/lib/midi-stage/practice-recommendation";
@@ -220,6 +220,8 @@ export function StageApp() {
     hitGuitarTargets: [] as GuitarPosition[],
     guitarFeedback: null as GuitarPitchFeedback | null,
     guitarAttackCue: null as GuitarAttackCue | null,
+    guitarPickingDirection: null as StrumDirection | null,
+    followingGuitarPickingDirection: null as StrumDirection | null,
   });
   const [overlay, setOverlay] = useState(true);
   const [results, setResults] = useState<SessionResults | null>(null);
@@ -1131,6 +1133,10 @@ export function StageApp() {
           guitarShape,
           guitarAttackCue: guitarJudge && b.song.guitarMode === "strings"
             ? getGuitarAttackCue(nextGuitarShape?.time ?? null, sessionTime, b.song.bpm, guitarJudge.windows[2]!) : null,
+          guitarPickingDirection: b.strumGuide && b.song.guitarMode === "strings" && nextGuitarShape
+            ? suggestedStrum(b.song, nextGuitarShape.time) : null,
+          followingGuitarPickingDirection: b.strumGuide && b.song.guitarMode === "strings" && guitarPreview?.following
+            ? suggestedStrum(b.song, guitarPreview.following.time) : null,
           guitarChord: nextGuitarShape?.name ?? "",
           followingGuitarShape: guitarPreview?.following?.targets ?? [],
           followingGuitarChord: guitarPreview?.following?.name ?? "",
@@ -2043,6 +2049,8 @@ export function StageApp() {
             hitTargets={hud.hitGuitarTargets}
             feedback={bag.current?.guitarFeedback ? hud.guitarFeedback : null}
             attackCue={hud.guitarAttackCue}
+            pickingDirection={strumGuide ? hud.guitarPickingDirection : null}
+            followingPickingDirection={strumGuide ? hud.followingGuitarPickingDirection : null}
             paused={status === "paused"}
             scored={!bag.current?.demo}
             performing={status === "playing"}
@@ -2202,7 +2210,7 @@ export function StageApp() {
                 {(rhythm || enabled.some((p) => p.type === "guitar")) && (
                   <label className="stage-setup-toggle">
                     <input type="checkbox" checked={strumGuide} onChange={(e) => setStrumGuide(e.target.checked)} aria-describedby="strum-guide-help" suppressHydrationWarning />
-                    Strum arrows
+                    {realGuitar ? "Picking guide" : "Strum arrows"}
                   </label>
                 )}
               </div>
@@ -2228,7 +2236,8 @@ export function StageApp() {
 
           {(rhythm || enabled.some((p) => p.type === "guitar")) && (
             <p id="strum-guide-help" className="mt-3 text-xs text-muted">
-              ↓ Downstrum · ↑ Upstrum. Suggested eighth-note pattern; direction is not scored{song.audioAssetId ? " or detected from the recording" : ""}.
+              {realGuitar ? "↓ Downstroke · ↑ Upstroke. The cockpit suggests picking for this shape and the following shape. Arrows describe your picking hand: down toward high E, up toward low E. MIDI does not detect or score direction."
+                : <>↓ Downstrum · ↑ Upstrum. Suggested eighth-note pattern; direction is not scored{song.audioAssetId ? " or detected from the recording" : ""}.</>}
             </p>
           )}
 

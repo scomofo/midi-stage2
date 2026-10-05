@@ -35,6 +35,9 @@ beat, section and audio animation.
 Enable **Strum arrows** beside the tempo and listening controls when a guitar
 player or a rhythm chart is selected. The choice is saved locally. It can change
 during playback without resetting the score, held notes, or audio clock.
+For authored real-string arrangements, this option is named **Picking guide**:
+the cockpit shows suggested current/following strokes while numbered highway
+targets retain their actual frets. See [Guitar cockpit](guitar-cockpit.md).
 
 - **↓ Downstrum:** nearest full beat.
 - **↑ Upstrum:** nearest half beat.
