@@ -42,6 +42,22 @@ it above the highway. Focused play hides the song introduction, search launcher
 and passage choices while keeping transport and session feedback available.
 Pausing restores those choices; Ctrl/Command K still opens Stage Finder.
 
+During a take, a compact **Prepare shape** cue shows the musical beats until the
+current fingering's attack. Its track fills over the final four beats, then the
+label becomes **Strike window** while the target is inside the active Judge's
+inclusive timing window. Aim for the strike line; this availability cue is not a
+grade or a guarantee of Perfect timing. The regular count-in remains separate.
+
+The cue uses the same authored song clock as the highway. Tempo changes how long
+a beat takes, not the number of musical beats shown. Pause freezes both the beat
+readout and track; ready Soundcheck and reset show no active timing cue. Passage
+practice uses the rebased passage clock. Partial chords retain their attack cue,
+and resolving the group prepares the next attack. Play along gets the same musical
+guidance without personal scoring. After the final attack, **No more attacks ·
+Follow sustain tails** preserves the distinction between a completed attack and
+an ongoing hold. The track has no independent animation or live announcement of
+each beat update.
+
 The highway uses a quiet neck surface, metallic strings with distinct gauges,
 a timing strike plate, tuning labels and open-note rings. Note numbers remain
 upright and visible; scoring, string order, sustain ownership and hit geometry
@@ -83,3 +99,8 @@ Graphics, session, navigation, practice, soundcheck, import and production rende
 checks retain their separate acceptance scope. Virtual MIDI and controlled clocks
 are automated evidence; physical instrument timing still needs the procedure in
 `player-polish.md`.
+
+`guitar-attack-cue.test.ts` checks the cue against actual Judge boundaries at every
+difficulty and tempo, count-in, partial chords and ringing sustains. The guitar
+browser regression also checks clock-driven progress, pause freezing, ready/reset
+isolation, Play along, passage-local attacks, 75% tempo and final sustain guidance.

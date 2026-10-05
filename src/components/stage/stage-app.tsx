@@ -24,6 +24,7 @@ import { RehearsalBookmarkCard } from "@/components/stage/rehearsal-bookmark-car
 import { GuitarController } from "@/components/stage/guitar-controller";
 import { GuitarStringGuide } from "@/components/stage/guitar-string-guide";
 import { getGuitarPreview } from "@/lib/midi-stage/guitar-preview";
+import { getGuitarAttackCue, type GuitarAttackCue } from "@/lib/midi-stage/guitar-attack-cue";
 import { getGuitarPitchFeedback, type GuitarPitchFeedback } from "@/lib/midi-stage/guitar-pitch-feedback";
 import "./stage-launcher.css";
 import { PracticeControls } from "@/components/stage/practice-controls";
@@ -218,6 +219,7 @@ export function StageApp() {
     followingGuitarChord: "",
     hitGuitarTargets: [] as GuitarPosition[],
     guitarFeedback: null as GuitarPitchFeedback | null,
+    guitarAttackCue: null as GuitarAttackCue | null,
   });
   const [overlay, setOverlay] = useState(true);
   const [results, setResults] = useState<SessionResults | null>(null);
@@ -1127,6 +1129,8 @@ export function StageApp() {
           bloom: b.bloom,
           trauma: b.trauma,
           guitarShape,
+          guitarAttackCue: guitarJudge && b.song.guitarMode === "strings"
+            ? getGuitarAttackCue(nextGuitarShape?.time ?? null, sessionTime, b.song.bpm, guitarJudge.windows[2]!) : null,
           guitarChord: nextGuitarShape?.name ?? "",
           followingGuitarShape: guitarPreview?.following?.targets ?? [],
           followingGuitarChord: guitarPreview?.following?.name ?? "",
@@ -2038,6 +2042,8 @@ export function StageApp() {
             followingChord={hud.followingGuitarChord}
             hitTargets={hud.hitGuitarTargets}
             feedback={bag.current?.guitarFeedback ? hud.guitarFeedback : null}
+            attackCue={hud.guitarAttackCue}
+            paused={status === "paused"}
             scored={!bag.current?.demo}
             performing={status === "playing"}
             connected={guitarMidiReady}
