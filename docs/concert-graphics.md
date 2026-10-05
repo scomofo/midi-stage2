@@ -68,12 +68,42 @@ stability, feedback de-duplication, and live/persisted strum-toggle behavior.
 It also checks real backing-bus audio analysis, monitor isolation, muted playback,
 pause stability, wall-clock independence, visible audio response and the next-strum HUD.
 
+The audio check uses the production `AudioEngine` and real 90 Hz Web Audio
+oscillators in a separate, minimal browser page, avoiding competition with the
+Canvas2D workload. It covers both an immediate source and one scheduled two
+seconds later (beyond the former 20 × 80 ms polling budget). Readiness requires
+both advancing `AudioContext.currentTime` and the original level/bass thresholds;
+the five-second wall deadline bounds a failed run rather than establishing
+readiness. Rerouting waits for a complete FFT window of rendered audio. Muting
+waits for master-gain automation to settle before asserting the pre-master tap
+still receives the signal. Monitor and guide isolation, backing recovery, and
+exact stopped zeros are all required. Each run reports measured energy, context
+state, sample rate and audio time; failures include clock and signal diagnostics.
+
+`npm test` includes focused readiness regressions for delayed audio, stalled and
+suspended contexts, permanent silence, stale transition samples, invalid energy
+values, and the engine's reused result object. These deterministic helper tests
+complement the real browser audio checks; they do not replace Web Audio coverage.
+
+Validation from base `9d9bef8` on Linux, Node 24.19.0 and headless Chromium
+153.0.8010.0: three consecutive full graphics runs passed (two real-audio
+scenarios and 26 canvas cases per run), plus five additional audio-only runs.
+The original immediate-source check passed here; a controlled two-second source
+delay reproduced its exact backing-signal failure. Real-browser mutation probes
+confirmed failures for a disconnected tap, a post-master tap, monitor leakage
+and guide leakage. All 524 automated tests, typecheck, lint (eight existing
+warnings, no errors), and build passed. This is synthetic-signal browser
+acceptance, not physical instrument or speaker-output validation.
+
 `SESSION_SCREENSHOT_DIR=/workspace/screenshots/concert npm run test:graphics`
 saves captures. Optional `GRAPHICS_BASELINE_MODULE` supplies a development module
 URL exporting a previous `StageRenderer` for local timing comparisons.
 
-The timing report forces a canvas readback and measures the browser's software
-raster path. It is diagnostic, not an assertion of hardware frame rate. A steady
+Chromium runs with `--disable-accelerated-2d-canvas` so the fixture and cached
+artwork use the same software raster backend from the first frame. This avoids
+readback-related colour rounding changes while retaining exact pixel equality.
+The timing report forces a canvas readback and measures that software raster
+path. It is diagnostic, not an assertion of hardware frame rate. A steady
 60 fps target still requires profiling on a physical phone and desktop.
 
 The audio regression also scores real imported audio with arrows enabled. The

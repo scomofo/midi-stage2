@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { chromium } from 'playwright';
+import { checkGraphicsAudio } from './graphics-audio.mjs';
 
 const url = process.argv[2] || 'http://127.0.0.1:8082';
 const output = process.env.SESSION_SCREENSHOT_DIR ? resolve(process.env.SESSION_SCREENSHOT_DIR) : null;
@@ -11,8 +12,12 @@ if (output) {
   assert.ok(output.startsWith('/workspace/screenshots/'));
   await mkdir(output, { recursive: true });
 }
-const browser = await chromium.launch({ headless: true, args: ['--no-sandbox'] });
+// Exact pixel comparisons need one raster backend for the fixture and its
+// cached material canvases. Chromium can otherwise change backends on readback,
+// producing one-channel rounding differences even for identical first frames.
+const browser = await chromium.launch({ headless: true, args: ['--no-sandbox', '--disable-accelerated-2d-canvas'] });
 try {
+  const audio = await checkGraphicsAudio(browser, url);
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 }, deviceScaleFactor: 2 });
   if (process.env.GRAPHICS_BASELINE_MODULE) await page.addInitScript((value) => { window.__graphicsBaselineModule = value; }, process.env.GRAPHICS_BASELINE_MODULE);
   const errors = [];
@@ -35,46 +40,6 @@ try {
       window.liveGraphics = { renderer: this, state };
       return draw.call(this, state);
     };
-  });
-  // A real Web Audio sine verifies the analysis tap, not mocked FFT samples.
-  await page.evaluate(async () => {
-    const { AudioEngine } = await import('/src/lib/midi-stage/audio.ts');
-    const audio = new AudioEngine();
-    await audio.init();
-    const ctx = audio.ctx;
-    const tone = ctx.createOscillator();
-    const gain = ctx.createGain();
-    tone.frequency.value = 90;
-    gain.gain.value = 0.08;
-    tone.connect(gain);
-    gain.connect(audio.buses.backing);
-    audio.running = true;
-    tone.start();
-    const wait = () => new Promise((done) => setTimeout(done, 80));
-    try {
-      let found = false;
-      for (let i = 0; i < 20; i++) {
-        await wait();
-        const energy = audio.readStageEnergy();
-        if (energy.level > 0.1 && energy.bass > 0.01) { found = true; break; }
-      }
-      if (!found) throw Error('Backing signal does not reach stage lighting analysis');
-      audio.setVolume(0);
-      await wait();
-      if (audio.readStageEnergy().level < 0.1) throw Error('Master volume must not alter the light choreography');
-      gain.disconnect(audio.buses.backing);
-      gain.connect(audio.buses.monitor);
-      await wait(); await wait();
-      if (audio.readStageEnergy().level > 0.02) throw Error('Live monitor sound leaked into backing lighting');
-      gain.disconnect(audio.buses.monitor);
-      gain.connect(audio.buses.backing);
-      audio.running = false;
-      const paused = audio.readStageEnergy();
-      if (paused.level !== 0 || paused.bass !== 0) throw Error('Stopped audio must report no live stage energy');
-    } finally {
-      tone.stop(); gain.disconnect(); tone.disconnect();
-      await ctx.close();
-    }
   });
   await page.getByRole('button', { name: 'Watch the house', exact: true }).click();
   await page.getByRole('button', { name: 'Focus stage', exact: true }).click();
@@ -374,7 +339,7 @@ try {
     results.push(await page.evaluate(([w, h]) => window.renderGraphics(w, h, 'miss-band', true), [width, height]));
   }
   assert.deepEqual(errors, []);
-  console.log(JSON.stringify({ ok: true, results }, null, 2));
+  console.log(JSON.stringify({ ok: true, audio, results }, null, 2));
 } finally {
   await browser.close();
 }
