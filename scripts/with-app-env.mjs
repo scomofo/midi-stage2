@@ -104,6 +104,24 @@ export function isMainModule(moduleUrl) {
   }
 }
 
+
+/**
+ * Expand a `${PORT:-NNNN}` argument using the merged environment.
+ *
+ * `package.json` dev scripts pass `--port ${PORT:-8080}` so an explicit
+ * `$PORT` wins — but that is POSIX-shell syntax. npm runs scripts through
+ * cmd.exe on Windows, which leaves the literal text in place, and Vite then
+ * dies with "No available ports found between ${PORT:-8080} and 65535".
+ * Expanding here makes the default work on every platform; where a real
+ * shell already expanded it, this is a no-op. Follows `:-` semantics: an
+ * empty PORT also falls back to the default.
+ */
+export function expandPortDefault(arg, env) {
+  const m = /^\$\{PORT:-(\d+)\}$/.exec(arg);
+  if (!m) return arg;
+  return env.PORT || m[1];
+}
+
 function main(argv) {
   const [command, ...args] = argv;
   if (!command) {
@@ -111,7 +129,9 @@ function main(argv) {
     process.exit(2);
   }
   const env = mergeAppEnv(readAppEnv(projectRoot()), process.env);
-  const child = spawn(command, args, {
+  // Expand ${PORT:-NNNN} ourselves: cmd.exe would pass it through literally.
+  const spawnArgs = args.map((a) => expandPortDefault(a, env));
+  const child = spawn(command, spawnArgs, {
     stdio: "inherit",
     env,
     // On Windows bare command names (npm, vite, npx) resolve to .cmd
