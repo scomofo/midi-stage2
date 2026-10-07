@@ -128,6 +128,8 @@ try {
     document.body.append(canvas);
     const renderer = new StageRenderer(canvas);
     await renderer.bandAtlas.ready;
+    await renderer.drummerRig.ready;
+    if (!renderer.drummerRig.image) throw Error("Drummer rig must decode for acceptance");
     if (!renderer.bandAtlas.image) throw Error('Illustrated band atlas must decode for graphics acceptance');
     const atlasImage = renderer.bandAtlas.image;
     const atlasCanvas = document.createElement('canvas');
@@ -155,16 +157,21 @@ try {
       renderer.resize();
       const song = makeOpenStage('expert');
       if (mode === 'rhythm' || mode === 'strum-rhythm') song.matching = 'rhythm';
-      const players = defaultPlayers().map((p) => ({ ...p, enabled: mode === 'band' || mode === 'miss-band' || mode === 'strum-band' || p.id === (mode === 'strum-guitar' ? 'guitar' : 'keys') }));
+      const players = defaultPlayers().map((p) => ({ ...p, enabled: mode.startsWith('drummer-') || mode === 'band' || mode === 'miss-band' || mode === 'strum-band' || p.id === (mode === 'strum-guitar' ? 'guitar' : 'keys') }));
       const judges = new Map(players.filter((p) => p.enabled).map((p) => [p.id,
         new Judge(makeChart(song, p), { speed: 1, difficulty: 'standard', drums: p.type === 'drums', onJudge() {} })]));
       const state = { song, players, judges, status: 'playing', demo: false,
         speed: 1, t: 21.8, now: 10, energy: 0.72, trauma: 0, bloom: 0, combo: 12,
         particles: [], flashes: [], callouts: [], pressed: new Map(), reduced,
         feel: withPreset(mode === 'calm' ? 'calm' : 'house'), strumGuide: mode.startsWith('strum-') };
+      if (mode.startsWith('drummer-')) {
+        const attack = judges.get('drums').notes.find((note) => note.lane === 1 || note.lane === 2);
+        if (!attack) throw Error('Drummer fixture needs a hand-played attack');
+        state.t = mode === 'drummer-strike' ? attack.time + 0.11 : attack.time - 0.001;
+      }
       if (mode === 'band') {
         const bank = { image: null, ready: Promise.resolve() };
-        const delayed = new StageRenderer(canvas, bank);
+        const delayed = new StageRenderer(canvas, bank, { image: null, ready: Promise.resolve() });
         delayed.resize();
         const calls = [];
         const originalDrawImage = delayed.ctx.drawImage;
@@ -368,7 +375,7 @@ try {
   const results = [];
   for (const [width, height] of [[1100, 600], [366, 420]]) {
     await page.setViewportSize({ width: Math.max(390, width), height: Math.max(844, height) });
-    for (const mode of ['chords', 'rhythm', 'band', 'miss-band', 'hit', 'sustain', 'calm', 'strum-guitar', 'strum-rhythm', 'strum-band']) {
+    for (const mode of ['drummer-rest', 'drummer-strike', 'chords', 'rhythm', 'band', 'miss-band', 'hit', 'sustain', 'calm', 'strum-guitar', 'strum-rhythm', 'strum-band']) {
       results.push(await page.evaluate(([w, h, m]) => window.renderGraphics(w, h, m), [width, height, mode]));
       if (output) {
         // Export the fixed fixture canvas itself; it is independent of the
