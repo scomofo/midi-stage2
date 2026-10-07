@@ -127,6 +127,26 @@ try {
     canvas.style.cssText = 'position:fixed;inset:0;z-index:9999';
     document.body.append(canvas);
     const renderer = new StageRenderer(canvas);
+    await renderer.bandAtlas.ready;
+    if (!renderer.bandAtlas.image) throw Error('Illustrated band atlas must decode for graphics acceptance');
+    const atlasImage = renderer.bandAtlas.image;
+    const atlasCanvas = document.createElement('canvas');
+    atlasCanvas.width = atlasCanvas.height = atlasImage.naturalWidth;
+    const atlasContext = atlasCanvas.getContext('2d');
+    atlasContext.drawImage(atlasImage, 0, 0);
+    const cell = atlasCanvas.width / 2;
+    for (const [column, row] of [[0, 0], [1, 0], [0, 1], [1, 1]]) {
+      const pixels = atlasContext.getImageData(column * cell, row * cell, cell, cell).data;
+      let opaque = 0;
+      for (let y = 0; y < cell; y++) for (let x = 0; x < cell; x++) {
+        const alpha = pixels[(y * cell + x) * 4 + 3];
+        if (alpha > 128) opaque++;
+        if ((x < 4 || y < 4 || x >= cell - 4 || y >= cell - 4) && alpha > 32) {
+          throw Error('Band atlas must have transparent margins around every performer');
+        }
+      }
+      if (opaque < cell * cell * 0.05) throw Error('Atlas quadrant has no readable performer');
+    }
     const baseline = globalThis.__graphicsBaselineModule
       ? new (await import(globalThis.__graphicsBaselineModule)).StageRenderer(canvas) : null;
     window.renderGraphics = (width, height, mode, reduced = false) => {
@@ -142,6 +162,29 @@ try {
         speed: 1, t: 21.8, now: 10, energy: 0.72, trauma: 0, bloom: 0, combo: 12,
         particles: [], flashes: [], callouts: [], pressed: new Map(), reduced,
         feel: withPreset(mode === 'calm' ? 'calm' : 'house'), strumGuide: mode.startsWith('strum-') };
+      if (mode === 'band') {
+        const bank = { image: null, ready: Promise.resolve() };
+        const delayed = new StageRenderer(canvas, bank);
+        delayed.resize();
+        const calls = [];
+        const originalDrawImage = delayed.ctx.drawImage;
+        delayed.ctx.drawImage = function (art, ...args) {
+          calls.push({ atlas: art === atlasImage, args });
+          return originalDrawImage.call(this, art, ...args);
+        };
+        try {
+          delayed.paintBand(state);
+          if (calls.length !== 4 || calls.some((call) => call.atlas)) throw Error('Pending artwork must draw all four fallback performers');
+          calls.length = 0;
+          bank.image = atlasImage;
+          delayed.paintBand(state);
+          if (calls.length !== 4 || calls.some((call) => !call.atlas || call.args.length !== 8)) throw Error('Decoded artwork must replace cached fallback on the next frame');
+          const sources = calls.map((call) => call.args.slice(0, 4));
+          if (JSON.stringify(sources) !== JSON.stringify([[0, 0, cell, cell], [cell, 0, cell, cell], [0, cell, cell, cell], [cell, cell, cell, cell]])) throw Error('Performer crop order is incorrect');
+        } finally {
+          delayed.ctx.drawImage = originalDrawImage;
+        }
+      }
       if (mode === 'sustain') {
         const judge = judges.get('keys');
         const note = judge.notes.find((note) => note.duration >= 1);
