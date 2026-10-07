@@ -7,10 +7,18 @@ silhouettes. Drums retain round heads; melodic notes use a faceted head. Perfect
 hits have a short impact core and directional sparks. Chord judgments display
 one grade and one separate streak milestone per player.
 
-Static club art is cached at the viewport's capped device-pixel ratio. Performer
-and note materials are small, reusable canvases. Resizing replaces the scenery
-cache; an unchanged viewport reuses it. There are no external graphics assets,
-network dependencies, or renderer-library changes. Reduced motion freezes ambient
+Static club art is cached at the viewport's capped device-pixel ratio. Note
+materials are small, reusable canvases. The four illustrated performers use a
+local transparent PNG atlas at `public/art/band/club-band.png`: keys/drums in the
+top row and guitar/bass below. Canva created the source sheet; the built-in image
+editor extracted transparency; deterministic silhouette packing added consistent
+quadrant margins without resampling. These are
+static poses with the existing song-clock bob and hit lift, not limb animations.
+The atlas loads once and becomes usable only after decoding. While loading, or
+on a network/decode/dimension error or a 15-second deadline, cached procedural
+performers keep the band visible. Artwork never delays gameplay or scoring.
+Resizing replaces the scenery cache; an unchanged viewport reuses it. There are
+no third-party runtime graphics services or renderer-library changes. Reduced motion freezes ambient
 lighting and performer/crowd motion, hides particles, and keeps moving notes.
 
 Authored real-string guitar charts add a quiet neck surface, projected metallic
@@ -66,7 +74,7 @@ heads. Rhythm charts can use arrows regardless of their assigned instrument.
 `npm run test:graphics` runs against the development server with real Chromium
 Canvas2D. It checks desktop and phone dimensions for dense chords, solo rhythm,
 four-player charts, perfect-hit feedback, Calm, and guitar/rhythm strum arrows.
-It verifies lane hit-testing, unchanged-size cache reuse, reduced-motion pixel
+It awaits the decoded band atlas and verifies lane hit-testing, unchanged-size cache reuse, reduced-motion pixel
 stability, feedback de-duplication, and live/persisted strum-toggle behavior.
 It also checks real backing-bus audio analysis, monitor isolation, muted playback,
 pause stability, wall-clock independence, visible audio response and the next-strum HUD.

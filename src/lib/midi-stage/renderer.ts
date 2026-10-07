@@ -2,6 +2,7 @@ import type { Callout, ChartNote, Flash, Grade, Instrument, Particle, Player, So
 import { Judge, clamp, currentHarmony, keyLabel, KEYS } from "./engine";
 import type { Feel, GoboMotion, GoboPattern, HeadCue } from "./feel";
 import { createClubArt, createNoteArt, createPerformerArt } from "./concert-art";
+import { getPerformerAtlas, PERFORMER_CELLS, type PerformerAtlas } from "./performer-assets";
 import { suggestedStrum } from "./strum-guide";
 import { concertCue, type ConcertCue, type MusicEnergy } from "./concert-cues";
 import { nextVisibleLaneTimes, rendererBeatStart, rendererNoteWindow } from "./renderer-window";
@@ -144,7 +145,7 @@ export class StageRenderer {
   private noteArt = new Map<string, HTMLCanvasElement>();
   private performerArt = new Map<Instrument, HTMLCanvasElement>();
 
-  constructor(canvas: HTMLCanvasElement) {
+  constructor(canvas: HTMLCanvasElement, private bandAtlas: PerformerAtlas = getPerformerAtlas()) {
     this.canvas = canvas;
     this.ctx = canvas.getContext("2d")!;
     for (let i = 0; i < 96; i++) {
@@ -823,22 +824,27 @@ export class StageRenderer {
     ];
     const animated = !state.reduced && state.feel.preset !== "calm";
     for (const f of figures) {
-      let art = this.performerArt.get(f.id);
-      if (!art) {
-        art = createPerformerArt(f.id);
-        this.performerArt.set(f.id, art);
-      }
       const on = state.players.some((p) => p.id === f.id && p.enabled);
-      const struck = on && state.flashes.some((fl) => fl.player === f.id && fl.kind === "hit" && fl.until > state.now);
+      const struck =
+        on &&
+        state.flashes.some((fl) => fl.player === f.id && fl.kind === "hit" && fl.until > state.now);
       const bob = animated && on ? Math.sin(((state.t * state.song.bpm) / 60) * Math.PI) * 1.2 : 0;
       ctx.globalAlpha = on ? 0.95 : 0.68;
-      ctx.drawImage(
-        art,
-        w * f.x - size / 2,
-        h * 0.065 + bob - (animated && struck ? 2 : 0),
-        size,
-        size,
-      );
+      const x = w * f.x - size / 2;
+      const y = h * 0.065 + bob - (animated && struck ? 2 : 0);
+      const atlas = this.bandAtlas.image;
+      if (atlas) {
+        const cell = atlas.naturalWidth / 2;
+        const [column, row] = PERFORMER_CELLS[f.id];
+        ctx.drawImage(atlas, column * cell, row * cell, cell, cell, x, y, size, size);
+      } else {
+        let art = this.performerArt.get(f.id);
+        if (!art) {
+          art = createPerformerArt(f.id);
+          this.performerArt.set(f.id, art);
+        }
+        ctx.drawImage(art, x, y, size, size);
+      }
     }
     ctx.globalAlpha = 1;
   }
