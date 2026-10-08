@@ -275,6 +275,8 @@ export class Judge {
   cursor = 0;
   held = new Map<string, Set<ChartNote>>();
   activeHolds = new Set<ChartNote>();
+  overdriveMeter = 0;
+  overdriveActive = false;
   private voicingInputs = new Map<ChartNote, Set<number>>();
   stats: JudgeStats = {
     score: 0,
@@ -302,8 +304,24 @@ export class Judge {
     this.onJudge = opts.onJudge;
   }
 
+  triggerOverdrive(): boolean {
+    if (this.overdriveActive || this.overdriveMeter < 30) return false;
+    this.overdriveActive = true;
+    return true;
+  }
+
+  updateOverdrive(dt: number) {
+    if (this.overdriveActive) {
+      this.overdriveMeter = Math.max(0, this.overdriveMeter - dt * (100 / 10));
+      if (this.overdriveMeter <= 0) {
+        this.overdriveActive = false;
+      }
+    }
+  }
+
   get multiplier() {
-    return Math.min(4, 1 + Math.floor(this.stats.combo / 10));
+    const base = Math.min(4, 1 + Math.floor(this.stats.combo / 10));
+    return this.overdriveActive ? base * 2 : base;
   }
 
   get accuracy() {
@@ -384,6 +402,9 @@ export class Judge {
     this.stats.weight += weight;
     this.stats.combo++;
     this.stats.maxCombo = Math.max(this.stats.maxCombo, this.stats.combo);
+    if (grade === "perfect" || grade === "great") {
+      this.overdriveMeter = Math.min(100, this.overdriveMeter + (grade === "perfect" ? 3.5 : 2.0));
+    }
     const gained = Math.round(100 * weight * this.multiplier);
     this.stats.score += gained;
     this.stats.offsets.push(((t - closest.time) / this.speed) * 1000);

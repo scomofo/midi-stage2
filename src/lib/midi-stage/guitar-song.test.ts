@@ -87,10 +87,12 @@ describe("Backline Drive optional arcade chart", () => {
   it("appends to the catalog while preserving the established first five songs", () => {
     for (const difficulty of difficulties) {
       const songs = catalog(difficulty);
-      assert.deepEqual(songs.map((song) => song.id), ["open-stage", "first-rehearsal", "neon-circuit", "after-hours", "voltage-run", "backline-drive", "backline-drive-arcade"]);
-      assert.equal(songs.at(-2)!.guitarMode, "strings");
-      assert.equal(songs.at(-1)!.guitarMode, "fret-strum");
-      assert.equal(songs.at(-1)!.arrangement, difficulty);
+      assert.deepEqual(songs.map((song) => song.id), ["open-stage", "first-rehearsal", "neon-circuit", "after-hours", "voltage-run", "backline-drive", "backline-drive-arcade", "overdrive-horizon"]);
+      const bd = songs.find((song) => song.id === "backline-drive");
+      const bda = songs.find((song) => song.id === "backline-drive-arcade");
+      assert.equal(bd!.guitarMode, "strings");
+      assert.equal(bda!.guitarMode, "fret-strum");
+      assert.equal(bda!.arrangement, difficulty);
     }
   });
 });

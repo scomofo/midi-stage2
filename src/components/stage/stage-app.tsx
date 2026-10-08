@@ -14,7 +14,11 @@ import {
   RotateCcw,
   Volume2,
   X,
+  Trophy,
+  Zap,
 } from "lucide-react";
+import { CareerPanel } from "@/components/stage/career-panel";
+import { loadCareerData, checkNewAchievements, type CareerData, type Achievement } from "@/lib/midi-stage/career";
 import { Button } from "@/components/ui/button";
 import { FeelPanel } from "@/components/stage/feel-panel";
 import { SessionOverlay, type SessionResults } from "@/components/stage/session-overlay";
@@ -196,6 +200,10 @@ export function StageApp() {
   const [strumGuide, setStrumGuide] = useState(false);
   const [metronome, setMetronome] = useState(false);
   const [volume, setVolume] = useState(55);
+  const [careerData, setCareerData] = useState<CareerData>(() => loadCareerData());
+  const [careerOpen, setCareerOpen] = useState(false);
+  const [unlockedToast, setUnlockedToast] = useState<Achievement | null>(null);
+
   const [hud, setHud] = useState({
     score: 0,
     combo: 0,
@@ -211,6 +219,8 @@ export function StageApp() {
     pop: 0,
     bloom: 0,
     trauma: 0,
+    overdriveMeter: 0,
+    overdriveActive: false,
     nextStrum: "",
     guitarTarget: "",
     guitarShape: [] as GuitarPosition[],
@@ -333,6 +343,7 @@ export function StageApp() {
   }
 
   function onJudge(b: Bag, p: Player, grade: Grade, lane: number | undefined, delta: number, pitch?: number, score = 0) {
+    b.audio.hitSfx(grade);
     const now = performance.now() / 1000;
     const feelNow = b.feel;
     b.callouts = b.callouts.filter((c) => c.until > now);
@@ -732,6 +743,20 @@ export function StageApp() {
     }
   }, []);
 
+  const triggerOverdrive = useCallback(() => {
+    const b = bag.current;
+    if (!b || b.status !== "playing") return;
+    let triggered = false;
+    for (const j of b.judges.values()) {
+      if (j.triggerOverdrive()) triggered = true;
+    }
+    if (triggered) {
+      b.audio.overdriveSting();
+      b.bloom = 1.0;
+      setToast("⚡ STAGE OVERDRIVE ACTIVATED! 2× MULTIPLIER BOOST! ⚡");
+    }
+  }, []);
+
   const pauseSession = useCallback((message?: string) => {
     const b = bag.current;
     if (!b || b.status !== "playing") return;
@@ -814,6 +839,28 @@ export function StageApp() {
     const newBest = !b.demo && !b.practice && score > previousBest;
     const bestSaved = !newBest || saveBest(key, score);
     if (newBest && bestSaved) setBest(score);
+    const isGuitar = Boolean(b.song.guitarMode);
+    let maxCombo = 0;
+    let overdriveActivated = false;
+    for (const j of b.judges.values()) {
+      if (j.stats.maxCombo > maxCombo) maxCombo = j.stats.maxCombo;
+      if (j.overdriveActive) overdriveActivated = true;
+    }
+    const { updatedData, newlyUnlocked } = checkNewAchievements(careerData, {
+      songId: b.song.id,
+      accuracy,
+      stars: stars(accuracy),
+      score,
+      maxCombo,
+      overdriveActivated,
+      isGuitar,
+    });
+    setCareerData(updatedData);
+    if (newlyUnlocked.length > 0) {
+      setUnlockedToast(newlyUnlocked[0]!);
+      b.audio.crowdCheer(3.2, 1.0);
+    }
+
     const completed: SessionResults = {
       score,
       accuracy,
@@ -1057,6 +1104,16 @@ export function StageApp() {
       for (const [k, until] of b.pressed) if (until < now) b.pressed.delete(k);
       for (const [k, until] of b.padFlash) if (until < now) b.padFlash.delete(k);
 
+      let maxOverdriveMeter = 0;
+      let anyOverdriveActive = false;
+      if (b.status === "playing") {
+        for (const j of b.judges.values()) {
+          j.updateOverdrive(dt);
+          if (j.overdriveMeter > maxOverdriveMeter) maxOverdriveMeter = j.overdriveMeter;
+          if (j.overdriveActive) anyOverdriveActive = true;
+        }
+      }
+
       b.renderer.draw({
         song: b.song,
         players: b.players,
@@ -1077,6 +1134,8 @@ export function StageApp() {
         reduced: b.reduced,
         feel: b.feel,
         strumGuide: b.strumGuide,
+        overdriveActive: anyOverdriveActive,
+        overdriveMeter: maxOverdriveMeter,
         music: b.status === "playing" && !b.reduced && b.feel.preset !== "calm" && b.feel.lights > 0
           ? b.audio.readStageEnergy() : undefined,
       });
@@ -1130,6 +1189,8 @@ export function StageApp() {
           pop: score > prev.score ? stamp : prev.pop,
           bloom: b.bloom,
           trauma: b.trauma,
+          overdriveMeter: maxOverdriveMeter,
+          overdriveActive: anyOverdriveActive,
           guitarShape,
           guitarAttackCue: guitarJudge && b.song.guitarMode === "strings"
             ? getGuitarAttackCue(nextGuitarShape?.time ?? null, sessionTime, b.song.bpm, guitarJudge.windows[2]!) : null,
@@ -1730,6 +1791,10 @@ export function StageApp() {
             <span className={cn("size-1.5 rounded-full", midi.connected ? "bg-accent" : "bg-tungsten")} />
             LOCAL SET
           </span>
+          <Button size="sm" variant="ghost" aria-label="World Tour Career" onClick={() => { if (bag.current?.status === "starting") resetReady(); else pauseSession(); setCareerOpen(true); }}>
+            <Trophy className="size-3.5 text-accent" />
+            <span className="hidden sm:inline">World Tour</span>
+          </Button>
           <Button size="sm" variant="ghost" aria-label="The room" onClick={() => { if (bag.current?.status === "starting") resetReady(); else pauseSession(); setFeelTap(true); setFeelOpen(true); }}>
             <Lamp className="size-3.5" />
             <span className="hidden sm:inline">The room</span>
@@ -2020,7 +2085,23 @@ export function StageApp() {
                 <small className="text-[10px] text-subtle">%</small>
               </strong>
             </div>
-            <div className="hud-chip hud-personal-best hidden lg:flex">
+            <div className={cn("hud-chip", hud.overdriveActive ? "border-yellow-400 bg-yellow-950/40 text-yellow-300" : "")}>
+              <span className="flex items-center gap-1">
+                <Zap className={cn("size-3", hud.overdriveActive ? "fill-yellow-400 text-yellow-400 animate-pulse" : "text-subtle")} />
+                OVERDRIVE
+              </span>
+              <div className="flex items-center justify-between gap-1 mt-0.5">
+                <meter className={cn("energy-meter flex-1", hud.overdriveActive && "hot")} min={0} max={100} value={hud.overdriveMeter} />
+                {hud.overdriveMeter >= 30 && !hud.overdriveActive ? (
+                  <button type="button" className="rounded bg-yellow-400 px-1.5 py-0.5 text-[9px] font-bold text-black hover:bg-yellow-300" onClick={triggerOverdrive}>
+                    ⚡ OVERDRIVE
+                  </button>
+                ) : (
+                  <strong className="text-[11px] font-bold">{hud.overdriveActive ? "ACTIVE (8×)" : `${Math.round(hud.overdriveMeter)}%`}</strong>
+                )}
+              </div>
+            </div>
+            <div className="hud-chip hud-personal-best hidden xl:flex">
               <span>{practice ? "PRACTICE" : "PERSONAL BEST"}</span>
               <strong className="text-muted">{practice ? "Not saved" : best ? best.toLocaleString() : "—"}</strong>
             </div>
@@ -2350,6 +2431,29 @@ export function StageApp() {
             />
           </div>
         </>
+      ) : null}
+
+      {careerOpen ? (
+        <>
+          <button type="button" className="fixed inset-0 z-40 bg-bg/60 backdrop-blur-sm" aria-label="Close World Tour" onClick={() => setCareerOpen(false)} />
+          <div className="fixed inset-y-0 right-0 z-50 flex w-[min(520px,96vw)] flex-col overflow-hidden bg-bg shadow-[0_0_0_1px_rgba(239,232,220,0.1)]">
+            <CareerPanel data={careerData} onClose={() => setCareerOpen(false)} />
+          </div>
+        </>
+      ) : null}
+
+      {unlockedToast ? (
+        <div role="alert" className="fixed bottom-6 right-6 z-50 flex items-center gap-3 rounded-2xl bg-elevated p-4 shadow-[0_0_0_1px_rgba(143,212,196,0.5)] border border-accent/40 animate-in slide-in-from-bottom-4 duration-300">
+          <span className="text-3xl">{unlockedToast.icon}</span>
+          <div>
+            <div className="text-[10px] font-bold tracking-widest text-accent">ACHIEVEMENT UNLOCKED!</div>
+            <strong className="text-sm font-bold text-fg">{unlockedToast.title}</strong>
+            <p className="text-xs text-muted">{unlockedToast.description}</p>
+          </div>
+          <Button size="icon" variant="ghost" className="size-8 ml-2" aria-label="Close notification" onClick={() => setUnlockedToast(null)}>
+            <X className="size-4" />
+          </Button>
+        </div>
       ) : null}
 
       {feelOpen ? (

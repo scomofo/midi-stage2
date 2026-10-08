@@ -1,4 +1,4 @@
-import type { Instrument, Song, Player } from "./types";
+import type { Instrument, Song, Player, Grade } from "./types";
 import { sourceForSafe } from "./audio-helpers";
 import type { MusicEnergy } from "./concert-cues";
 
@@ -272,6 +272,101 @@ export class AudioEngine {
     this.track(osc, gain);
     osc.start(start);
     osc.stop(start + 0.05);
+  }
+
+  hitSfx(grade: Grade) {
+    if (!this.ctx || this.ctx.state !== "running") return;
+    const ctx = this.ctx;
+    const start = ctx.currentTime;
+    if (grade === "perfect" || grade === "great") {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.value = grade === "perfect" ? 1800 : 1400;
+      gain.gain.setValueAtTime(0.08, start);
+      gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.035);
+      osc.connect(gain);
+      gain.connect(this.buses.monitor || this.master!);
+      this.track(osc, gain);
+      osc.start(start);
+      osc.stop(start + 0.04);
+    } else if (grade === "miss" || grade === "extra" || grade === "release") {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sawtooth";
+      osc.frequency.setValueAtTime(120, start);
+      osc.frequency.exponentialRampToValueAtTime(50, start + 0.08);
+      gain.gain.setValueAtTime(0.12, start);
+      gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.09);
+      osc.connect(gain);
+      gain.connect(this.buses.monitor || this.master!);
+      this.track(osc, gain);
+      osc.start(start);
+      osc.stop(start + 0.1);
+    }
+  }
+
+  crowdCheer(duration = 2.5, intensity = 0.8) {
+    if (!this.ctx || !this.noise || this.ctx.state !== "running") return;
+    const ctx = this.ctx;
+    const start = ctx.currentTime;
+
+    const src = ctx.createBufferSource();
+    src.buffer = this.noise;
+    src.loop = true;
+
+    const filter = ctx.createBiquadFilter();
+    filter.type = "bandpass";
+    filter.frequency.setValueAtTime(700, start);
+    filter.frequency.exponentialRampToValueAtTime(1500, start + 0.4);
+    filter.frequency.exponentialRampToValueAtTime(500, start + duration);
+    filter.Q.value = 1.1;
+
+    const gain = ctx.createGain();
+    const amp = 0.18 * intensity;
+    gain.gain.setValueAtTime(0.0001, start);
+    gain.gain.exponentialRampToValueAtTime(amp, start + 0.25);
+    gain.gain.exponentialRampToValueAtTime(amp * 0.6, start + duration * 0.7);
+    gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
+
+    src.connect(filter);
+    filter.connect(gain);
+    gain.connect(this.buses.monitor || this.master!);
+
+    this.track(src, gain);
+    src.start(start);
+    src.stop(start + duration + 0.05);
+  }
+
+  overdriveSting() {
+    if (!this.ctx || this.ctx.state !== "running") return;
+    const ctx = this.ctx;
+    const start = ctx.currentTime;
+
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = "sawtooth";
+    osc.frequency.setValueAtTime(220, start);
+    osc.frequency.exponentialRampToValueAtTime(880, start + 0.4);
+
+    const filter = ctx.createBiquadFilter();
+    filter.type = "lowpass";
+    filter.frequency.setValueAtTime(1200, start);
+    filter.frequency.exponentialRampToValueAtTime(5000, start + 0.4);
+
+    gain.gain.setValueAtTime(0.0001, start);
+    gain.gain.exponentialRampToValueAtTime(0.25, start + 0.1);
+    gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.55);
+
+    osc.connect(filter);
+    filter.connect(gain);
+    gain.connect(this.master!);
+
+    this.track(osc, gain);
+    osc.start(start);
+    osc.stop(start + 0.6);
+
+    this.crowdCheer(2.8, 1.0);
   }
 
   async begin(opts: {
