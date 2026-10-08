@@ -6,6 +6,7 @@ import {
   loadCareerData,
   getTotalStars,
   getUnlockedVenues,
+  setSelectedVenue,
   type CareerData,
 } from "@/lib/midi-stage/career";
 import { cn } from "@/lib/utils";
@@ -13,12 +14,14 @@ import { cn } from "@/lib/utils";
 type CareerPanelProps = {
   data: CareerData;
   onClose: () => void;
+  onSelectVenue?: (venueId: string) => void;
 };
 
-export function CareerPanel({ data, onClose }: CareerPanelProps) {
+export function CareerPanel({ data, onClose, onSelectVenue }: CareerPanelProps) {
   const careerData = data || loadCareerData();
   const totalStars = getTotalStars(careerData);
   const unlockedVenues = getUnlockedVenues(totalStars);
+  const selectedVenueId = careerData.selectedVenueId || "garage";
 
   return (
     <div className="flex size-full flex-col overflow-hidden bg-bg p-4 sm:p-6 text-fg">
@@ -56,12 +59,20 @@ export function CareerPanel({ data, onClose }: CareerPanelProps) {
           <div className="grid gap-3">
             {VENUES.map((venue) => {
               const isUnlocked = totalStars >= venue.starsRequired;
+              const isSelected = selectedVenueId === venue.id;
               return (
                 <div
                   key={venue.id}
+                  onClick={() => {
+                    if (isUnlocked) {
+                      setSelectedVenue(venue.id);
+                      onSelectVenue?.(venue.id);
+                    }
+                  }}
                   className={cn(
-                    "flex items-center justify-between rounded-xl p-3.5 shadow-[0_0_0_1px_rgba(239,232,220,0.08)] transition-all",
-                    isUnlocked ? "bg-surface shadow-[0_0_0_1px_rgba(143,212,196,0.25)]" : "bg-bg/60 opacity-60",
+                    "flex items-center justify-between rounded-xl p-3.5 shadow-[0_0_0_1px_rgba(239,232,220,0.08)] transition-all cursor-pointer",
+                    isUnlocked ? "bg-surface hover:bg-elevated shadow-[0_0_0_1px_rgba(143,212,196,0.25)]" : "bg-bg/60 opacity-60 cursor-not-allowed",
+                    isSelected && "ring-2 ring-accent shadow-[0_0_12px_rgba(143,212,196,0.4)]"
                   )}
                 >
                   <div className="flex items-center gap-3">
@@ -69,7 +80,9 @@ export function CareerPanel({ data, onClose }: CareerPanelProps) {
                     <div>
                       <div className="flex items-center gap-2">
                         <strong className="text-sm font-semibold text-fg">{venue.name}</strong>
-                        {isUnlocked ? (
+                        {isSelected ? (
+                          <span className="rounded-full bg-accent px-2 py-0.5 text-[9px] font-bold text-bg">ACTIVE STAGE</span>
+                        ) : isUnlocked ? (
                           <span className="rounded-full bg-accent/15 px-2 py-0.5 text-[9px] font-medium text-accent">UNLOCKED</span>
                         ) : (
                           <span className="rounded-full bg-tungsten/20 px-2 py-0.5 text-[9px] font-medium text-tungsten">

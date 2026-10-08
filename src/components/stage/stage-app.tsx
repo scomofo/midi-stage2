@@ -18,7 +18,7 @@ import {
   Zap,
 } from "lucide-react";
 import { CareerPanel } from "@/components/stage/career-panel";
-import { loadCareerData, checkNewAchievements, type CareerData, type Achievement } from "@/lib/midi-stage/career";
+import { loadCareerData, checkNewAchievements, VENUES, type CareerData, type Achievement } from "@/lib/midi-stage/career";
 import { Button } from "@/components/ui/button";
 import { FeelPanel } from "@/components/stage/feel-panel";
 import { SessionOverlay, type SessionResults } from "@/components/stage/session-overlay";
@@ -1114,6 +1114,8 @@ export function StageApp() {
         }
       }
 
+      const activeVenue = VENUES.find((v) => v.id === careerData.selectedVenueId) || VENUES[0];
+
       b.renderer.draw({
         song: b.song,
         players: b.players,
@@ -1136,6 +1138,7 @@ export function StageApp() {
         strumGuide: b.strumGuide,
         overdriveActive: anyOverdriveActive,
         overdriveMeter: maxOverdriveMeter,
+        activeVenue,
         music: b.status === "playing" && !b.reduced && b.feel.preset !== "calm" && b.feel.lights > 0
           ? b.audio.readStageEnergy() : undefined,
       });
@@ -2443,7 +2446,11 @@ export function StageApp() {
         <>
           <button type="button" className="fixed inset-0 z-40 bg-bg/60 backdrop-blur-sm" aria-label="Close World Tour" onClick={() => setCareerOpen(false)} />
           <div className="fixed inset-y-0 right-0 z-50 flex w-[min(520px,96vw)] flex-col overflow-hidden bg-bg shadow-[0_0_0_1px_rgba(239,232,220,0.1)]">
-            <CareerPanel data={careerData} onClose={() => setCareerOpen(false)} />
+            <CareerPanel
+              data={careerData}
+              onClose={() => setCareerOpen(false)}
+              onSelectVenue={() => setCareerData(loadCareerData())}
+            />
           </div>
         </>
       ) : null}
