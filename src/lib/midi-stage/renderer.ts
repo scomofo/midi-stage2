@@ -6,6 +6,7 @@ import { getPerformerAtlas, PERFORMER_CELLS, type PerformerAtlas } from "./perfo
 import { suggestedStrum } from "./strum-guide";
 import { concertCue, type ConcertCue, type MusicEnergy } from "./concert-cues";
 import { nextVisibleLaneTimes, rendererBeatStart, rendererNoteWindow } from "./renderer-window";
+import type { Venue } from "./career";
 
 const GRADE_COLOR: Record<Grade, string> = {
   perfect: "#8fd4c4",
@@ -61,6 +62,7 @@ export type DrawState = {
   music?: MusicEnergy;
   overdriveActive?: boolean;
   overdriveMeter?: number;
+  activeVenue?: Venue;
 };
 
 function hexA(hex: string, a: number) {
@@ -281,20 +283,45 @@ export class StageRenderer {
     ctx.beginPath();
     ctx.ellipse(cycX, cycY, w * 0.36, h * 0.155, 0, 0, Math.PI * 2);
     ctx.clip();
+    const primaryTint = state.activeVenue?.primaryColor || this.cue.primary;
+    const accentTint = state.activeVenue?.accentColor || this.cue.secondary;
     const cyc = ctx.createRadialGradient(cycX, cycY, 4, cycX, cycY, w * 0.38);
     cyc.addColorStop(
       0,
-      hexA(hot ? "#efe8dc" : this.cue.secondary, (0.26 + e * 0.18 + bloom * 0.3) * lights),
+      hexA(hot ? "#efe8dc" : accentTint, (0.26 + e * 0.18 + bloom * 0.3) * lights),
     );
     cyc.addColorStop(
       0.32,
-      hexA(hot ? "#c4a882" : this.cue.primary, (0.14 + e * 0.12 + bloom * 0.16) * lights),
+      hexA(hot ? "#c4a882" : primaryTint, (0.14 + e * 0.12 + bloom * 0.16) * lights),
     );
     cyc.addColorStop(0.7, hexA("#6a7a8a", (0.05 + e * 0.05) * lights));
     cyc.addColorStop(1, "rgba(0,0,0,0)");
     ctx.fillStyle = cyc;
     ctx.fillRect(0, 0, w, h);
     ctx.restore();
+
+    if (state.activeVenue) {
+      ctx.save();
+      ctx.font = "800 12px 'IBM Plex Sans', system-ui, sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      const venueText = `✦ ${state.activeVenue.name.toUpperCase()} · ${state.activeVenue.location.toUpperCase()} ✦`;
+      const vWidth = ctx.measureText(venueText).width + 24;
+      const vx = w * 0.5;
+      const vy = h * 0.075;
+
+      ctx.fillStyle = "rgba(8, 6, 12, 0.75)";
+      ctx.strokeStyle = hexA(state.activeVenue.primaryColor || "#8fd4c4", 0.45);
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.roundRect(vx - vWidth / 2, vy - 10, vWidth, 20, 10);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = state.activeVenue.primaryColor || "#8fd4c4";
+      ctx.fillText(venueText, vx, vy);
+      ctx.restore();
+    }
 
     ctx.strokeStyle = hexA("#c4a882", 0.12 + lights * 0.1);
     ctx.lineWidth = 1.2;
@@ -696,6 +723,8 @@ export class StageRenderer {
     const pulse = 0.7 + this.cue.pulse * 0.3;
     const lift = 1 + state.bloom * 0.65;
     const geometricBloom = state.reduced ? 0 : state.bloom;
+    const highCombo = state.combo >= 25 || Boolean(state.overdriveActive);
+
     for (const c of this.crowd) {
       const gallery = c.y < 0.55;
       const twinkle = state.reduced
@@ -725,6 +754,19 @@ export class StageRenderer {
         ctx.closePath();
         ctx.fill();
         ctx.stroke();
+
+        // High combo waving arms animation
+        if (highCombo && !state.reduced) {
+          const armWave = Math.sin(this.cue.clock * 7 + c.phase) * s * 6;
+          ctx.strokeStyle = hexA(state.activeVenue?.primaryColor || "#8fd4c4", 0.55);
+          ctx.lineWidth = s * 1.4;
+          ctx.beginPath();
+          ctx.moveTo(x - s * 6, y - s * 4);
+          ctx.lineTo(x - s * 10, y - s * 18 + armWave);
+          ctx.moveTo(x + s * 6, y - s * 4);
+          ctx.lineTo(x + s * 10, y - s * 18 - armWave);
+          ctx.stroke();
+        }
       }
       ctx.globalAlpha = (0.06 + e * 0.3) * twinkle * pulse * lift * crowd * (gallery ? 0.7 : 1);
       ctx.fillStyle = c.phase > 3.2 ? "#efe8dc" : c.phase > 1.6 ? "#c4a882" : "#8fd4c4";
@@ -819,21 +861,25 @@ export class StageRenderer {
   private paintPyrotechnics(state: DrawState) {
     const { w, h } = this;
     if (state.reduced) return;
+    const pyroMult = state.activeVenue?.pyroIntensity ?? 1.0;
     const leftX = w * 0.12;
     const rightX = w * 0.88;
+    const midX = w * 0.5;
     const baseY = h * 0.72;
-    if (Math.random() < 0.6) {
-      for (const px of [leftX, rightX]) {
-        for (let i = 0; i < 3; i++) {
+    if (Math.random() < 0.6 * Math.min(2.0, pyroMult)) {
+      const positions = pyroMult >= 1.5 ? [leftX, midX, rightX] : [leftX, rightX];
+      for (const px of positions) {
+        const count = Math.round(3 * pyroMult);
+        for (let i = 0; i < count; i++) {
           state.particles.push({
-            x: px + (Math.random() - 0.5) * 16,
+            x: px + (Math.random() - 0.5) * 20,
             y: baseY,
-            vx: (Math.random() - 0.5) * 40,
-            vy: -180 - Math.random() * 140,
+            vx: (Math.random() - 0.5) * 50,
+            vy: -180 - Math.random() * 160 * pyroMult,
             life: 0,
-            max: 0.4 + Math.random() * 0.3,
-            color: Math.random() < 0.5 ? "#ffd700" : "#ff5500",
-            size: 2.5 + Math.random() * 3,
+            max: 0.4 + Math.random() * 0.35,
+            color: Math.random() < 0.33 ? "#ffd700" : Math.random() < 0.5 ? "#ff5500" : "#ffffff",
+            size: 2.5 + Math.random() * 3.5,
             kind: "pyro",
           });
         }
