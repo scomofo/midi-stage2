@@ -45,4 +45,16 @@ jobs:
           npm run test:setup
           npm run test:imports
           npm run test:audio
-          npm run test:graphics
+          sudo mkdir -p /workspace/screenshots/illustrated-band
+          sudo chown -R "$USER" /workspace/screenshots
+          SESSION_SCREENSHOT_DIR=/workspace/screenshots/illustrated-band npm run test:graphics
+          node scripts/browser-smoke.mjs http://127.0.0.1:8082/ /workspace/screenshots/illustrated-band/dev.png
+          npm run preview:restart
+          node scripts/browser-smoke.mjs http://127.0.0.1:8081/ /workspace/screenshots/illustrated-band/built.png --baseline /workspace/screenshots/illustrated-band/dev.json
+      - name: Save browser acceptance captures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: illustrated-band-browser-acceptance
+          path: /workspace/screenshots/illustrated-band/
+          if-no-files-found: warn
