@@ -1328,6 +1328,12 @@ export function StageApp() {
     return () => clearTimeout(id);
   }, [toast]);
 
+  useEffect(() => {
+    if (!unlockedToast) return;
+    const id = setTimeout(() => setUnlockedToast(null), 4000);
+    return () => clearTimeout(id);
+  }, [unlockedToast]);
+
   const midi = useStageMidi({
     onNoteOn: (note, velocity, token, source) => {
       const b = bag.current;
@@ -2443,14 +2449,14 @@ export function StageApp() {
       ) : null}
 
       {unlockedToast ? (
-        <div role="alert" className="fixed bottom-6 right-6 z-50 flex items-center gap-3 rounded-2xl bg-elevated p-4 shadow-[0_0_0_1px_rgba(143,212,196,0.5)] border border-accent/40 animate-in slide-in-from-bottom-4 duration-300">
+        <div role="alert" className="pointer-events-none fixed bottom-6 right-6 z-50 flex items-center gap-3 rounded-2xl bg-elevated p-4 shadow-[0_0_0_1px_rgba(143,212,196,0.5)] border border-accent/40 animate-in slide-in-from-bottom-4 duration-300">
           <span className="text-3xl">{unlockedToast.icon}</span>
           <div>
             <div className="text-[10px] font-bold tracking-widest text-accent">ACHIEVEMENT UNLOCKED!</div>
             <strong className="text-sm font-bold text-fg">{unlockedToast.title}</strong>
             <p className="text-xs text-muted">{unlockedToast.description}</p>
           </div>
-          <Button size="icon" variant="ghost" className="size-8 ml-2" aria-label="Close notification" onClick={() => setUnlockedToast(null)}>
+          <Button size="icon" variant="ghost" className="pointer-events-auto size-8 ml-2" aria-label="Close notification" onClick={() => setUnlockedToast(null)}>
             <X className="size-4" />
           </Button>
         </div>
