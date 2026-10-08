@@ -140,4 +140,8 @@ hands. Pause freezes the song-time pose; seeking computes the destination pose.
 Calm, reduced motion, disabled drums and ready/count-in remain still. Other
 musicians retain their existing whole-sprite motion.
 
-Visual acceptance remains pending for the assembled arm joins and strike poses.
+The graphics regression captures raised and struck poses for each arm, including
+enlarged joint details. It compares actual Canvas2D pixels while paused wall time
+advances and while Calm, reduced motion, or disabled drums advance in chart time.
+The dedicated CI job retains those captures for visual review of elbow joins and
+stick paths; passing automation alone does not establish their appearance.
