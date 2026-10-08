@@ -850,18 +850,20 @@ export class StageRenderer {
         const arms = [
           {
             crop: [1010, 60, 170, 380],
-            joint: [1120, 388],
+            joint: [1115, 365],
             anchor: [285, 243],
-            angle: -2.05 * pose.left,
+            angle: -2.3 * pose.left,
           },
           {
             crop: [1800, 60, 185, 370],
-            joint: [1840, 384],
+            joint: [1858, 360],
             anchor: [585, 243],
             angle: 1.3 * pose.right,
           },
         ];
-        // Arms sit behind the sleeves and kit, keeping elbow joins covered.
+        // Rotate around the elbow centers, not the cutout edges.
+        // Forearms overlap the sleeve caps and stay visible over the kit.
+        ctx.drawImage(rig, 0, 0, 860, 724, 0, 0, 860, 724);
         for (const arm of arms) {
           ctx.save();
           ctx.translate(arm.anchor[0]!, arm.anchor[1]!);
@@ -881,7 +883,6 @@ export class StageRenderer {
           );
           ctx.restore();
         }
-        ctx.drawImage(rig, 0, 0, 860, 724, 0, 0, 860, 724);
         ctx.restore();
       } else if (atlas) {
         const cell = atlas.naturalWidth / 2;

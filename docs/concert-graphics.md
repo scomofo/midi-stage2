@@ -129,8 +129,8 @@ preferences. Existing session/setup/import regressions remain part of CI.
 
 The drummer uses a separate local body/kit and two forearm/stick cutouts from
 `public/art/band/drummer-rig.png`. Explicit crop rectangles and elbow anchors
-assemble the irregularly spaced source. Sleeves and kit render over the arms to
-cover joints. The original band atlas remains the fallback until the rig has
+assemble the irregularly spaced source. Forearms overlap the sleeve caps at
+their elbow centers and render over the kit to keep hands and sticks visible. The original band atlas remains the fallback until the rig has
 decoded, or if its load fails. Both use the same bounded, one-shot loader.
 
 Stick strokes derive from chart time and the mapped drum lanes: snare/tom use the
