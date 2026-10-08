@@ -1791,9 +1791,9 @@ export function StageApp() {
             <span className={cn("size-1.5 rounded-full", midi.connected ? "bg-accent" : "bg-tungsten")} />
             LOCAL SET
           </span>
-          <Button size="sm" variant="ghost" aria-label="World Tour Career" onClick={() => { if (bag.current?.status === "starting") resetReady(); else pauseSession(); setCareerOpen(true); }}>
+          <Button size="sm" variant="ghost" className="hidden sm:inline-flex" aria-label="World Tour Career" onClick={() => { if (bag.current?.status === "starting") resetReady(); else pauseSession(); setCareerOpen(true); }}>
             <Trophy className="size-3.5 text-accent" />
-            <span className="hidden sm:inline">World Tour</span>
+            <span>World Tour</span>
           </Button>
           <Button size="sm" variant="ghost" aria-label="The room" onClick={() => { if (bag.current?.status === "starting") resetReady(); else pauseSession(); setFeelTap(true); setFeelOpen(true); }}>
             <Lamp className="size-3.5" />
@@ -2085,7 +2085,7 @@ export function StageApp() {
                 <small className="text-[10px] text-subtle">%</small>
               </strong>
             </div>
-            <div className={cn("hud-chip", hud.overdriveActive ? "border-yellow-400 bg-yellow-950/40 text-yellow-300" : "")}>
+            <div className={cn("hud-chip hidden sm:flex", hud.overdriveActive ? "border-yellow-400 bg-yellow-950/40 text-yellow-300" : "")}>
               <span className="flex items-center gap-1">
                 <Zap className={cn("size-3", hud.overdriveActive ? "fill-yellow-400 text-yellow-400 animate-pulse" : "text-subtle")} />
                 OVERDRIVE
