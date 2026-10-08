@@ -281,8 +281,97 @@ export function makeFirstRehearsal(): Song {
   };
 }
 
+export function makeOverdriveHorizon(difficulty: "chill" | "standard" | "expert" = "standard"): Song {
+  const bpm = 132;
+  const beat = 60 / bpm;
+  const bars = 36;
+  const parts = emptyParts();
+  const byType = Object.fromEntries(parts.map((p) => [p.type, p])) as Record<Instrument, Part>;
+  const add = (type: Instrument, b: number, pitch: number, duration = 0.2, velocity = 100) => {
+    byType[type].notes.push({ time: b * beat, duration: duration * beat, pitch, velocity });
+  };
+  const addChord = (b: number, pitches: number[], duration: number) => {
+    for (const pitch of pitches) add("keys", b, pitch, duration, difficulty === "expert" ? 95 : 88);
+  };
+
+  const scale = [60, 62, 63, 65, 67, 70, 72];
+  const bassScale = [36, 38, 39, 41, 43];
+
+  for (let bar = 0; bar < bars; bar++) {
+    const b = bar * 4;
+    const chorus = (bar >= 16 && bar < 24) || bar >= 28;
+
+    add("drums", b, 36, 0.15, 105);
+    add("drums", b + 2, 36, 0.15, 100);
+    if (chorus) add("drums", b + 3.5, 36, 0.12, 90);
+    add("drums", b + 1, 38, 0.15, 100);
+    add("drums", b + 3, 38, 0.15, 105);
+
+    for (let h = 0; h < 8; h++) {
+      add("drums", b + h * 0.5, chorus ? 51 : 42, 0.1, h % 2 ? 65 : 85);
+    }
+    if (bar % 4 === 0) add("drums", b, 49, 0.8, 105);
+    if (bar % 4 === 3) {
+      for (let f = 0; f < 4; f++) {
+        add("drums", b + 3 + f * 0.25, [48, 47, 45, 43][f]!, 0.12, 85 + f * 5);
+      }
+    }
+
+    for (let k = 0; k < 8; k++) {
+      const p = bassScale[bar % 4]!;
+      add("bass", b + k * 0.5, p, 0.35, 90);
+    }
+
+    if (difficulty === "chill") {
+      addChord(b, [60, 63, 67], 3.2);
+      add("guitar", b, 48, 1.8, 85);
+      add("guitar", b + 2, 51, 1.8, 85);
+    } else if (difficulty === "standard") {
+      addChord(b, [60, 63, 67], 1.6);
+      addChord(b + 2, [63, 67, 72], 1.6);
+      for (let g = 0; g < 4; g++) {
+        add("guitar", b + g, scale[(g + bar) % scale.length]!, 0.6, 90);
+      }
+    } else {
+      addChord(b, [60, 63, 67, 72], 1.2);
+      addChord(b + 1.5, [63, 67, 70, 75], 1.2);
+      addChord(b + 3, [65, 68, 72, 77], 0.8);
+      for (let g = 0; g < 8; g++) {
+        add("guitar", b + g * 0.5, scale[(g * 2 + bar) % scale.length]!, 0.35, 95);
+      }
+    }
+  }
+
+  for (const part of parts) part.notes.sort((a, b) => a.time - b.time || a.pitch - b.pitch);
+  const duration = bars * 4 * beat;
+
+  return {
+    id: "overdrive-horizon",
+    name: "Overdrive Horizon",
+    subtitle: "High BPM AAA Synth Rock. Unleash Stage Overdrive.",
+    tag: "AAA ARENA ROCK",
+    bpm,
+    duration,
+    original: true,
+    parts,
+    beats: beats(duration, beat),
+    sections: [
+      { time: 0, name: "INTRO" },
+      { time: 8 * 4 * beat, name: "SHRED VERSE" },
+      { time: 16 * 4 * beat, name: "ARENA CHORUS" },
+      { time: 24 * 4 * beat, name: "GUITAR SOLO" },
+      { time: 28 * 4 * beat, name: "FINAL OVERDRIVE" },
+      { time: 32 * 4 * beat, name: "OUTRO" },
+    ],
+    arrangement: difficulty,
+    arrangementDescription: "Fast tempo, heavy syncopated riffs and arena drops designed to max out Overdrive.",
+    key: "C minor",
+    art: "voltage",
+  };
+}
+
 export function catalog(difficulty: "chill" | "standard" | "expert"): Song[] {
-  return [makeOpenStage(difficulty), makeFirstRehearsal(), makePocketSong(0), makePocketSong(1), makePocketSong(2), makeBacklineDrive(difficulty), makeBacklineDriveArcade(difficulty)];
+  return [makeOpenStage(difficulty), makeFirstRehearsal(), makePocketSong(0), makePocketSong(1), makePocketSong(2), makeBacklineDrive(difficulty), makeBacklineDriveArcade(difficulty), makeOverdriveHorizon(difficulty)];
 }
 
 export { LABELS };

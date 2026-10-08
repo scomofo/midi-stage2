@@ -141,7 +141,7 @@ export type Particle = {
   max: number;
   color: string;
   size: number;
-  kind: "spark" | "ring" | "burst" | "float" | "shock" | "ember";
+  kind: "spark" | "ring" | "burst" | "float" | "shock" | "ember" | "pyro";
   player?: Instrument;
   lane?: number;
   text?: string;

@@ -59,6 +59,8 @@ export type DrawState = {
   feel: Feel;
   strumGuide?: boolean;
   music?: MusicEnergy;
+  overdriveActive?: boolean;
+  overdriveMeter?: number;
 };
 
 function hexA(hex: string, a: number) {
@@ -229,6 +231,7 @@ export class StageRenderer {
     this.paintCrowd(state);
     this.paintTruss(state);
     this.paintBand(state);
+    if (state.overdriveActive) this.paintPyrotechnics(state);
     const geom = this.paintHighways(state);
     this.paintParticles(state, geom);
     this.paintVignette(state);
@@ -809,6 +812,31 @@ export class StageRenderer {
         ctx.moveTo(x + 9, 22);
         ctx.lineTo(x + 12, 15);
         ctx.stroke();
+      }
+    }
+  }
+
+  private paintPyrotechnics(state: DrawState) {
+    const { w, h } = this;
+    if (state.reduced) return;
+    const leftX = w * 0.12;
+    const rightX = w * 0.88;
+    const baseY = h * 0.72;
+    if (Math.random() < 0.6) {
+      for (const px of [leftX, rightX]) {
+        for (let i = 0; i < 3; i++) {
+          state.particles.push({
+            x: px + (Math.random() - 0.5) * 16,
+            y: baseY,
+            vx: (Math.random() - 0.5) * 40,
+            vy: -180 - Math.random() * 140,
+            life: 0,
+            max: 0.4 + Math.random() * 0.3,
+            color: Math.random() < 0.5 ? "#ffd700" : "#ff5500",
+            size: 2.5 + Math.random() * 3,
+            kind: "pyro",
+          });
+        }
       }
     }
   }
@@ -1488,6 +1516,11 @@ export class StageRenderer {
           ctx.ellipse(hx, hy, grow, grow * 0.38, 0, 0, Math.PI * 2);
           ctx.stroke();
         }
+        } else if (p.kind === "pyro") {
+          ctx.fillStyle = p.color;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.size * Math.max(0.2, 1 - life), 0, Math.PI * 2);
+          ctx.fill();
       } else {
         ctx.strokeStyle = p.color;
         ctx.lineWidth = Math.max(0.7, p.size * (1 - life) * 0.65);
