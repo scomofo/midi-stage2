@@ -128,6 +128,8 @@ try {
     document.body.append(canvas);
     const renderer = new StageRenderer(canvas);
     await renderer.bandAtlas.ready;
+    await renderer.drummerRig.ready;
+    if (!renderer.drummerRig.image) throw Error("Drummer rig must decode for acceptance");
     if (!renderer.bandAtlas.image) throw Error('Illustrated band atlas must decode for graphics acceptance');
     const atlasImage = renderer.bandAtlas.image;
     const atlasCanvas = document.createElement('canvas');
@@ -149,22 +151,73 @@ try {
     }
     const baseline = globalThis.__graphicsBaselineModule
       ? new (await import(globalThis.__graphicsBaselineModule)).StageRenderer(canvas) : null;
+    window.drummerDetails = () => {
+      const detail = document.createElement('canvas');
+      detail.width = detail.height = 520;
+      const closeup = new StageRenderer(detail, renderer.bandAtlas, renderer.drummerRig);
+      closeup.w = 1100;
+      closeup.h = 600;
+      const song = makeOpenStage('expert');
+      const players = defaultPlayers().map((p) => ({ ...p, enabled: p.id === 'drums' }));
+      const drums = players.find((p) => p.id === 'drums');
+      const judge = new Judge(makeChart(song, drums), { speed: 1, difficulty: 'standard', drums: true, onJudge() {} });
+      const state = { song, players, judges: new Map([['drums', judge]]), status: 'playing', demo: false,
+        speed: 1, t: 0, now: 10, energy: 0.72, trauma: 0, bloom: 0, combo: 0,
+        particles: [], flashes: [], callouts: [], pressed: new Map(), reduced: false, feel: withPreset('house') };
+      const paint = () => {
+        closeup.ctx.setTransform(1, 0, 0, 1, 0, 0);
+        closeup.ctx.clearRect(0, 0, 520, 520);
+        closeup.ctx.setTransform(4, 0, 0, 4, -(1100 * 0.45 - 52) * 4 + 52, -600 * 0.065 * 4 + 40);
+        closeup.paintBand(state);
+        return detail.toDataURL('image/png');
+      };
+      const captures = {};
+      for (const [name, lane] of [['snare', 1], ['cymbal', 2]]) {
+        const attack = judge.notes.find((note) => note.lane === lane);
+        if (!attack) throw Error('Drummer closeup needs snare and cymbal attacks');
+        state.t = attack.time - 0.001;
+        captures[`${name}-raised`] = paint();
+        state.t = attack.time + 0.11;
+        captures[`${name}-strike`] = paint();
+        if (captures[`${name}-raised`] === captures[`${name}-strike`]) throw Error(`${name} stroke must be visible`);
+        state.status = 'paused';
+        const paused = paint();
+        state.now += 100;
+        if (paint() !== paused) throw Error('Drummer pause must ignore advancing wall time');
+        state.status = 'playing';
+      }
+      for (const mode of ['reduced', 'calm', 'disabled']) {
+        state.reduced = mode === 'reduced';
+        state.feel = withPreset(mode === 'calm' ? 'calm' : 'house');
+        drums.enabled = mode !== 'disabled';
+        const still = paint();
+        state.t += 0.11;
+        state.now += 100;
+        if (paint() !== still) throw Error(`${mode} drummer must remain still`);
+      }
+      return captures;
+    };
     window.renderGraphics = (width, height, mode, reduced = false) => {
       canvas.style.width = `${width}px`;
       canvas.style.height = `${height}px`;
       renderer.resize();
       const song = makeOpenStage('expert');
       if (mode === 'rhythm' || mode === 'strum-rhythm') song.matching = 'rhythm';
-      const players = defaultPlayers().map((p) => ({ ...p, enabled: mode === 'band' || mode === 'miss-band' || mode === 'strum-band' || p.id === (mode === 'strum-guitar' ? 'guitar' : 'keys') }));
+      const players = defaultPlayers().map((p) => ({ ...p, enabled: mode.startsWith('drummer-') || mode === 'band' || mode === 'miss-band' || mode === 'strum-band' || p.id === (mode === 'strum-guitar' ? 'guitar' : 'keys') }));
       const judges = new Map(players.filter((p) => p.enabled).map((p) => [p.id,
         new Judge(makeChart(song, p), { speed: 1, difficulty: 'standard', drums: p.type === 'drums', onJudge() {} })]));
       const state = { song, players, judges, status: 'playing', demo: false,
         speed: 1, t: 21.8, now: 10, energy: 0.72, trauma: 0, bloom: 0, combo: 12,
         particles: [], flashes: [], callouts: [], pressed: new Map(), reduced,
         feel: withPreset(mode === 'calm' ? 'calm' : 'house'), strumGuide: mode.startsWith('strum-') };
+      if (mode.startsWith('drummer-')) {
+        const attack = judges.get('drums').notes.find((note) => mode === 'drummer-snare' ? note.lane === 1 : note.lane === 2);
+        if (!attack) throw Error('Drummer fixture needs a hand-played attack');
+        state.t = mode === 'drummer-rest' ? attack.time - 0.001 : attack.time + 0.11;
+      }
       if (mode === 'band') {
         const bank = { image: null, ready: Promise.resolve() };
-        const delayed = new StageRenderer(canvas, bank);
+        const delayed = new StageRenderer(canvas, bank, { image: null, ready: Promise.resolve() });
         delayed.resize();
         const calls = [];
         const originalDrawImage = delayed.ctx.drawImage;
@@ -365,10 +418,14 @@ try {
       return { width, height, mode, reduced, medianMs: timings[4], p95Ms: timings[7], previousMedianMs };
     };
   });
+  const details = await page.evaluate(() => window.drummerDetails());
+  if (output) for (const [name, png] of Object.entries(details)) {
+    await writeFile(`${output}/drummer-detail-${name}.png`, Buffer.from(png.split(',')[1], 'base64'));
+  }
   const results = [];
   for (const [width, height] of [[1100, 600], [366, 420]]) {
     await page.setViewportSize({ width: Math.max(390, width), height: Math.max(844, height) });
-    for (const mode of ['chords', 'rhythm', 'band', 'miss-band', 'hit', 'sustain', 'calm', 'strum-guitar', 'strum-rhythm', 'strum-band']) {
+    for (const mode of ['drummer-rest', 'drummer-strike', 'drummer-snare', 'chords', 'rhythm', 'band', 'miss-band', 'hit', 'sustain', 'calm', 'strum-guitar', 'strum-rhythm', 'strum-band']) {
       results.push(await page.evaluate(([w, h, m]) => window.renderGraphics(w, h, m), [width, height, mode]));
       if (output) {
         // Export the fixed fixture canvas itself; it is independent of the

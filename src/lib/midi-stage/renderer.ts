@@ -2,10 +2,12 @@ import type { Callout, ChartNote, Flash, Grade, Instrument, Particle, Player, So
 import { Judge, clamp, currentHarmony, keyLabel, KEYS } from "./engine";
 import type { Feel, GoboMotion, GoboPattern, HeadCue } from "./feel";
 import { createClubArt, createNoteArt, createPerformerArt } from "./concert-art";
-import { getPerformerAtlas, PERFORMER_CELLS, type PerformerAtlas } from "./performer-assets";
+import { getDrummerRig, getPerformerAtlas, PERFORMER_CELLS, type PerformerAtlas } from "./performer-assets";
 import { suggestedStrum } from "./strum-guide";
 import { concertCue, type ConcertCue, type MusicEnergy } from "./concert-cues";
 import { nextVisibleLaneTimes, rendererBeatStart, rendererNoteWindow } from "./renderer-window";
+
+import { drummerStroke } from "./drummer-motion";
 
 const GRADE_COLOR: Record<Grade, string> = {
   perfect: "#8fd4c4",
@@ -145,7 +147,7 @@ export class StageRenderer {
   private noteArt = new Map<string, HTMLCanvasElement>();
   private performerArt = new Map<Instrument, HTMLCanvasElement>();
 
-  constructor(canvas: HTMLCanvasElement, private bandAtlas: PerformerAtlas = getPerformerAtlas()) {
+  constructor(canvas: HTMLCanvasElement, private bandAtlas: PerformerAtlas = getPerformerAtlas(), private drummerRig: PerformerAtlas = getDrummerRig()) {
     this.canvas = canvas;
     this.ctx = canvas.getContext("2d")!;
     for (let i = 0; i < 96; i++) {
@@ -833,7 +835,56 @@ export class StageRenderer {
       const x = w * f.x - size / 2;
       const y = h * 0.065 + bob - (animated && struck ? 2 : 0);
       const atlas = this.bandAtlas.image;
-      if (atlas) {
+      if (f.id === "drums" && this.drummerRig.image) {
+        const rig = this.drummerRig.image;
+        const scale = size / 860;
+        const pose = drummerStroke(
+          state.judges.get("drums")?.notes ?? [],
+          state.t,
+          state.song.bpm,
+          animated && on && (state.status === "playing" || state.status === "paused"),
+        );
+        ctx.save();
+        ctx.translate(x, y + size * 0.1);
+        ctx.scale(scale, scale);
+        const arms = [
+          {
+            crop: [1010, 60, 170, 380],
+            joint: [1115, 365],
+            anchor: [285, 243],
+            angle: -2.3 * pose.left,
+          },
+          {
+            crop: [1800, 60, 185, 370],
+            joint: [1858, 360],
+            anchor: [585, 243],
+            angle: 1.3 * pose.right,
+          },
+        ];
+        // Rotate around the elbow centers, not the cutout edges.
+        // Forearms overlap the sleeve caps and stay visible over the kit.
+        ctx.drawImage(rig, 0, 0, 860, 724, 0, 0, 860, 724);
+        for (const arm of arms) {
+          ctx.save();
+          ctx.translate(arm.anchor[0]!, arm.anchor[1]!);
+          ctx.rotate(arm.angle);
+          ctx.scale(0.62, 0.62);
+          const [sx, sy, sw, sh] = arm.crop;
+          ctx.drawImage(
+            rig,
+            sx!,
+            sy!,
+            sw!,
+            sh!,
+            sx! - arm.joint[0]!,
+            sy! - arm.joint[1]!,
+            sw!,
+            sh!,
+          );
+          ctx.restore();
+        }
+        ctx.restore();
+      } else if (atlas) {
         const cell = atlas.naturalWidth / 2;
         const [column, row] = PERFORMER_CELLS[f.id];
         ctx.drawImage(atlas, column * cell, row * cell, cell, cell, x, y, size, size);

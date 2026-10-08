@@ -18,6 +18,11 @@ export type PerformerAtlas = {
 export function createPerformerAtlas(
   makeImage: () => HTMLImageElement = () => new Image(),
   timeoutMs = 15000,
+  url = BAND_ATLAS_URL,
+  validDimensions = (image: HTMLImageElement) =>
+    image.naturalWidth >= 512 &&
+    image.naturalWidth === image.naturalHeight &&
+    image.naturalWidth % 2 === 0,
 ): PerformerAtlas {
   const atlas: PerformerAtlas = { image: null, ready: Promise.resolve() };
   atlas.ready = new Promise<void>((resolve) => {
@@ -42,11 +47,7 @@ export function createPerformerAtlas(
         void (async () => {
           try {
             await image.decode();
-            finish(
-              image.naturalWidth >= 512 &&
-                image.naturalWidth === image.naturalHeight &&
-                image.naturalWidth % 2 === 0,
-            );
+            finish(validDimensions(image));
           } catch {
             finish(false);
           }
@@ -54,7 +55,7 @@ export function createPerformerAtlas(
       };
       image.onerror = () => finish(false);
       timer = setTimeout(() => finish(false), timeoutMs);
-      image.src = BAND_ATLAS_URL;
+      image.src = url;
     } catch {
       finish(false);
     }
@@ -67,4 +68,14 @@ let sharedAtlas: PerformerAtlas | undefined;
 // No browser globals at module evaluation: the renderer module is also SSR imported.
 export function getPerformerAtlas(): PerformerAtlas {
   return (sharedAtlas ??= createPerformerAtlas());
+}
+
+let drummerRig: PerformerAtlas | undefined;
+export function getDrummerRig(): PerformerAtlas {
+  return (drummerRig ??= createPerformerAtlas(
+    () => new Image(),
+    15000,
+    "/art/band/drummer-rig.png",
+    (image) => image.naturalWidth === 2172 && image.naturalHeight === 724,
+  ));
 }

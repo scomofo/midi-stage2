@@ -124,3 +124,24 @@ preferences. Existing session/setup/import regressions remain part of CI.
 ## Preview
 
 ![Concert stage with optional guitar strum arrows](../screenshots/concert-lighting.jpg)
+
+## Drummer cutout rig
+
+The drummer uses a separate local body/kit and two forearm/stick cutouts from
+`public/art/band/drummer-rig.png`. Explicit crop rectangles and elbow anchors
+assemble the irregularly spaced source. Forearms overlap the sleeve caps at
+their elbow centers and render over the kit to keep hands and sticks visible. The original band atlas remains the fallback until the rig has
+decoded, or if its load fails. Both use the same bounded, one-shot loader.
+
+Stick strokes derive from chart time and the mapped drum lanes: snare/tom use the
+left arm, hi-hat/cymbals use the right, and kick-only events leave the hands still.
+This is chart choreography rather than detection of a real player's physical
+hands. Pause freezes the song-time pose; seeking computes the destination pose.
+Calm, reduced motion, disabled drums and ready/count-in remain still. Other
+musicians retain their existing whole-sprite motion.
+
+The graphics regression captures raised and struck poses for each arm, including
+enlarged joint details. It compares actual Canvas2D pixels while paused wall time
+advances and while Calm, reduced motion, or disabled drums advance in chart time.
+The dedicated CI job retains those captures for visual review of elbow joins and
+stick paths; passing automation alone does not establish their appearance.
