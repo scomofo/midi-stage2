@@ -35,6 +35,34 @@ jobs:
           path: /workspace/screenshots/performance-hud/
           if-no-files-found: error
 
+  guitar-import:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Verify authored guitar import
+        run: |
+          npm run dev > /tmp/guitar-import-dev.log 2>&1 &
+          ready=false
+          for attempt in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:8082/ > /dev/null; then ready=true; break; fi
+            sleep 1
+          done
+          if [ "$ready" != true ]; then cat /tmp/guitar-import-dev.log; exit 1; fi
+          SESSION_SCREENSHOT_DIR=/workspace/screenshots/guitar-import npm run test:guitar-import
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: authored-guitar-import-desktop
+          path: /workspace/screenshots/guitar-import/
+          if-no-files-found: error
+
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 15

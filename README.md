@@ -44,6 +44,7 @@ npm run dev   # serves the app on http://0.0.0.0:8082
 | `npm run test:imports` | Chart/MIDI import, playback, saved songs and mobile regression |
 | `npm run test:audio` | Real WAV/MP3/FLAC import, backing playback, storage and rhythm-input regression |
 | `npm run test:guitar` | Authored strings/frets, exact-pitch MIDI, arcade strums, holds and touch |
+| `npm run test:guitar-import` | Desktop MusicXML/string-fret imports, correction/export, reload and exact-pitch playback |
 | `npm run test:graphics` | Concert rendering, lane targets, reduced motion and saved/live strum arrows |
 
 ## Player experience
@@ -158,8 +159,15 @@ library to cancel; long analysis yields so the controls remain responsive.
   into the stage parts. Unsupported percussion/expression is reported. Variable
   tempo, SMPTE timing and format 2 are rejected. Limit: 4 MB.
 - **Stage charts (.midistage.json):** validates versions 1/3 pitch charts and
-  explicit version 2 rhythm charts. Referenced audio in JSON is not attached
+  explicit version 2 rhythm charts, plus version 4 six-string arrangements with
+  tuning and authored string/fret positions. Referenced audio in JSON is not attached
   automatically. Limit: 4 MB. See `docs/chart-format.md`.
+
+- **Guitar tablature (.musicxml/.xml):** imports an uncompressed, constant-tempo
+  MusicXML export with one authored six-string TAB staff. Expand repeats before
+  exporting. Review and correct note times, lengths, strings and frets, then
+  download a reusable Stage chart. Compressed `.mxl`, direct Guitar Pro and PDF
+  tabs are not supported. [Details and limits](docs/guitar-import.md).
 
 Up to 12 imports are remembered in this browser: chart metadata in local storage,
 original audio in IndexedDB. Files are processed locally and are never uploaded.

@@ -1,0 +1,270 @@
+{
+  "schema": "midi-stage-chart",
+  "version": 4,
+  "id": "musicxml-f90736e5",
+  "title": "Open-string Study",
+  "bpm": 96,
+  "duration": 7.5,
+  "firstBeat": 0,
+  "audioOffset": 0,
+  "audioName": "",
+  "origin": "musicxml",
+  "parts": [
+    {
+      "type": "drums",
+      "notes": []
+    },
+    {
+      "type": "keys",
+      "notes": []
+    },
+    {
+      "type": "guitar",
+      "notes": [
+        {
+          "time": 0,
+          "duration": 0.3125,
+          "pitch": 40,
+          "velocity": 100,
+          "guitarPosition": {
+            "string": 6,
+            "fret": 0
+          }
+        },
+        {
+          "time": 0.3125,
+          "duration": 0.3125,
+          "pitch": 43,
+          "velocity": 100,
+          "guitarPosition": {
+            "string": 6,
+            "fret": 3
+          }
+        },
+        {
+          "time": 0.625,
+          "duration": 0.3125,
+          "pitch": 45,
+          "velocity": 100,
+          "guitarPosition": {
+            "string": 5,
+            "fret": 0
+          }
+        },
+        {
+          "time": 0.9375,
+          "duration": 0.3125,
+          "pitch": 47,
+          "velocity": 100,
+          "guitarPosition": {
+            "string": 5,
+            "fret": 2
+          }
+        },
+        {
+          "time": 1.25,
+          "duration": 0.3125,
+          "pitch": 50,
+          "velocity": 100,
+          "guitarPosition": {
+            "string": 4,
+            "fret": 0
+          }
+        },
+        {
+          "time": 1.5625,
+          "duration": 0.3125,
+          "pitch": 52,
+          "velocity": 100,
+          "guitarPosition": {
+            "string": 4,
+            "fret": 2
+          }
+        },
+        {
+          "time": 1.875,
+          "duration": 0.3125,
+          "pitch": 50,
+          "velocity": 100,
+          "guitarPosition": {
+            "string": 4,
+            "fret": 0
+          }
+        },
+        {
+          "time": 2.1875,
+          "duration": 0.3125,
+          "pitch": 45,
+          "velocity": 100,
+          "guitarPosition": {
+            "string": 5,
+            "fret": 0
+          }
+        },
+        {
+          "time": 2.5,
+          "duration": 1.25,
+          "pitch": 40,
+          "velocity": 100,
+          "guitarPosition": {
+            "string": 6,
+            "fret": 0
+          }
+        },
+        {
+          "time": 2.5,
+          "duration": 1.25,
+          "pitch": 47,
+          "velocity": 100,
+          "guitarPosition": {
+            "string": 5,
+            "fret": 2
+          }
+        },
+        {
+          "time": 2.5,
+          "duration": 1.25,
+          "pitch": 52,
+          "velocity": 100,
+          "guitarPosition": {
+            "string": 4,
+            "fret": 2
+          }
+        },
+        {
+          "time": 3.75,
+          "duration": 1.25,
+          "pitch": 45,
+          "velocity": 100,
+          "guitarPosition": {
+            "string": 5,
+            "fret": 0
+          }
+        },
+        {
+          "time": 3.75,
+          "duration": 1.25,
+          "pitch": 52,
+          "velocity": 100,
+          "guitarPosition": {
+            "string": 4,
+            "fret": 2
+          }
+        },
+        {
+          "time": 5,
+          "duration": 1.25,
+          "pitch": 64,
+          "velocity": 100,
+          "guitarPosition": {
+            "string": 2,
+            "fret": 5
+          }
+        },
+        {
+          "time": 5,
+          "duration": 1.25,
+          "pitch": 64,
+          "velocity": 100,
+          "guitarPosition": {
+            "string": 1,
+            "fret": 0
+          }
+        },
+        {
+          "time": 6.25,
+          "duration": 1.25,
+          "pitch": 40,
+          "velocity": 100,
+          "guitarPosition": {
+            "string": 6,
+            "fret": 0
+          }
+        }
+      ]
+    },
+    {
+      "type": "bass",
+      "notes": []
+    }
+  ],
+  "tempoMap": [
+    {
+      "time": 0,
+      "bpm": 96
+    }
+  ],
+  "beats": [
+    {
+      "time": 0,
+      "bar": true
+    },
+    {
+      "time": 0.625,
+      "bar": false
+    },
+    {
+      "time": 1.25,
+      "bar": false
+    },
+    {
+      "time": 1.875,
+      "bar": false
+    },
+    {
+      "time": 2.5,
+      "bar": true
+    },
+    {
+      "time": 3.125,
+      "bar": false
+    },
+    {
+      "time": 3.75,
+      "bar": false
+    },
+    {
+      "time": 4.375,
+      "bar": false
+    },
+    {
+      "time": 5,
+      "bar": true
+    },
+    {
+      "time": 5.625,
+      "bar": false
+    },
+    {
+      "time": 6.25,
+      "bar": false
+    },
+    {
+      "time": 6.875,
+      "bar": false
+    }
+  ],
+  "sections": [
+    {
+      "time": 0,
+      "name": "OPEN POSITION"
+    },
+    {
+      "time": 2.5,
+      "name": "LET IT RING"
+    },
+    {
+      "time": 5,
+      "name": "HIGH STRINGS"
+    }
+  ],
+  "guitarMode": "strings",
+  "guitarTuning": [
+    40,
+    45,
+    50,
+    55,
+    59,
+    64
+  ]
+}

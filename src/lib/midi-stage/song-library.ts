@@ -76,9 +76,11 @@ export function songFromSavedChart(entry: SavedChart): Song {
     ...sharedChartToSong(entry.chart),
     id: entry.id,
     subtitle: entry.fileName,
-    arrangement: entry.audio === true ? "Audio rhythm" : "Imported chart",
+    arrangement: entry.chart.guitarMode === "strings" ? "Authored guitar" : entry.audio === true ? "Audio rhythm" : "Imported chart",
     arrangementDescription: entry.audio === true
       ? "Rhythm chart detected from your audio. Play any MIDI note or the shown key; the original track plays with you."
+      : entry.chart.guitarMode === "strings"
+      ? "Authored strings and frets. All difficulty levels keep the imported notes. Play along with the guide, or connect guitar MIDI for pitch scoring. Backing audio is not attached."
       : "Plays with the stage instruments. Backing audio and audio offsets are not used.",
     ...(entry.audio === true ? { audioAssetId: entry.id } : {}),
   };
