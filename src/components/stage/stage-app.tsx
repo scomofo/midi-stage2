@@ -15,8 +15,8 @@ import {
   Volume2,
   X,
   Trophy,
-  Zap,
 } from "lucide-react";
+import { OverdriveControl } from "@/components/stage/overdrive-control";
 import { CareerPanel } from "@/components/stage/career-panel";
 import { loadCareerData, checkNewAchievements, VENUES, type CareerData, type Achievement } from "@/lib/midi-stage/career";
 import { Button } from "@/components/ui/button";
@@ -745,7 +745,8 @@ export function StageApp() {
 
   const triggerOverdrive = useCallback(() => {
     const b = bag.current;
-    if (!b || b.status !== "playing") return;
+    if (!b || b.status !== "playing" || b.demo || b.audio.songAt() < 0) return;
+    if ([...b.judges.values()].some((judge) => judge.overdriveActive)) return;
     let triggered = false;
     for (const j of b.judges.values()) {
       if (j.triggerOverdrive()) triggered = true;
@@ -753,7 +754,7 @@ export function StageApp() {
     if (triggered) {
       b.audio.overdriveSting();
       b.bloom = 1.0;
-      setToast("⚡ STAGE OVERDRIVE ACTIVATED! 2× MULTIPLIER BOOST! ⚡");
+      setToast("Overdrive active · your current multiplier is doubled.");
     }
   }, []);
 
@@ -1106,9 +1107,9 @@ export function StageApp() {
 
       let maxOverdriveMeter = 0;
       let anyOverdriveActive = false;
-      if (b.status === "playing") {
+      if (b.status === "playing" || b.status === "paused") {
         for (const j of b.judges.values()) {
-          j.updateOverdrive(dt);
+          if (b.status === "playing") j.updateOverdrive(dt);
           if (j.overdriveMeter > maxOverdriveMeter) maxOverdriveMeter = j.overdriveMeter;
           if (j.overdriveActive) anyOverdriveActive = true;
         }
@@ -1278,6 +1279,11 @@ export function StageApp() {
       }
       if (e.ctrlKey || e.metaKey || e.altKey || el.isContentEditable || el.closest("input, select, textarea, [role=dialog]")) return;
       if (feelOpen || libraryOpen || menu) return;
+      if (e.code === "Enter" && e.shiftKey) {
+        e.preventDefault();
+        if (!e.repeat && !careerOpen) triggerOverdrive();
+        return;
+      }
       if ((e.code === "Enter" || e.code === "Space") && el.closest("button, a")) return;
       const activePlayers = b.players.filter((p) => p.enabled);
       if (b.song.guitarMode === "fret-strum" && ["ArrowDown", "ArrowUp", "Space"].includes(e.code)) {
@@ -1323,7 +1329,7 @@ export function StageApp() {
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("keyup", onUp);
     };
-  }, [pauseSession, startSession, resetReady, feelOpen, libraryOpen, menu, soundcheckOpen, finderOpen, readingImport, savingImport]);
+  }, [pauseSession, startSession, resetReady, triggerOverdrive, careerOpen, feelOpen, libraryOpen, menu, soundcheckOpen, finderOpen, readingImport, savingImport]);
 
   useEffect(() => {
     if (!toast) return;
@@ -2066,7 +2072,7 @@ export function StageApp() {
           />
           </div>
 
-          <div className="stage-hud grid grid-cols-2 gap-3 rounded-t-2xl bg-surface px-4 py-3 shadow-[0_0_0_1px_rgba(239,232,220,0.08)] sm:grid-cols-4 lg:grid-cols-5">
+          <div className="stage-hud grid gap-3 rounded-t-2xl bg-surface px-4 py-3 shadow-[0_0_0_1px_rgba(239,232,220,0.08)]">
             <div className={cn("hud-chip accent", hud.gain > 0 && "pop")}>
               <span>SCORE</span>
               <strong key={hud.pop}>
@@ -2094,27 +2100,15 @@ export function StageApp() {
                 <small className="text-[10px] text-subtle">%</small>
               </strong>
             </div>
-            <div className={cn("hud-chip hidden sm:flex", hud.overdriveActive ? "border-yellow-400 bg-yellow-950/40 text-yellow-300" : "")}>
-              <span className="flex items-center gap-1">
-                <Zap className={cn("size-3", hud.overdriveActive ? "fill-yellow-400 text-yellow-400 animate-pulse" : "text-subtle")} />
-                OVERDRIVE
-              </span>
-              <div className="flex items-center justify-between gap-1 mt-0.5">
-                <meter className={cn("energy-meter flex-1", hud.overdriveActive && "hot")} min={0} max={100} value={hud.overdriveMeter} />
-                {hud.overdriveMeter >= 30 && !hud.overdriveActive ? (
-                  <button type="button" className="rounded bg-yellow-400 px-1.5 py-0.5 text-[9px] font-bold text-black hover:bg-yellow-300" onClick={triggerOverdrive}>
-                    ⚡ OVERDRIVE
-                  </button>
-                ) : (
-                  <strong className="text-[11px] font-bold">{hud.overdriveActive ? "ACTIVE (8×)" : `${Math.round(hud.overdriveMeter)}%`}</strong>
-                )}
-              </div>
-            </div>
             <div className="hud-chip hud-personal-best hidden xl:flex">
               <span>{practice ? "PRACTICE" : "PERSONAL BEST"}</span>
               <strong className="text-muted">{practice ? "Not saved" : best ? best.toLocaleString() : "—"}</strong>
             </div>
           </div>
+
+          <OverdriveControl charge={hud.overdriveMeter} active={hud.overdriveActive}
+            status={status} demo={bag.current?.demo ?? false} countIn={Boolean(countIn)}
+            onActivate={triggerOverdrive} />
 
           <div className="stage-energy-strip flex flex-wrap items-center justify-between gap-2 bg-elevated px-4 py-2 text-[10px] tracking-[0.12em] text-muted">
             <label className="flex items-center gap-2">
