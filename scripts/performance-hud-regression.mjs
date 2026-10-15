@@ -115,9 +115,12 @@ try {
   assert.equal(await active(), true, 'focused button activates with ordinary Enter');
   await transport.getByRole('button', { name: 'Pause', exact: true }).click();
   await charge(47, true);
-  if (output) await page.screenshot({ path: `${output}/overdrive-paused-laptop.png` });
+  if (output) {
+    await page.locator('.stage-overdrive').screenshot({ path: `${output}/overdrive-paused-control.png` });
+    await page.screenshot({ path: `${output}/overdrive-paused-laptop.png` });
+  }
   await transport.getByRole('button', { name: 'Resume', exact: true }).click();
-  await page.evaluate(() => { window.hudProbe.time = window.hudProbe.live.song.duration + 0.1; });
+  await page.evaluate(() => { window.hudProbe.time = window.hudProbe.live.song.duration + 1; });
   await page.locator('[data-session-overlay="results"]').waitFor();
   await settle();
   assert.equal(Number(await meter.getAttribute('value')), 0, 'completed sets do not advertise a live boost');
@@ -125,6 +128,7 @@ try {
   await page.getByRole('button', { name: 'Reset set', exact: true }).click();
   await settle();
   assert.equal(Number(await meter.getAttribute('value')), 0, 'reset clears charge');
+  await page.evaluate(() => { window.hudProbe.time = 0.1; });
   await page.getByRole('button', { name: 'Watch the house', exact: true }).click();
   await page.waitForFunction(() => window.hudProbe.live?.demo && window.hudProbe.live.status === 'playing');
   await charge(100);
