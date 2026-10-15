@@ -48,6 +48,7 @@ try {
       await page.getByRole('dialog', { name: 'Stage finder', exact: true }).waitFor();
       await page.getByRole('dialog', { name: 'Stage finder', exact: true }).locator('[data-command-id="import"]').click();
     }
+    await library.waitFor();
   };
   const upload = (name, contents) => file.setInputFiles({ name, mimeType: name.endsWith('json') ? 'application/json' : 'application/xml', buffer: Buffer.from(contents) });
   const capture = async (name) => page.screenshot({ path: `${output}/${name}.png` });
@@ -191,6 +192,11 @@ try {
   console.log('PASS: MusicXML preview, correction validation, tempo scaling, export, six-string MIDI scoring, independent unisons/holds, playback gate, persistence, duplicate identity, restore/add/remove and cancelled-edit isolation. Desktop only.');
 } catch (error) {
   console.error(`Guitar import phase: ${phase}`);
+  const page = browser.contexts()[0]?.pages()[0];
+  if (page) {
+    await page.screenshot({ path: `${output}/guitar-import-failure.png` }).catch(() => {});
+    console.error(await page.locator('body').innerText().catch(() => 'Page unavailable'));
+  }
   throw error;
 } finally {
   await browser.close();
