@@ -19,6 +19,7 @@ const STRINGS = [
 ] as const;
 
 export type GuitarStringGuideProps = {
+  tuning?: readonly number[];
   targets: GuitarPosition[];
   hitTargets?: GuitarPosition[];
   feedback?: GuitarPitchFeedback | null;
@@ -39,6 +40,7 @@ export type GuitarStringGuideProps = {
 };
 
 export function GuitarStringGuide({
+  tuning = [40, 45, 50, 55, 59, 64],
   targets,
   hitTargets = [],
   feedback = null,
@@ -58,13 +60,18 @@ export function GuitarStringGuide({
   disabled = false,
 }: GuitarStringGuideProps) {
   const id = useId();
+  const standard = tuning.every((pitch, index) => pitch === [40, 45, 50, 55, 59, 64][index]);
+  const strings = STRINGS.map((string, index) => {
+    const name = noteName(tuning[index]!).replace(/-?\d+$/, "");
+    return { ...string, name, label: index === 0 ? `Low ${name}` : index === 5 ? `High ${name}` : name };
+  });
   const fretWindow = getFretboardWindow(targets);
   const columns = fretWindow.frets;
   const omittedBefore = columns[0]! - 1;
   const hasGapBefore = (fret: number) => (fret === columns[0] && omittedBefore > 0)
     || fretWindow.gaps.some((gap) => gap.before === fret);
   const positionLabel = (target: GuitarPosition) => {
-    const string = STRINGS.find((candidate) => candidate.string === target.string)!;
+    const string = strings.find((candidate) => candidate.string === target.string)!;
     return `${string.label} ${target.fret === 0 ? "open" : `fret ${target.fret}`}`;
   };
   const followingLabel = followingTargets.map(positionLabel).join(" · ");
@@ -88,7 +95,7 @@ export function GuitarStringGuide({
         </span>
       </div>
       <div className="guitar-string-guide-caption">
-        <p>High E at top · low E at bottom</p>
+        <p>High {strings[5]!.name} at top · low {strings[0]!.name} at bottom</p>
         <strong>{attacksComplete ? "Attacks complete" : chord ? `Next · ${chord}` : targets.length ? "Next notes" : "Listen for the next phrase"}</strong>
       </div>
 
@@ -104,7 +111,7 @@ export function GuitarStringGuide({
             {hasGapBefore(fret) ? <i>⋯</i> : null}{fret}
           </span>)}
         </div>
-        {[...STRINGS].reverse().map(({ string, name, label }) => {
+        {[...strings].reverse().map(({ string, name, label }) => {
           const target = targets.find((note) => note.string === string);
           const hit = targetHit(target);
           return <div className="guitar-fretboard-row guitar-fretboard-string" data-string={string} key={string}>
@@ -146,8 +153,8 @@ export function GuitarStringGuide({
         {followingTargets.length ? <p className="guitar-string-guide-following"><span>THEN</span> {followingChord ? <strong>{followingChord} · </strong> : null}{followingLabel}</p> : <p className="guitar-string-guide-following"><span>THEN</span> {targets.length ? "Final shape" : "No more targets"}</p>}
       </div>
 
-      <ol className="guitar-string-guide-strings sr-only" aria-label="Next frets, low E to high E">
-        {STRINGS.map(({ string, name, label }) => {
+      <ol className="guitar-string-guide-strings sr-only" aria-label={`Next frets, low ${strings[0]!.name} to high ${strings[5]!.name}`}>
+        {strings.map(({ string, name, label }) => {
           const target = targets.find((note) => note.string === string);
           const active = target !== undefined;
           return (
@@ -166,7 +173,7 @@ export function GuitarStringGuide({
         })}
       </ol>
       <p className="guitar-string-guide-help" id={`${id}-help`}>
-        <span>Standard tuning · E A D G B E. 0 means open; × means skip. </span>
+        <span>{standard ? "Standard tuning · E A D G B E." : `Tuning · ${tuning.map(noteName).join(" ")}.`} 0 means open; × means skip. </span>
         {connected
           ? "Play the shown strings and frets. MIDI scores the notes you send; it cannot verify which string you played."
           : "Follow the string lanes and fret numbers on your guitar. Choose Play along without scoring, or connect a guitar MIDI device."}

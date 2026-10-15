@@ -1,0 +1,50 @@
+.guitar-library-sheet { width: min(55rem, 96vw); }
+.guitar-import-review {
+  --review-space-sm: 8px;
+  --review-space-md: 12px;
+  --review-space-lg: 16px;
+  margin-top: var(--review-space-lg);
+  padding-top: var(--review-space-lg);
+  border-top: 1px solid var(--color-border);
+  color: var(--color-fg);
+}
+.guitar-review-heading, .guitar-review-setup, .guitar-review-pagination, .guitar-review-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--review-space-md);
+}
+.guitar-review-heading h4 { font-size: 1rem; font-weight: 500; }
+.guitar-review-heading p, .guitar-review-help { color: var(--color-muted); font-size: 0.75rem; line-height: 1.6; }
+.guitar-review-setup { margin-block: var(--review-space-lg) var(--review-space-sm); }
+.guitar-review-setup p > span { display: block; font-size: 0.6875rem; color: var(--color-muted); }
+.guitar-review-setup strong { display: block; margin-top: 4px; font: 500 0.8125rem var(--font-mono); }
+.guitar-review-setup label { display: flex; align-items: center; gap: var(--review-space-sm); font-size: 0.75rem; }
+.guitar-review-setup label input { width: 6rem; }
+.guitar-import-review input, .guitar-import-review select {
+  min-height: 44px;
+  width: 100%;
+  min-width: 0;
+  padding: var(--review-space-sm);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+  color: var(--color-fg);
+  font: 400 0.8125rem var(--font-mono);
+  color-scheme: dark;
+}
+.guitar-import-review :is(input, select):disabled { opacity: 0.5; }
+.guitar-review-table-wrap { overflow: auto; max-height: 28rem; margin-top: var(--review-space-md); border: 1px solid var(--color-border); border-radius: var(--radius-sm); }
+.guitar-import-review table { width: 100%; min-width: 39rem; border-collapse: collapse; text-align: left; table-layout: fixed; }
+.guitar-import-review thead { position: sticky; top: 0; z-index: 1; background: var(--color-elevated); }
+.guitar-import-review th, .guitar-import-review td { padding: var(--review-space-sm); border-bottom: 1px solid var(--color-border); }
+.guitar-import-review th { font-size: 0.6875rem; font-weight: 500; color: var(--color-muted); }
+.guitar-import-review th:first-child { width: 3rem; }
+.guitar-import-review th:nth-last-child(2) { width: 4.5rem; }
+.guitar-import-review th:last-child { width: 4rem; }
+.guitar-review-pitch { font: 500 0.75rem var(--font-mono); color: var(--color-accent); }
+.guitar-review-pagination { margin-top: var(--review-space-sm); font: 400 0.6875rem var(--font-mono); color: var(--color-muted); }
+.guitar-review-pagination > div { display: flex; gap: var(--review-space-sm); }
+.guitar-review-error { margin-top: var(--review-space-md); color: var(--color-tungsten); font-size: 0.8125rem; line-height: 1.6; }
+.guitar-review-actions { justify-content: flex-start; margin-block: var(--review-space-md) var(--review-space-sm); }

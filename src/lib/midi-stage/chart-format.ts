@@ -1,4 +1,4 @@
-import type { Harmony, Instrument, Part, Song } from "./types.ts";
+import type { GuitarPosition, Harmony, Instrument, Part, Song } from "./types.ts";
 import { INSTRUMENTS } from "./types.ts";
 import { DRUMS } from "./engine.ts";
 import { LABELS } from "./songs.ts";
@@ -19,7 +19,7 @@ import { LABELS } from "./songs.ts";
  */
 
 export const CHART_SCHEMA = "midi-stage-chart" as const;
-export const CHART_VERSIONS = [1, 2, 3] as const;
+export const CHART_VERSIONS = [1, 2, 3, 4] as const;
 export type ChartVersion = (typeof CHART_VERSIONS)[number];
 
 const MAX_NOTES = 60000;
@@ -38,6 +38,7 @@ export type ChartFormatErrorCode =
   | "INVALID_PARTS"
   | "DRUM_PITCH_UNMAPPED"
   | "TOO_MANY_NOTES"
+  | "INVALID_GUITAR_POSITION"
   | "VARIABLE_TEMPO_UNSUPPORTED";
 
 export class ChartFormatError extends Error {
@@ -57,6 +58,7 @@ export interface SharedNote {
   duration: number;
   pitch: number;
   velocity: number;
+  guitarPosition?: GuitarPosition;
 }
 
 export interface SharedPart {
@@ -92,6 +94,8 @@ export interface SharedChart {
   schema: typeof CHART_SCHEMA;
   version: ChartVersion;
   matching?: "pitch" | "rhythm";
+  guitarMode?: "strings";
+  guitarTuning?: number[];
   id: string;
   title: string;
   bpm: number;
@@ -152,7 +156,7 @@ function optStr(v: unknown, label: string, path: string, max: number, fallback: 
   return (v as string).slice(0, max);
 }
 
-function checkParts(raw: unknown, duration: number, rhythm = false): SharedPart[] {
+function checkParts(raw: unknown, duration: number, rhythm = false, tuning?: number[]): SharedPart[] {
   const path = "parts";
   if (!Array.isArray(raw) || raw.length !== 4) {
     fail("INVALID_PARTS", "A chart must contain exactly four instrument parts", path);
@@ -185,20 +189,49 @@ function checkParts(raw: unknown, duration: number, rhythm = false): SharedPart[
       const velocity = n.velocity === undefined || n.velocity === null
         ? 100
         : int(n.velocity, 1, 127, "Velocity", `${np}.velocity`);
+      if (tuning && type === "guitar") {
+        if (!isRecord(n.guitarPosition)) fail("INVALID_GUITAR_POSITION", "Every guitar note needs an authored string and fret", `${np}.guitarPosition`);
+        const string = int(n.guitarPosition.string, 1, 6, "Guitar string", `${np}.guitarPosition.string`) as GuitarPosition["string"];
+        const fret = int(n.guitarPosition.fret, 0, 24, "Guitar fret", `${np}.guitarPosition.fret`);
+        if (pitch !== tuning[6 - string]! + fret) {
+          fail("INVALID_GUITAR_POSITION", "Pitch must match the authored string, fret and tuning", np);
+        }
+        return { time, duration: noteDur, pitch, velocity, guitarPosition: { string, fret } };
+      }
+      if (n.guitarPosition !== undefined) {
+        fail("INVALID_GUITAR_POSITION", "String/fret positions require a version 4 guitar arrangement", `${np}.guitarPosition`);
+      }
       return { time, duration: noteDur, pitch, velocity };
     });
     total += notes.length;
     if (total > MAX_NOTES) fail("TOO_MANY_NOTES", `A chart can contain at most ${MAX_NOTES} notes`, path);
     // Canonical order + exact (time, pitch) duplicates dropped, like the workshop.
-    const seen = new Set<string>();
+    const seen = new Map<string, SharedNote>();
     const deduped = notes
       .sort((a, b) => a.time - b.time || a.pitch - b.pitch)
       .filter((n) => {
-        const key = `${n.time}:${n.pitch}`;
-        if (seen.has(key)) return false;
-        seen.add(key);
+        const key = `${n.time}:${n.pitch}${n.guitarPosition ? `:${n.guitarPosition.string}` : ""}`;
+        const previous = seen.get(key);
+        if (previous) {
+          if (n.guitarPosition && previous.duration !== n.duration) {
+            fail("INVALID_GUITAR_POSITION", "Duplicate string targets disagree on note length", path);
+          }
+          return false;
+        }
+        seen.set(key, n);
         return true;
       });
+    if (tuning && type === "guitar") {
+      if (!deduped.length) fail("INVALID_GUITAR_POSITION", "A string/fret arrangement needs guitar notes", path);
+      const ends = new Map<number, number>();
+      for (const note of deduped) {
+        const string = note.guitarPosition!.string;
+        if (note.time < (ends.get(string) ?? -1) - 0.000001) {
+          fail("INVALID_GUITAR_POSITION", `String ${string} has overlapping notes; shorten the earlier note or move the fingering`, path);
+        }
+        ends.set(string, note.time + note.duration);
+      }
+    }
     return { type, notes: deduped };
   });
   return parts;
@@ -314,8 +347,20 @@ export function validateSharedChart(input: unknown): SharedChart {
     fail("BAD_SCHEMA", `Chart schema must be "${CHART_SCHEMA}"`, "schema");
   }
   const version = root.version;
-  if (version !== 1 && version !== 2 && version !== 3) {
+  if (version !== 1 && version !== 2 && version !== 3 && version !== 4) {
     fail("UNSUPPORTED_VERSION", "Unsupported chart version", "version");
+  }
+  let guitarTuning: number[] | undefined;
+  if (version === 4) {
+    if (root.guitarMode !== "strings" || root.matching === "rhythm") {
+      fail("INVALID_GUITAR_POSITION", 'Version 4 requires guitarMode "strings" and pitch matching', "guitarMode");
+    }
+    if (!Array.isArray(root.guitarTuning) || root.guitarTuning.length !== 6) {
+      fail("INVALID_GUITAR_POSITION", "Supply six open-string MIDI pitches, from low string 6 to high string 1", "guitarTuning");
+    }
+    guitarTuning = root.guitarTuning.map((pitch, i) => int(pitch, 0, 127, "Open-string MIDI pitch", `guitarTuning[${i}]`));
+  } else if (root.guitarMode !== undefined || root.guitarTuning !== undefined) {
+    fail("INVALID_GUITAR_POSITION", "String/fret arrangements require chart version 4", "version");
   }
   if ((root.matching !== undefined && root.matching !== "pitch" && root.matching !== "rhythm") ||
       (version === 2 && root.matching !== "rhythm")) {
@@ -341,7 +386,7 @@ export function validateSharedChart(input: unknown): SharedChart {
 
   // Keep existing pitch-chart serialization byte-stable for saved IDs/bests.
   const matching = root.matching === "rhythm" ? "rhythm" : undefined;
-  const parts = checkParts(root.parts, duration, matching === "rhythm");
+  const parts = checkParts(root.parts, duration, matching === "rhythm", guitarTuning);
   const tempoMap = checkTempoMap(root.tempoMap, duration, bpm);
   const beats = checkBeats(root.beats, duration);
   const chordHighways = checkChordHighways(root.chordHighways, duration);
@@ -354,8 +399,9 @@ export function validateSharedChart(input: unknown): SharedChart {
 
   return {
     schema: CHART_SCHEMA,
-    version: matching === "rhythm" ? 2 : hasChords ? 3 : (version as ChartVersion),
+    version: guitarTuning ? 4 : matching === "rhythm" ? 2 : hasChords ? 3 : (version as ChartVersion),
     ...(matching !== undefined ? { matching } : {}),
+    ...(guitarTuning ? { guitarMode: "strings" as const, guitarTuning } : {}),
     id,
     title,
     bpm,
@@ -423,6 +469,7 @@ export function sharedChartToSong(chart: SharedChart): Song {
     duration: chart.duration,
     original: false,
     ...(chart.matching !== undefined ? { matching: chart.matching } : {}),
+    ...(chart.guitarMode ? { guitarMode: chart.guitarMode, guitarTuning: [...chart.guitarTuning!] } : {}),
     parts,
     beats: chart.beats.length
       ? chart.beats.map((b) => ({ time: b.time, bar: b.bar }))
@@ -466,6 +513,10 @@ export function serializeSharedChart(chart: SharedChart): string {
     sections,
   };
   if (matching === "rhythm") wire.matching = matching;
+  if (chart.guitarMode) {
+    wire.guitarMode = chart.guitarMode;
+    wire.guitarTuning = chart.guitarTuning;
+  }
   if (chordHighways.keys.length || chordHighways.guitar.length) wire.chordHighways = chordHighways;
   return JSON.stringify(wire, null, 2);
 }

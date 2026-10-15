@@ -37,6 +37,7 @@ import type { AudioImportProgress } from "@/lib/midi-stage/audio-import";
 import { SongLibraryPanel } from "@/components/stage/song-library-panel";
 import { addLibraryEntry, chartIdentity, loadSongLibrary, MAX_CHART_IMPORT_BYTES, prepareChartImport, saveSongLibrary, songFromSavedChart, type SavedChart } from "@/lib/midi-stage/song-library";
 import { SoundcheckPanel } from "@/components/stage/soundcheck-panel";
+import type { SharedChart } from "@/lib/midi-stage/chart-format";
 import { defaultMidiRoutes, loadMidiRoutes, remapMidiRouteInputIds, saveMidiRoutes, resolveMidiPlayer, type MidiRoute } from "@/lib/midi-stage/midi-routing";
 import { loadSessionPreferences, saveSessionPreferences } from "@/lib/midi-stage/preferences";
 import { clearRehearsalBookmark, loadRehearsalBookmark, resolveRehearsalBookmark, saveRehearsalBookmark, type RehearsalBookmark } from "@/lib/midi-stage/rehearsal-bookmark";
@@ -162,7 +163,8 @@ export function StageApp() {
   const audioBuffers = useRef(new Map<string, AudioBuffer>());
   const sessionAudioFiles = useRef(new Map<string, Blob>());
   const volatileAudioIds = useRef(new Set<string>());
-  const [importCandidate, setImportCandidate] = useState<{ entry: SavedChart; warnings: string[]; kind: "audio" | "midi" | "chart"; buffer?: AudioBuffer; audioFile?: File } | null>(null);
+  const [importCandidate, setImportCandidate] = useState<{ entry: SavedChart; warnings: string[]; kind: "audio" | "midi" | "chart" | "musicxml"; buffer?: AudioBuffer; audioFile?: File } | null>(null);
+  const [guitarReviewPending, setGuitarReviewPending] = useState(false);
   const [savingImport, setSavingImport] = useState(false);
   const [readingImport, setReadingImport] = useState(false);
   const [importProgress, setImportProgress] = useState<AudioImportProgress | null>(null);
@@ -1627,11 +1629,12 @@ export function StageApp() {
     setImportProgress(null);
     setImportError(null);
     setImportCandidate(null);
+    setGuitarReviewPending(false);
     try {
       if (!file.size) throw new Error("This file is empty. Choose audio, MIDI or an exported Stage chart.");
       let candidate: NonNullable<typeof importCandidate>;
       if (/\.(mp3|wav|wave|flac|ogg|oga|opus|m4a|aac|webm|aif|aiff)$/i.test(file.name)
-        || (file.type.startsWith("audio/") && !/midi/i.test(file.type) && !/\.(midi?|json)$/i.test(file.name))) {
+        || (file.type.startsWith("audio/") && !/midi/i.test(file.type) && !/\.(midi?|json|musicxml|xml|mxl)$/i.test(file.name))) {
         const { importAudioFile } = await import("@/lib/midi-stage/audio-import");
         const { chart, warnings, buffer } = await importAudioFile(file, {
           signal: controller.signal,
@@ -1645,11 +1648,18 @@ export function StageApp() {
         const { importMidiFile } = await import("@/lib/midi-stage/midi-file-import");
         const { chart, warnings } = importMidiFile(new Uint8Array(await file.arrayBuffer()), file.name);
         candidate = { entry: { id: chartIdentity(chart), chart, fileName: file.name, addedAt: Date.now() }, warnings, kind: "midi" };
+      } else if (/\.(musicxml|xml)$/i.test(file.name)) {
+        if (file.size > MAX_CHART_IMPORT_BYTES) throw new Error("Choose a MusicXML file smaller than 4 MB.");
+        const { importGuitarMusicXml } = await import("@/lib/midi-stage/musicxml-import");
+        const { chart, warnings } = importGuitarMusicXml(await file.text(), file.name);
+        candidate = { entry: { id: chartIdentity(chart), chart, fileName: file.name, addedAt: Date.now() }, warnings, kind: "musicxml" };
+      } else if (/\.mxl$/i.test(file.name)) {
+        throw new Error("Choose an uncompressed MusicXML export (.musicxml or .xml). Compressed .mxl files are not supported yet.");
       } else if (/\.json$/i.test(file.name)) {
         if (file.size > MAX_CHART_IMPORT_BYTES) throw new Error("Choose a chart file smaller than 4 MB.");
         candidate = { ...prepareChartImport(await file.text(), file.name), kind: "chart" };
       } else {
-        throw new Error("Choose audio (MP3, WAV, FLAC and other browser-supported formats), MIDI, or a Stage chart (.midistage.json).");
+        throw new Error("Choose audio, MIDI, MusicXML guitar tablature (.musicxml, .xml), or a Stage chart (.midistage.json).");
       }
       if (ticket === importTicket.current) setImportCandidate(candidate);
     } catch (error) {
@@ -1670,7 +1680,7 @@ export function StageApp() {
   }
 
   async function addImportedSong() {
-    if (!importCandidate || readingImport || savingImport) return;
+    if (!importCandidate || readingImport || savingImport || guitarReviewPending) return;
     const candidate = importCandidate;
     const ticket = importTicket.current;
     setSavingImport(true);
@@ -1752,7 +1762,7 @@ export function StageApp() {
     { id: "beginner", group: "Stage", icon: "play", label: "Try beginner rehearsal", detail: "Solo keys · Chill · 75% tempo · guide and click", keywords: ["learn", "easy", "first"], disabled: !ready, onSelect: () => { quickStart(); setFocusStage(true); setSongMapOpen(false); focusTransport(true); } },
     { id: "soundcheck", group: "Controls", icon: "sound", label: "Check my sound and input", detail: "Audition keys and review MIDI routing", keywords: ["soundcheck", "audio", "midi", "keyboard"], onSelect: () => { setSoundcheckOpen(true); focusSoundcheck(); } },
     { id: "room", group: "Controls", icon: "room", label: "Shape the room", detail: "Lights, crowd and effects", keywords: ["feel", "lights", "vfx", "calm"], onSelect: () => { setFeelTap(true); setFeelOpen(true); } },
-    { id: "import", group: "Controls", icon: "import", label: "Bring your own song", detail: "Import audio, MIDI or a Stage chart", keywords: ["import", "library", "upload"], onSelect: openSongLibrary },
+    { id: "import", group: "Controls", icon: "import", label: "Bring your own song", detail: "Import audio, MIDI, guitar tablature or a Stage chart", keywords: ["import", "library", "upload", "tablature", "musicxml"], onSelect: openSongLibrary },
     { id: "reset", group: "Controls", icon: "reset", label: "Reset this set", detail: "Return to ready with a fresh score", keywords: ["restart", "clear"], onSelect: () => { resetReady(); focusTransport(); } },
     ...songs.map((entry): StageFinderItem => ({ id: `song:${entry.id}`, group: "Songs", icon: "song", label: entry.name, detail: `${entry.id === song.id ? "Current song · " : ""}${Math.round(entry.bpm)} BPM · ${formatTime(entry.duration)}`, keywords: [entry.arrangementDescription ?? ""], onSelect: () => { selectSong(entry); focusTransport(); } })),
     ...passages.map((section): StageFinderItem => ({ id: `passage:${section.id}`, group: "Passages", icon: "passage", label: section.name, detail: `${song.name} · ${formatTime(section.start)}–${formatTime(section.end)}`, keywords: ["practice", "section", song.name], onSelect: () => { resetReady(); setPracticeSelection({ songId: song.id, sectionId: section.id }); setSongMapOpen(true); focusTransport(); } })),
@@ -2126,6 +2136,7 @@ export function StageApp() {
 
           <div className={cn("stage-playfield", realGuitar && "guitar-playfield")}>
           {realGuitar ? <GuitarStringGuide
+            tuning={song.guitarTuning}
             targets={hud.guitarShape}
             chord={hud.guitarChord}
             followingTargets={hud.followingGuitarShape}
@@ -2149,7 +2160,7 @@ export function StageApp() {
             <canvas
               ref={canvasRef}
               className="stage-canvas absolute inset-0 size-full"
-              aria-label={realGuitar ? "Six guitar strings from low E to high E. Numbers on the targets are actual frets; zero means an open string. Play the shown pitches through MIDI when they reach the strike line." : guitarMode ? "Five fret lanes. Hold the matching fret buttons, then strum when the gems reach the strike line. Keep holding through long tails." : "Notes travel down each instrument highway. Hit the matching pad when a note reaches the strike line. You can also tap the receptors on the strike line."}
+              aria-label={realGuitar ? "Six guitar strings from string 6 to string 1. Numbers on the targets are actual frets; zero means an open string. Play the shown pitches through MIDI when they reach the strike line." : guitarMode ? "Five fret lanes. Hold the matching fret buttons, then strum when the gems reach the strike line. Keep holding through long tails." : "Notes travel down each instrument highway. Hit the matching pad when a note reaches the strike line. You can also tap the receptors on the strike line."}
               onPointerDown={onCanvasPointerDown}
               onPointerUp={onCanvasPointerUp}
               onPointerCancel={onCanvasPointerUp}
@@ -2166,6 +2177,7 @@ export function StageApp() {
                 rhythm={rhythm}
                 guitarMode={guitarMode}
                 realGuitar={realGuitar}
+                guitarTuning={song.guitarTuning}
                 guitarMidiReady={guitarMidiReady}
                 guitarConnecting={midi.connecting}
                 onConnectGuitar={connectGuitar}
@@ -2320,7 +2332,7 @@ export function StageApp() {
 
           {(rhythm || enabled.some((p) => p.type === "guitar")) && (
             <p id="strum-guide-help" className="mt-3 text-xs text-muted">
-              {realGuitar ? "↓ Downstroke · ↑ Upstroke. The cockpit suggests picking for this shape and the following shape. Arrows describe your picking hand: down toward high E, up toward low E. MIDI does not detect or score direction."
+              {realGuitar ? "↓ Downstroke · ↑ Upstroke. The cockpit suggests picking for this shape and the following shape. Arrows describe your picking hand: down toward string 1, up toward string 6. MIDI does not detect or score direction."
                 : <>↓ Downstrum · ↑ Upstrum. Suggested eighth-note pattern; direction is not scored{song.audioAssetId ? " or detected from the recording" : ""}.</>}
             </p>
           )}
@@ -2403,10 +2415,11 @@ export function StageApp() {
       {libraryOpen ? (
         <>
           <button type="button" className="fixed inset-0 z-40 bg-bg/55" aria-label="Dismiss song library" onClick={closeSongLibrary} />
-          <div ref={libraryRef} role="dialog" aria-modal="true" aria-labelledby="song-library-title" className="feel-sheet fixed inset-y-0 right-0 z-50 flex w-[min(480px,96vw)] flex-col overflow-hidden bg-bg shadow-[0_0_0_1px_rgba(239,232,220,0.1)]">
+          <div ref={libraryRef} role="dialog" aria-modal="true" aria-labelledby="song-library-title" className={cn("feel-sheet fixed inset-y-0 right-0 z-50 flex w-[min(480px,96vw)] flex-col overflow-hidden bg-bg shadow-[0_0_0_1px_rgba(239,232,220,0.1)]", importCandidate?.entry.chart.guitarMode === "strings" && "guitar-library-sheet")}>
             <SongLibraryPanel
               candidate={importCandidate ? {
                 kind: importCandidate.kind,
+                chart: importCandidate.entry.chart,
                 audioFile: importCandidate.audioFile,
                 name: importCandidate.entry.chart.title,
                 fileName: importCandidate.entry.fileName,
@@ -2431,6 +2444,12 @@ export function StageApp() {
               onClose={closeSongLibrary}
               onSelect={(id) => { const selected = songs.find((entry) => entry.id === id); if (selected) selectSong(selected); }}
               onRemove={removeImportedSong}
+              reviewKey={importTicket.current}
+              reviewPending={guitarReviewPending}
+              onReviewPending={setGuitarReviewPending}
+              onReviewApply={(chart: SharedChart) => setImportCandidate((candidate) => candidate ? {
+                ...candidate, entry: { ...candidate.entry, chart, id: chartIdentity(chart) },
+              } : null)}
             />
           </div>
         </>
