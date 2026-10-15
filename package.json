@@ -28,7 +28,8 @@
     "test:setup": "node scripts/setup-regression.mjs",
     "test:imports": "node scripts/import-regression.mjs",
     "test:audio": "node scripts/audio-import-regression.mjs",
-    "test:graphics": "node scripts/graphics-regression.mjs"
+    "test:graphics": "node scripts/graphics-regression.mjs",
+    "test:performance-hud": "node scripts/performance-hud-regression.mjs"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.4",
