@@ -1107,10 +1107,12 @@ export function StageApp() {
 
       let maxOverdriveMeter = 0;
       let anyOverdriveActive = false;
-      for (const j of b.judges.values()) {
-        if (b.status === "playing") j.updateOverdrive(dt);
-        if (j.overdriveMeter > maxOverdriveMeter) maxOverdriveMeter = j.overdriveMeter;
-        if (j.overdriveActive) anyOverdriveActive = true;
+      if (b.status === "playing" || b.status === "paused") {
+        for (const j of b.judges.values()) {
+          if (b.status === "playing") j.updateOverdrive(dt);
+          if (j.overdriveMeter > maxOverdriveMeter) maxOverdriveMeter = j.overdriveMeter;
+          if (j.overdriveActive) anyOverdriveActive = true;
+        }
       }
 
       const activeVenue = VENUES.find((v) => v.id === careerData.selectedVenueId) || VENUES[0];

@@ -116,6 +116,12 @@ try {
   await transport.getByRole('button', { name: 'Pause', exact: true }).click();
   await charge(47, true);
   if (output) await page.screenshot({ path: `${output}/overdrive-paused-laptop.png` });
+  await transport.getByRole('button', { name: 'Resume', exact: true }).click();
+  await page.evaluate(() => { window.hudProbe.time = window.hudProbe.live.song.duration + 0.1; });
+  await page.locator('[data-session-overlay="results"]').waitFor();
+  await settle();
+  assert.equal(Number(await meter.getAttribute('value')), 0, 'completed sets do not advertise a live boost');
+  assert.equal(await page.locator('.stage-overdrive').getAttribute('data-active'), 'false');
   await page.getByRole('button', { name: 'Reset set', exact: true }).click();
   await settle();
   assert.equal(Number(await meter.getAttribute('value')), 0, 'reset clears charge');
@@ -126,7 +132,7 @@ try {
   await page.keyboard.press('Shift+Enter');
   assert.equal(await active(), false);
   assert.deepEqual(errors, []);
-  console.log('Performance HUD: charge threshold, count-in, shortcut, pause/resume, focus ownership, desktop/laptop layout, keyboard button activation, reset and autoplay passed.');
+  console.log('Performance HUD: charge threshold, count-in, shortcut, pause/resume, focus ownership, desktop/laptop layout, keyboard button activation, completion, reset and autoplay passed.');
 } finally {
   await browser.close();
 }

@@ -13,6 +13,7 @@ with their existing owners. Repeated keydown events do not activate it.
 
 Pause retains and displays both charge and active state without draining the
 meter. Resuming restores the same boost. Reset clears charge with the new set.
+Completed sets stop advertising an active boost.
 No scoring thresholds, charge rates or multiplier rules changed.
 
 ## Validation
@@ -20,7 +21,7 @@ No scoring thresholds, charge rates or multiplier rules changed.
 `npm run test:performance-hud` exercises the real React session and Judge with a
 controlled song clock. It verifies the threshold, count-in, keyboard activation,
 actual 2× multiplier from a 1× base, retrigger prevention, pause/resume, dialog and
-form focus, focused-button activation, reset and autoplay. It also checks a single
+form focus, focused-button activation, completion, reset and autoplay. It also checks a single
 score row, minimum 44px activation target and no overflow at 1440, 1280 and 1024px.
 
 Set `SESSION_SCREENSHOT_DIR` under `/workspace/screenshots` to retain ready-state
