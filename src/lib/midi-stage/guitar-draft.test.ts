@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "./test-compat.ts";
 import { makeGuitarDraft, isReviewableGuitarDraft } from "./guitar-draft.ts";
 
 const fp = "abc123";
