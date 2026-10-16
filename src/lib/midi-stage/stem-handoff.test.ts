@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "./test-compat.ts";
 import { detectStemInstrument, stemCompatibility, stemSetIdentity } from "./stem-handoff.ts";
 
 describe("Stem Lab handoff",()=>{
