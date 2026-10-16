@@ -388,6 +388,10 @@ export async function analyzeDecodedSongAudio(
     const { transcribeGuitarAudio } = await import("./guitar-transcription.ts");
     return transcribeGuitarAudio(buffer, filename, fingerprint, { signal, onProgress });
   }
+  if (mode === "bass") {
+    const { transcribeBassAudio } = await import("./bass-transcription.ts");
+    return transcribeBassAudio(buffer, filename, fingerprint, { signal, onProgress });
+  }
   onProgress?.({ phase: "analyzing", progress: 0 });
   await yieldToBrowser(signal);
   const steps = analyzeSongAudioSteps(buffer, filename, fingerprint, mode);
