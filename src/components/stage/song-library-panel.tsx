@@ -12,10 +12,12 @@ import {
 import { Button } from "@/components/ui/button";
 import { AudioSourcePreview } from "./audio-source-preview";
 import { GuitarImportReview } from "./guitar-import-review";
-import { DrumImportReview } from "./drum-import-review";
-import { DrumStemImport } from "./drum-stem-import";
+import { AudioDraftReview } from "./audio-draft-review";
+import { AudioStemImport } from "./audio-stem-import";
 import type { SharedChart } from "@/lib/midi-stage/chart-format";
 import { isReviewableDrumDraft } from "@/lib/midi-stage/drum-chart-review";
+import { isReviewableKeyboardDraft } from "@/lib/midi-stage/keyboard-draft";
+import type { AudioImportMode } from "@/lib/midi-stage/audio-file-types";
 import { formatTime } from "@/lib/midi-stage/engine";
 import { LABELS } from "@/lib/midi-stage/songs";
 import { INSTRUMENTS, type Instrument } from "@/lib/midi-stage/types";
@@ -51,8 +53,8 @@ type SongLibraryPanelProps = {
   reviewPending?: boolean;
   onReviewPending?: (pending: boolean) => void;
   onReviewApply?: (chart: SharedChart) => void;
-  audioMode?: "rhythm" | "drums";
-  onAudioMode?: (mode: "rhythm" | "drums") => void;
+  audioMode?: AudioImportMode;
+  onAudioMode?: (mode: AudioImportMode) => void;
   onStemFiles?: (original: File, stem: File) => void;
 };
 
@@ -95,6 +97,8 @@ export function SongLibraryPanel({
   const candidateFileName = candidate?.fileName;
   const notice = fileNotice || error;
   const drumDraft = isReviewableDrumDraft(candidate?.chart);
+  const keysDraft = isReviewableKeyboardDraft(candidate?.chart);
+  const audioDraft = drumDraft || keysDraft;
 
   useEffect(() => {
     if (!previewReady) return;
@@ -163,12 +167,15 @@ export function SongLibraryPanel({
             <div className="flex flex-wrap gap-2">
               <Button type="button" variant={audioMode === "rhythm" ? "primary" : "secondary"} aria-pressed={audioMode === "rhythm"} disabled={busy} onClick={() => onAudioMode("rhythm")}>Rhythm</Button>
               <Button type="button" variant={audioMode === "drums" ? "primary" : "secondary"} aria-pressed={audioMode === "drums"} disabled={busy} onClick={() => onAudioMode("drums")}>Drums (draft)</Button>
+              <Button type="button" variant={audioMode === "keys" ? "primary" : "secondary"} aria-pressed={audioMode === "keys"} disabled={busy} onClick={() => onAudioMode("keys")}>Keys (draft)</Button>
             </div>
-            <p className="text-xs leading-relaxed text-muted">{audioMode === "drums"
+            <p className="text-xs leading-relaxed text-muted">{audioMode === "keys"
+              ? "Estimate keyboard pitches, chords and holds locally, then review each note. A clean piano/keyboard stem works best. Longer recordings can take several minutes. Changing mode rebuilds the preview."
+              : audioMode === "drums"
               ? "Estimate kick, snare and hi-hat from a recording, then review each hit. A drum-only track works best. Changing mode rebuilds the audio preview."
               : "One rhythm lane from detected attacks, with your original recording. This choice applies to audio files only."}</p>
           </fieldset> : null}
-          {audioMode === "drums" && onStemFiles ? <div className="mb-4"><DrumStemImport disabled={busy} onImport={onStemFiles} /></div> : null}
+          {audioMode !== "rhythm" && onStemFiles ? <div className="mb-4"><AudioStemImport key={audioMode} instrument={audioMode} disabled={busy} onImport={onStemFiles} /></div> : null}
           <label
             className={cn(
               "flex min-h-36 cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed px-4 py-5 text-center transition-colors focus-within:outline-2 focus-within:outline-offset-3 focus-within:outline-accent",
@@ -219,7 +226,7 @@ export function SongLibraryPanel({
           </label>
           <p id="song-file-help" className="mt-3 text-xs leading-relaxed text-muted">
             MP3, WAV, FLAC and other browser-supported audio. Rhythm hits are detected from your
-            track. Choose Rhythm or an editable drum draft; both play your original track. Up to 50 MB
+            track. Choose Rhythm, a drum draft or a keyboard draft; all play your original track. Up to 50 MB
             and 6 minutes.
           </p>
           <p className="mt-2 text-xs leading-relaxed text-muted">
@@ -278,8 +285,8 @@ export function SongLibraryPanel({
             className="min-w-0 rounded-xl border border-accent/30 bg-surface p-4 text-fg"
           >
             <div className="mb-3 flex items-center gap-2 text-xs font-medium tracking-widest text-accent">
-              {drumDraft ? <FileMusic className="size-4" aria-hidden="true" /> : <Check className="size-4" aria-hidden="true" />}
-              {drumDraft ? "DRUM DRAFT · REVIEW HITS" : "READY FOR THE SETLIST"}
+              {audioDraft ? <FileMusic className="size-4" aria-hidden="true" /> : <Check className="size-4" aria-hidden="true" />}
+              {keysDraft ? "KEYBOARD DRAFT · REVIEW NOTES" : drumDraft ? "DRUM DRAFT · REVIEW HITS" : "READY FOR THE SETLIST"}
             </div>
             <h3
               ref={previewTitleRef}
@@ -294,15 +301,15 @@ export function SongLibraryPanel({
             </p>
             {candidate.kind === "audio" ? (
               <p className="mt-2 text-xs leading-relaxed text-accent">
-                {drumDraft ? "Drum draft · estimated types and timing" : "Rhythm chart · detected hits"}
+                {keysDraft ? "Keyboard draft · estimated pitches, timing and holds" : drumDraft ? "Drum draft · estimated types and timing" : "Rhythm chart · detected hits"}
               </p>
             ) : null}
-            {drumDraft && candidate.stemName ? <p className="mt-2 break-all text-xs leading-relaxed text-muted">Analysis stem: {candidate.stemName}. The original song supplies backing audio.</p> : null}
+            {audioDraft && candidate.stemName ? <p className="mt-2 break-all text-xs leading-relaxed text-muted">Analysis stem: {candidate.stemName}. The original song supplies backing audio.</p> : null}
             <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 border-y border-border py-3 font-mono text-sm tabular-nums">
               <span>
                 {Number(candidate.bpm.toFixed(2))}{" "}
                 <span className="text-xs text-muted">
-                  {drumDraft ? "COUNT-IN BPM" : candidate.kind === "audio" ? "EST. BPM" : "BPM"}
+                  {audioDraft ? "COUNT-IN BPM" : candidate.kind === "audio" ? "EST. BPM" : "BPM"}
                 </span>
               </span>
               <span>
@@ -320,7 +327,7 @@ export function SongLibraryPanel({
                     <dt className="text-muted">{LABELS[instrument]}</dt>
                     <dd className="font-mono text-xs tabular-nums">
                       {candidate.counts[instrument].toLocaleString()}{" "}
-                      {candidate.kind === "audio" ? "hit" : "note"}
+                      {candidate.kind === "audio" && !keysDraft ? "hit" : "note"}
                       {candidate.counts[instrument] === 1 ? "" : "s"}
                     </dd>
                   </div>
@@ -334,8 +341,8 @@ export function SongLibraryPanel({
               <GuitarImportReview key={reviewKey} chart={candidate.chart} disabled={busy}
                 onApply={onReviewApply} onPendingChange={onReviewPending} />
             ) : null}
-            {drumDraft && candidate.chart && onReviewApply && onReviewPending ? (
-              <DrumImportReview key={reviewKey} chart={candidate.chart} disabled={busy}
+            {audioDraft && candidate.chart && onReviewApply && onReviewPending ? (
+              <AudioDraftReview key={reviewKey} chart={candidate.chart} disabled={busy} instrument={keysDraft ? "keys" : "drums"}
                 audioAttached={candidate.kind === "audio"} onApply={onReviewApply} onPendingChange={onReviewPending} />
             ) : null}
             {candidate.warnings.length > 0 ? (
