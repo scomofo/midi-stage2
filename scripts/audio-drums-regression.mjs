@@ -1,0 +1,278 @@
+#!/usr/bin/env node
+import assert from 'node:assert/strict';
+import { mkdir, readFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
+import { chromium } from 'playwright';
+import { drumWav, stemPairFixture } from './fixtures/drum-draft.mjs';
+
+const url = process.argv[2] || 'http://127.0.0.1:8082';
+const uiOnly = process.argv.includes('--ui-only');
+const stemsOnly = process.argv.includes('--stems-only');
+const output = resolve(process.env.SESSION_SCREENSHOT_DIR || '/workspace/screenshots/audio-drums');
+assert.ok(output === '/workspace/screenshots' || output.startsWith('/workspace/screenshots/'));
+await mkdir(output, { recursive: true });
+const browser = await chromium.launch({ headless: true, args: ['--no-sandbox'] });
+let phase = 'loading';
+try {
+  const page = await browser.newPage({ viewport: { width: 1440, height: 1000 }, acceptDownloads: true });
+  page.setDefaultTimeout(20000);
+  const errors = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  await page.addInitScript(() => {
+    const input = Object.assign(new EventTarget(), { id: 'drum-draft-midi', name: 'Drum draft QA', state: 'connected' });
+    const access = Object.assign(new EventTarget(), { inputs: new Map([[input.id, input]]) });
+    Object.defineProperty(navigator, 'requestMIDIAccess', { configurable: true, value: async () => access });
+    window.draftMidi = (pitch) => {
+      const event = new Event('midimessage');
+      Object.defineProperty(event, 'data', { value: new Uint8Array([0x99, pitch, 100]) }); input.dispatchEvent(event);
+    };
+  });
+  const installProbe = () => page.evaluate(async () => {
+    const { AudioEngine } = await import('/src/lib/midi-stage/audio.ts');
+    const { StageRenderer } = await import('/src/lib/midi-stage/renderer.ts');
+    const probe = window.drumDraftProbe = { time: -1, audio: null, options: null, live: null };
+    const begin = AudioEngine.prototype.begin;
+    AudioEngine.prototype.begin = function (options) { probe.audio = this; probe.options = options; return begin.call(this, options); };
+    AudioEngine.prototype.songAt = function () { return probe.time; };
+    const draw = StageRenderer.prototype.draw;
+    StageRenderer.prototype.draw = function (state) { probe.live = state; return draw.call(this, state); };
+  });
+  const library = page.getByRole('dialog', { name: 'Your songs', exact: true });
+  const open = async () => {
+    const button = page.getByRole('button', { name: 'Import songs', exact: true });
+    if (await button.isVisible()) await button.click();
+    else { await page.keyboard.press('Control+k'); await page.getByRole('dialog', { name: 'Stage finder', exact: true }).locator('[data-command-id="import"]').click(); }
+    await library.waitFor();
+  };
+  const upload = (name, buffer) => library.getByLabel('Choose song file', { exact: true }).setInputFiles({ name, mimeType: name.endsWith('json') ? 'application/json' : 'audio/wav', buffer });
+  const add = library.getByRole('button', { name: 'Add to setlist', exact: true });
+  const apply = library.getByRole('button', { name: 'Apply corrections', exact: true });
+  const ready = async () => {
+    await library.getByRole('heading', { name: 'Review the drum draft', exact: true }).waitFor();
+    await page.waitForTimeout(100);
+    const close = await library.getByRole('button', { name: 'Close song library', exact: true }).boundingBox();
+    assert.ok(close && close.y >= 0 && close.y + close.height <= 1000, 'preview must retain its visible close control');
+  };
+  const capture = (name) => page.screenshot({ path: `${output}/${name}.png` });
+  await page.goto(url, { waitUntil: 'domcontentloaded' });
+  await page.locator('.pad').first().waitFor();
+  if (!uiOnly) await installProbe();
+
+  if (stemsOnly) {
+    phase = 'paired Stem Lab files';
+    const pair = stemPairFixture();
+    const backingWav = drumWav(pair.backing), stemWav = drumWav(pair.stem);
+    await open();
+    await library.getByRole('button', { name: 'Drums (draft)', exact: true }).click();
+    const form = library.locator('details').filter({ hasText: 'Use a separated drum stem' });
+    await form.locator('summary').click();
+    const build = form.getByRole('button', { name: 'Build from drum stem', exact: true });
+    const chooseOriginal = (name, buffer) => form.getByLabel('Original song for drum stem', { exact: true }).setInputFiles({ name, mimeType: 'audio/wav', buffer });
+    const chooseStem = (name, buffer) => form.getByLabel('Drum stem for highway', { exact: true }).setInputFiles({ name, mimeType: 'audio/wav', buffer });
+    assert.equal(await build.isDisabled(), true);
+    await chooseOriginal('Stem Study.wav', backingWav);
+    assert.equal(await build.isDisabled(), true, 'both sources are required');
+    await chooseStem('drums.wav', stemWav);
+    await capture('stem-import-files-desktop');
+    await build.click(); await ready();
+    await library.getByText('Analysis stem: drums.wav. The original song supplies backing audio.', { exact: true }).waitFor();
+    assert.equal(await library.getByLabel('Hit 1 time', { exact: true }).inputValue(), '1.3');
+    await library.getByRole('button', { name: 'Rhythm', exact: true }).click();
+    await library.getByText('Rhythm chart · detected hits', { exact: true }).waitFor();
+    await library.getByRole('button', { name: 'Drums (draft)', exact: true }).click(); await ready();
+    assert.equal(await library.getByLabel('Hit 1 time', { exact: true }).inputValue(), '1.3', 'mode changes retain the selected stem');
+    await library.getByLabel('Hit 1 drum', { exact: true }).selectOption('49');
+    await library.getByLabel('Hit 1 time', { exact: true }).fill('1.32');
+    await library.getByLabel('Drum count-in tempo', { exact: true }).fill('90');
+    await apply.click();
+    await library.getByRole('heading', { name: 'Review the drum draft', exact: true }).scrollIntoViewIfNeeded();
+    await capture('stem-import-review-desktop');
+    const downloading = page.waitForEvent('download');
+    await library.getByRole('button', { name: 'Download chart', exact: true }).click();
+    const chartPath = `${output}/stem-drums.midistage.json`;
+    await (await downloading).saveAs(chartPath);
+    const chart = JSON.parse(await readFile(chartPath, 'utf8'));
+    assert.equal(chart.duration, 10, 'song continues after the nine-second stem');
+    assert.equal(chart.audioName, 'Stem Study.wav');
+    assert.equal(chart.bpm, 90);
+    assert.ok(chart.parts[0].notes.every((n) => n.time >= 1.3 && n.time + n.duration <= 9));
+    assert.ok(chart.parts[0].notes.some((n) => n.time === 1.32 && n.pitch === 49));
+    assert.ok(!chart.parts[0].notes.some((n) => n.time < 1), 'the bass attack in the mix must not enter the drum highway');
+    await add.click(); await library.waitFor({ state: 'hidden' });
+    await page.getByRole('heading', { level: 2, name: 'Stem Study', exact: true }).waitFor();
+    let savedId;
+    if (!uiOnly) {
+      phase = 'stem chart with original backing and reload';
+      await page.waitForFunction(() => window.drumDraftProbe.live?.song.audioAssetId);
+      savedId = await page.evaluate(() => window.drumDraftProbe.live.song.id);
+      assert.equal(await page.evaluate(() => window.drumDraftProbe.live.judges.get('drums').lanes.length), 6);
+      await page.getByRole('button', { name: 'Connect MIDI', exact: true }).first().click();
+      const transport = page.getByRole('group', { name: 'Playback controls', exact: true });
+      await transport.getByRole('button', { name: 'Start set', exact: true }).click();
+      await page.waitForFunction(() => window.drumDraftProbe.audio?.backingSource);
+      assert.equal(await page.evaluate(() => window.drumDraftProbe.audio.backingSource.buffer.duration), 10, 'nine-second stem cannot replace the original backing');
+      await page.evaluate(() => { window.drumDraftProbe.time = 1.32; window.draftMidi(49); });
+      await page.waitForFunction(() => window.drumDraftProbe.live.judges.get('drums').stats.perfect === 1);
+      await page.getByRole('button', { name: 'Reset set', exact: true }).click();
+      await page.reload({ waitUntil: 'domcontentloaded' });
+      await page.locator('.pad').first().waitFor(); await installProbe();
+      await page.waitForFunction(() => window.drumDraftProbe.live?.song.audioAssetId);
+      assert.equal(await page.evaluate(() => window.drumDraftProbe.live.song.id), savedId);
+      assert.equal(await page.evaluate(() => window.drumDraftProbe.live.status), 'ready');
+      await transport.getByRole('button', { name: 'Start set', exact: true }).click();
+      await page.waitForFunction(() => window.drumDraftProbe.audio?.backingSource);
+      assert.equal(await page.evaluate(() => window.drumDraftProbe.audio.backingSource.buffer.duration), 10);
+      await page.getByRole('button', { name: 'Reset set', exact: true }).click();
+    }
+    phase = 'mismatched stem rejection and cancellation';
+    await open();
+    await library.getByRole('button', { name: 'Drums (draft)', exact: true }).click();
+    if (!(await form.evaluate((el) => el.open))) await form.locator('summary').click();
+    await chooseOriginal('Short backing.wav', stemWav);
+    await chooseStem('Long drums.wav', backingWav);
+    await build.click();
+    await library.getByRole('alert').filter({ hasText: 'longer than the original recording' }).waitFor();
+    assert.equal(await add.count(), 0);
+    await chooseOriginal('Stem Study.wav', backingWav);
+    await chooseStem('Waiting-drums.wav', stemWav);
+    await page.evaluate(() => {
+      const read = File.prototype.arrayBuffer;
+      File.prototype.arrayBuffer = function () {
+        if (this.name !== 'Waiting-drums.wav') return read.call(this);
+        return new Promise((resolve, reject) => { window.releaseStemRead = () => read.call(this).then(resolve, reject); });
+      };
+    });
+    await build.click();
+    await page.waitForFunction(() => Boolean(window.releaseStemRead));
+    await library.getByRole('button', { name: 'Cancel import', exact: true }).click();
+    await page.evaluate(() => window.releaseStemRead());
+    await page.waitForTimeout(150);
+    assert.equal(await library.getByRole('heading', { name: 'Review the drum draft', exact: true }).count(), 0);
+    assert.equal(await add.count(), 0, 'late stem reads cannot restore a cancelled preview');
+    await library.getByRole('button', { name: 'Close song library', exact: true }).click();
+    if (!uiOnly) assert.equal(await page.evaluate(() => window.drumDraftProbe.live.song.id), savedId);
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+    assert.deepEqual(errors, []);
+    console.log(`PASS: Stem Lab file pair, native decoding, retained leading silence, shorter stem on full song clock, mode rebuild, review/export, longer-stem rejection and cancellation${uiOnly ? '' : ', six lanes, MIDI scoring, original backing and saved reload'}. Desktop only.`);
+  } else {
+  phase = 'drum audio preview, validation and correction';
+  await open();
+  await library.getByRole('button', { name: 'Drums (draft)', exact: true }).click();
+  await upload('Drum Study.wav', drumWav());
+  await ready();
+  await library.getByText(/kick, snare and hi-hat are estimated/).waitFor();
+  assert.equal(await library.locator('tbody tr').count(), 16);
+  assert.equal(await library.getByLabel('Hit 1 drum', { exact: true }).inputValue(), '36');
+  await library.getByLabel('Hit 1 drum', { exact: true }).selectOption('49');
+  assert.equal(await add.isDisabled(), true);
+  await library.getByLabel('Hit 1 time', { exact: true }).fill('9');
+  await apply.click();
+  await library.getByRole('alert').filter({ hasText: /inside the recording/ }).waitFor();
+  await library.getByLabel('Hit 1 time', { exact: true }).fill('0.3');
+  await library.getByLabel('Drum count-in tempo', { exact: true }).fill('90');
+  await apply.click();
+  await library.getByText('Corrections applied. Ready to add or download.', { exact: true }).waitFor();
+  assert.equal(await add.isEnabled(), true);
+  await library.getByRole('heading', { name: 'Review the drum draft', exact: true }).scrollIntoViewIfNeeded();
+  await capture('drum-draft-review-desktop');
+  const downloading = page.waitForEvent('download');
+  await library.getByRole('button', { name: 'Download chart', exact: true }).click();
+  const download = await downloading;
+  const exportedPath = `${output}/reviewed-drums.midistage.json`;
+  await download.saveAs(exportedPath);
+  const exported = JSON.parse(await readFile(exportedPath, 'utf8'));
+  assert.equal(exported.bpm, 90);
+  assert.equal(exported.duration, 8);
+  assert.equal(exported.origin, 'audio-drums-draft');
+  assert.ok(exported.parts[0].notes.some((note) => note.pitch === 49 && note.time === 0.3));
+  assert.ok(exported.parts[0].notes.some((note) => note.pitch === 42 && note.time === 0.3));
+  assert.ok(exported.parts.slice(1).every((part) => part.notes.length === 0));
+  await add.click(); await library.waitFor({ state: 'hidden' });
+  await page.getByRole('heading', { level: 2, name: 'Drum Study', exact: true }).waitFor();
+  let savedId;
+  if (!uiOnly) {
+    phase = 'original backing and separate drum MIDI targets';
+    await page.waitForFunction(() => window.drumDraftProbe.live?.song.audioAssetId);
+    savedId = await page.evaluate(() => window.drumDraftProbe.live.song.id);
+    assert.deepEqual(await page.evaluate(() => window.drumDraftProbe.live.players.filter((p) => p.enabled).map((p) => p.id)), ['drums']);
+    assert.equal(await page.evaluate(() => window.drumDraftProbe.live.judges.get('drums').lanes.length), 6);
+    await page.getByRole('button', { name: 'Connect MIDI', exact: true }).first().click();
+    const transport = page.getByRole('group', { name: 'Playback controls', exact: true });
+    await transport.getByRole('button', { name: 'Start set', exact: true }).click();
+    await page.waitForFunction(() => window.drumDraftProbe.audio?.backingSource && window.drumDraftProbe.live.status === 'playing');
+    assert.equal(await page.evaluate(() => window.drumDraftProbe.options.backingBuffer === window.drumDraftProbe.audio.backingSource.buffer), true);
+    assert.equal(await page.evaluate(() => window.drumDraftProbe.audio.backingSource.buffer.duration), 8);
+    await page.evaluate(() => { window.drumDraftProbe.time = 0.3; window.draftMidi(36); });
+    await page.waitForTimeout(100);
+    assert.equal(await page.evaluate(() => window.drumDraftProbe.live.judges.get('drums').stats.perfect), 0, 'kick must not match a corrected crash');
+    await page.evaluate(() => { window.draftMidi(49); window.draftMidi(42); });
+    await page.waitForFunction(() => window.drumDraftProbe.live.judges.get('drums').stats.perfect === 2);
+    await transport.getByRole('button', { name: 'Pause', exact: true }).click();
+    await page.locator('.stage-viewport').scrollIntoViewIfNeeded(); await capture('drum-draft-highway-desktop');
+    await page.getByRole('button', { name: 'Reset set', exact: true }).click();
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.locator('.pad').first().waitFor(); await installProbe();
+    await page.waitForFunction(() => window.drumDraftProbe.live?.song.audioAssetId);
+    assert.equal(await page.evaluate(() => window.drumDraftProbe.live.song.id), savedId);
+    assert.equal(await page.evaluate(() => window.drumDraftProbe.live.status), 'ready');
+    await transport.getByRole('button', { name: 'Start set', exact: true }).click();
+    await page.waitForFunction(() => window.drumDraftProbe.audio?.backingSource);
+    assert.equal(await page.evaluate(() => window.drumDraftProbe.audio.backingSource.buffer.duration), 8, 'IndexedDB restores original audio');
+    await page.getByRole('button', { name: 'Reset set', exact: true }).click();
+  }
+
+  phase = 'export identity, review operations and mode changes';
+  await open(); await upload('reviewed-drums.midistage.json', Buffer.from(JSON.stringify(exported))); await ready();
+  await add.click(); await library.waitFor({ state: 'hidden' });
+  if (!uiOnly) assert.equal(await page.evaluate(() => window.drumDraftProbe.live.song.id), savedId);
+  await open();
+  assert.equal(await library.getByRole('button', { name: 'Play Drum Study', exact: true }).count(), 1);
+  await upload('Review operations.midistage.json', Buffer.from(JSON.stringify(exported))); await ready();
+  await library.getByRole('button', { name: 'Remove hit 1', exact: true }).click(); await apply.click();
+  await library.getByRole('button', { name: 'Add hit', exact: true }).click(); await apply.click();
+  await library.getByRole('button', { name: 'Restore original', exact: true }).click();
+  assert.equal(await library.getByLabel('Hit 1 time', { exact: true }).inputValue(), '0.3');
+
+  phase = 'clear all false hits and add replacements before applying';
+  const single = { ...exported, title: 'Replacement study', parts: exported.parts.map((part) => ({ ...part, notes: part.type === 'drums' ? part.notes.slice(0, 1) : [] })) };
+  await upload('Replacement study.midistage.json', Buffer.from(JSON.stringify(single))); await ready();
+  await library.getByRole('button', { name: 'Remove hit 1', exact: true }).click();
+  await apply.click();
+  await library.getByRole('alert').filter({ hasText: /Keep at least one drum hit/ }).waitFor();
+  assert.equal(await library.getByRole('button', { name: 'Add hit', exact: true }).isEnabled(), true);
+  await library.getByRole('button', { name: 'Add hit', exact: true }).click();
+  await library.getByLabel('Hit 1 drum', { exact: true }).selectOption('38');
+  await library.getByLabel('Hit 1 time', { exact: true }).fill('0.5');
+  await library.getByRole('button', { name: 'Add hit', exact: true }).click();
+  assert.equal(await library.locator('tbody tr').count(), 2, 'pending edits must allow multiple replacement hits');
+  await apply.click();
+  assert.equal(await add.isEnabled(), true);
+  assert.equal(await library.getByLabel('Hit 1 drum', { exact: true }).inputValue(), '38');
+  await capture('drum-draft-replacements-desktop');
+
+  phase = 'rhythm chart with drum origin metadata and unmapped pitch';
+  const rhythm = { ...single, title: 'Unmapped rhythm', version: 2, matching: 'rhythm', parts: single.parts.map((part) => ({ ...part, notes: part.type === 'drums' ? [{ time: 0.3, pitch: 60, duration: 0.06, velocity: 100 }] : [] })) };
+  await upload('Unmapped rhythm.midistage.json', Buffer.from(JSON.stringify(rhythm)));
+  await library.getByRole('heading', { name: 'Unmapped rhythm', exact: true }).waitFor();
+  assert.equal(await library.getByRole('heading', { name: 'Review the drum draft', exact: true }).count(), 0);
+  assert.equal(await add.isEnabled(), true, 'valid rhythm chart stays importable');
+
+  phase = 'audio mode changes';
+  await library.getByRole('button', { name: 'Drums (draft)', exact: true }).click();
+  await upload('Mode Study.wav', drumWav()); await ready();
+  await library.getByRole('button', { name: 'Rhythm', exact: true }).click();
+  await library.getByText('Rhythm chart · detected hits', { exact: true }).waitFor();
+  assert.equal(await library.getByRole('heading', { name: 'Review the drum draft', exact: true }).count(), 0);
+  await library.getByRole('button', { name: 'Drums (draft)', exact: true }).click(); await ready();
+  await library.getByRole('button', { name: 'Close song library', exact: true }).click();
+  if (!uiOnly) assert.equal(await page.evaluate(() => window.drumDraftProbe.live.song.id), savedId, 'an unsaved preview cannot change the selected chart');
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+  assert.deepEqual(errors, []);
+  console.log(`PASS: drum audio draft, review/edit validation, count-in without retiming, canonical export/identity, restore/add/remove, audio mode rebuild and cancelled-preview isolation${uiOnly ? '' : ', six drum lanes, family-specific MIDI, original backing and IndexedDB reload'}. Desktop only.`);
+  }
+} catch (error) {
+  console.error(`Drum draft phase: ${phase}`);
+  const page = browser.contexts()[0]?.pages()[0];
+  if (page) { await page.screenshot({ path: `${output}/drum-draft-failure.png` }).catch(() => {}); console.error(await page.locator('body').innerText().catch(() => 'Page unavailable')); }
+  throw error;
+} finally { await browser.close(); }

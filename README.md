@@ -43,6 +43,7 @@ npm run dev   # serves the app on http://0.0.0.0:8082
 | `npm run test:setup` | Soundcheck, MIDI routing and saved-setup browser regression |
 | `npm run test:imports` | Chart/MIDI import, playback, saved songs and mobile regression |
 | `npm run test:audio` | Real WAV/MP3/FLAC import, backing playback, storage and rhythm-input regression |
+| `npm run test:audio-drums` | Desktop drum drafts, correction/export, original backing, MIDI lanes and reload |
 | `npm run test:guitar` | Authored strings/frets, exact-pitch MIDI, arcade strums, holds and touch |
 | `npm run test:guitar-import` | Desktop MusicXML/string-fret imports, correction/export, reload and exact-pitch playback |
 | `npm run test:graphics` | Concert rendering, lane targets, reduced motion and saved/live strum arrows |
@@ -152,8 +153,16 @@ library to cancel; long analysis yields so the controls remain responsive.
   lane from detected attacks and plays the original recording in sync. Press the
   shown computer key or Space, tap the wide hit pad, or play any MIDI note. This is a rhythm chart;
   dense mixes and vocals may create extra or missed hits. Tempo is estimated for
-  count-in/click; actual hit times follow the recording. Audio is limited to
+  count-in/click; actual hit times follow the recording. Choose **Drums (draft)**
+  to estimate separate kick, snare and hi-hat targets instead. Review hit times
+  and drum types, add/remove hits, correct count-in tempo without moving notes,
+  and download the chart. Drum-only stems work best; this is an editable estimate,
+  not source separation or a complete drum transcription. Audio is limited to
   50 MB and six minutes. Tempo changes playback speed and pitch.
+  To use SparkSuite Stem Lab files, choose **Drums (draft) → Use a separated drum
+  stem**, select the original song and its `drums.wav`, then **Build from drum
+  stem**. Detection uses the stem; saved playback uses the original song. Leading
+  silence stays intact, and a shorter stem ends without shortening the song.
 - **MIDI (.mid/.midi):** preserves note timing, chords and holds from constant-tempo
   format 0/1 files, grouping General MIDI drums, guitar, bass and other instruments
   into the stage parts. Unsupported percussion/expression is reported. Variable
@@ -171,6 +180,8 @@ library to cancel; long analysis yields so the controls remain responsive.
 
 Up to 12 imports are remembered in this browser: chart metadata in local storage,
 original audio in IndexedDB. Files are processed locally and are never uploaded.
+See [audio drum drafts and the stem handoff](docs/audio-drum-drafts.md) for the
+current limits and the keyboard-transcription next step.
 If storage is unavailable, the current visit remains playable and a warning
 explains what was not saved. Reimporting the same file does not duplicate it.
 Remove imports from **Your songs**; the original files are unchanged. Parts with
