@@ -11,6 +11,8 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AudioSourcePreview } from "./audio-source-preview";
+import { GuitarImportReview } from "./guitar-import-review";
+import type { SharedChart } from "@/lib/midi-stage/chart-format";
 import { formatTime } from "@/lib/midi-stage/engine";
 import { LABELS } from "@/lib/midi-stage/songs";
 import { INSTRUMENTS, type Instrument } from "@/lib/midi-stage/types";
@@ -18,7 +20,8 @@ import { cn } from "@/lib/utils";
 
 type SongLibraryPanelProps = {
   candidate: {
-    kind?: "audio" | "midi" | "chart";
+    kind?: "audio" | "midi" | "chart" | "musicxml";
+    chart?: SharedChart;
     audioFile?: File;
     name: string;
     fileName: string;
@@ -40,6 +43,10 @@ type SongLibraryPanelProps = {
   onClose: () => void;
   onSelect: (id: string) => void;
   onRemove: (id: string) => void;
+  reviewKey?: number;
+  reviewPending?: boolean;
+  onReviewPending?: (pending: boolean) => void;
+  onReviewApply?: (chart: SharedChart) => void;
 };
 
 export function SongLibraryPanel({
@@ -57,6 +64,10 @@ export function SongLibraryPanel({
   onClose,
   onSelect,
   onRemove,
+  reviewKey,
+  reviewPending = false,
+  onReviewPending,
+  onReviewApply,
 }: SongLibraryPanelProps) {
   const [dragging, setDragging] = useState(false);
   const [fileNotice, setFileNotice] = useState("");
@@ -116,7 +127,7 @@ export function SongLibraryPanel({
             Your songs
           </h2>
           <p className="mt-2 text-sm leading-relaxed text-muted">
-            Audio, MIDI or a Stage chart. Bring your own track to the stage.
+            Audio, MIDI, guitar tablature or a Stage chart. Bring your own track to the stage.
           </p>
         </div>
         <Button
@@ -165,7 +176,7 @@ export function SongLibraryPanel({
             <input
               ref={fileRef}
               type="file"
-              accept=".mp3,.wav,.flac,.ogg,.m4a,.aac,.webm,.mid,.midi,.json,audio/*"
+              accept=".mp3,.wav,.flac,.ogg,.m4a,.aac,.webm,.mid,.midi,.json,.musicxml,.xml,audio/*"
               aria-label="Choose song file"
               aria-describedby="song-file-help"
               className="sr-only"
@@ -190,6 +201,11 @@ export function SongLibraryPanel({
             MIDI (.mid, .midi) and Stage charts (.midistage.json) keep pitch notes and play
             synthesized instruments. Up to 4 MB; tempo changes aren’t supported for these files.
           </p>
+          <p className="mt-2 text-xs leading-relaxed text-muted">
+            MusicXML tablature (.musicxml, .xml) and version 4 Stage charts keep authored strings
+            and frets. Export one six-string tablature staff with a constant tempo and expanded repeats.
+          </p>
+          <a className="mt-2 inline-flex min-h-11 items-center text-xs text-accent underline underline-offset-4" href="/examples/open-string-study.musicxml" download>Download an example guitar arrangement</a>
           {reading ? (
             <div className="mt-3 rounded-xl border border-accent/25 bg-surface p-3">
               <div className="flex items-center justify-between gap-3">
@@ -287,6 +303,10 @@ export function SongLibraryPanel({
             {candidate.kind === "audio" && candidate.audioFile ? (
               <AudioSourcePreview file={candidate.audioFile} disabled={busy} />
             ) : null}
+            {candidate.chart?.guitarMode === "strings" && onReviewApply && onReviewPending ? (
+              <GuitarImportReview key={reviewKey} chart={candidate.chart} disabled={busy}
+                onApply={onReviewApply} onPendingChange={onReviewPending} />
+            ) : null}
             {candidate.warnings.length > 0 ? (
               <ul
                 aria-label="Import notes"
@@ -302,7 +322,7 @@ export function SongLibraryPanel({
             <Button
               type="button"
               className="mt-4 w-full"
-              disabled={busy}
+              disabled={busy || reviewPending}
               aria-busy={saving}
               onClick={onAdd}
             >

@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import type { Difficulty, Instrument } from "@/lib/midi-stage/types";
 import { TIMING_CENTER_MS, type TimingSummary } from "@/lib/midi-stage/timing-summary";
 import type { PracticeRecommendation } from "@/lib/midi-stage/practice-recommendation";
-import { formatTime } from "@/lib/midi-stage/engine";
+import { formatTime, noteName } from "@/lib/midi-stage/engine";
 
 export type PracticeContext = { name: string; start: number; end: number; pass: number };
 
@@ -118,6 +118,7 @@ type SessionOverlayProps = {
   rhythm?: boolean;
   guitarMode?: boolean;
   realGuitar?: boolean;
+  guitarTuning?: readonly number[];
   guitarMidiReady?: boolean;
   guitarConnecting?: boolean;
   onConnectGuitar?: () => void;
@@ -263,6 +264,7 @@ export function SessionOverlay({
   rhythm = false,
   guitarMode = false,
   realGuitar = false,
+  guitarTuning = [40, 45, 50, 55, 59, 64],
   guitarMidiReady = false,
   guitarConnecting = false,
   onConnectGuitar,
@@ -539,7 +541,7 @@ export function SessionOverlay({
             </div>
             <p className="session-footnote">
               {realGuitar
-                ? "Standard tuning · E A D G B E. Play along runs the guide without scoring. A guitar MIDI device enables pitch scoring; a regular guitar cable does not send MIDI. String choice is not verified."
+                ? `${guitarTuning.every((pitch, i) => pitch === [40, 45, 50, 55, 59, 64][i]) ? "Standard tuning · E A D G B E." : `Tuning · ${guitarTuning.map(noteName).join(" ")}.`} Play along runs the guide without scoring. A guitar MIDI device enables pitch scoring; a regular guitar cable does not send MIDI. String choice is not verified.`
                 : practice
                 ? "Start with a count-in. Repeat section gives you a fresh score on every take. Practice scores aren’t saved."
                 : guitarMode

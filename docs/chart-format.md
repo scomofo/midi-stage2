@@ -23,7 +23,7 @@ mapping decision where the two engines differ.
   existing `schema` key rather than renaming it to `format`: every chart the
   workshop has ever exported already uses it, so renaming would break
   compatibility for zero benefit.)
-- `version` is `1`, `2`, or `3`:
+- `version` is `1`, `2`, `3`, or `4`:
   - **1** — plain chart (the common case).
   - **2** — rhythm-only chart (explicit `"matching": "rhythm"` required): each
     enabled nonempty part has a single HIT lane accepting any MIDI pitch.
@@ -31,6 +31,14 @@ mapping decision where the two engines differ.
     do not become sustain notes.
   - **3** — chart carries `chordHighways` for keys/guitar. Supported: stage2
     folds them into `Song.harmony` (display-only chord names), see §6.
+  - **4** — authored six-string guitar: `guitarMode: "strings"`, six open-string
+    MIDI pitches in `guitarTuning` (low string 6 to high string 1), and a
+    `guitarPosition: {string, fret}` on every guitar note. Pitch must equal the
+    corresponding open-string pitch plus fret. String is 1–6; fret is 0–24.
+    Positions on other parts, rhythm matching, missing guitar notes and
+    overlapping notes on one string are rejected. Identical pitches on different
+    strings remain separate targets. Versions 1–3 retain their serialized form
+    and existing saved identities; explicit position data requires version 4.
 - A version-1 file that *contains* `chordHighways` is normalized to version 3
   on parse, mirroring the workshop's own `validate()`.
 
@@ -67,6 +75,12 @@ All times and durations are **seconds** (floats). Pitches are MIDI note numbers.
 - Notes are sorted by `(time, pitch)` on parse; exact `(time, pitch)`
   duplicates are dropped (mirrors the workshop).
 - At most 60,000 notes total per chart.
+
+Version 4 keeps authored physical strings instead of deriving guitar lanes from
+pitch classes. Other parts can provide synthesized backing, but the playable
+lineup is guitar only. Imported notes are retained at all difficulty levels.
+Downloadable examples live at `public/examples/open-string-study.musicxml` and
+`public/examples/open-string-study.midistage.json`.
 
 ### Optional extensions
 
@@ -174,7 +188,14 @@ Remaining work:
 2. **Audio chart editing / musical acceptance:** automatic onset detection is not
    instrument transcription; dense arrangements and expressive recordings need
    listening review and may need hand correction.
-3. **Round-trip authoring:** the canonical serializer exists, but no in-game
-   export/editor or procedural-song-to-shared-chart authoring flow is exposed.
+3. **Round-trip authoring:** version 4 guitar imports have a review/correction
+   table and canonical JSON download. General pitch/rhythm charts and procedural
+   songs do not have an export/editor flow yet.
 4. **Drum lane table sync:** pitch-chart drum groups remain duplicated between
    the original workshop and this game.
+
+## 10. Authored guitar and MusicXML
+
+See [Authored guitar imports](guitar-import.md) for MusicXML support, desktop
+review, persistence and acceptance limits. This path preserves explicit score
+data; audio-file imports continue to use detected one-lane rhythm attacks.

@@ -236,8 +236,9 @@ The primary arrangement authors each guitar note's string and fret in standard
 E–A–D–G–B–E tuning. String 1 is high E; string 6 is low E. Six fixed highway lanes
 run low to high, preserving string identity through passage slicing and difficulty
 changes. Numbered gems and the next-shape guide show actual frets, including open
-strings. No fingering is inferred from MIDI pitch. Only authored built-in charts
-use this mode; the existing import formats do not accept guitar-position data.
+strings. No fingering is inferred from MIDI pitch. Authored built-in charts,
+version 4 Stage charts and supported MusicXML tablature exports use this mode.
+See [Authored guitar imports](guitar-import.md) for desktop review and corrections.
 
 Real-guitar input scores exact MIDI pitches. Wrong octaves count as extra notes;
 keyboard keys and generic touch pads cannot score this arrangement. MIDI note-off
