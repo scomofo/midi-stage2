@@ -5,6 +5,7 @@ import { noteName } from "@/lib/midi-stage/engine";
 import { serializeSharedChart, type SharedChart } from "@/lib/midi-stage/chart-format";
 import { applyGuitarReview, guitarReviewRows, type GuitarReviewRow } from "@/lib/midi-stage/guitar-chart-review";
 import { confidenceBand, transcriptionConfidenceSummary } from "@/lib/midi-stage/transcription-confidence";
+import { duplicateRows, quantizeRows, shiftRows } from "@/lib/midi-stage/authoring-operations";
 import "./guitar-import-review.css";
 
 const PAGE_SIZE = 16;
@@ -24,6 +25,7 @@ export function GuitarImportReview({ chart, disabled, onApply, onPendingChange }
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [showNeedsReview, setShowNeedsReview] = useState(false);
+  const [selected, setSelected] = useState<Set<number>>(() => new Set());
   const confidence = transcriptionConfidenceSummary(chart.parts.find((part) => part.type === "guitar")!.notes);
   const visibleRows = showNeedsReview
     ? rows.filter((row) => row.confidence !== undefined && confidenceBand(row.confidence) !== "high")
@@ -64,6 +66,7 @@ export function GuitarImportReview({ chart, disabled, onApply, onPendingChange }
     nextId.current = source.parts.find((part) => part.type === "guitar")!.notes.length;
     setTempo(String(source.bpm));
     setPage(0);
+    setSelected(new Set());
     setDirty(false);
     setError("");
     setNotice("Original arrangement restored.");
@@ -103,6 +106,19 @@ export function GuitarImportReview({ chart, disabled, onApply, onPendingChange }
           <span>BPM</span>
         </label>
       </div>
+      <div className="guitar-review-actions">
+        <Button type="button" size="sm" variant="secondary" disabled={disabled || !selected.size} onClick={() => {
+          const bpm = Number(tempo); if (!Number.isFinite(bpm) || bpm <= 0) return;
+          pending(); setRows(current => quantizeRows(current, selected, 60 / bpm / 4));
+        }}>Quantize selected · 1/16</Button>
+        <Button type="button" size="sm" variant="ghost" disabled={disabled || !selected.size} onClick={() => { pending(); setRows(current => shiftRows(current, selected, -0.01)); }}>−10 ms</Button>
+        <Button type="button" size="sm" variant="ghost" disabled={disabled || !selected.size} onClick={() => { pending(); setRows(current => shiftRows(current, selected, 0.01)); }}>+10 ms</Button>
+        <Button type="button" size="sm" variant="secondary" disabled={disabled || !selected.size} onClick={() => {
+          const bpm = Number(tempo); if (!Number.isFinite(bpm) || bpm <= 0) return;
+          pending(); const result = duplicateRows(rows, selected, 4 * 60 / bpm, nextId.current); nextId.current = result.nextId; setRows(result.rows as GuitarReviewRow[]); setSelected(new Set());
+        }}>Duplicate +1 bar</Button>
+        <Button type="button" size="sm" variant="ghost" disabled={disabled} onClick={() => setSelected(new Set(visibleRows.map(row => row.id)))}>Select visible</Button>
+      </div>
       <p id="guitar-review-help" className="guitar-review-help">
         Times and lengths are seconds. Changing tempo rescales the whole chart when you apply.
         String or fret edits update the sounding note. All difficulty levels keep these notes.
@@ -111,7 +127,7 @@ export function GuitarImportReview({ chart, disabled, onApply, onPendingChange }
       <div className="guitar-review-table-wrap" tabIndex={0} aria-label="Guitar note review table">
         <table>
           <caption className="sr-only">Review note times, lengths, strings and frets before adding this arrangement.</caption>
-          <thead><tr><th scope="col">Note</th><th scope="col">Time (s)</th><th scope="col">Length (s)</th><th scope="col">String</th><th scope="col">Fret</th><th scope="col">Sounds</th><th scope="col"><span className="sr-only">Remove</span></th></tr></thead>
+          <thead><tr><th scope="col"><span className="sr-only">Select</span></th><th scope="col">Note</th><th scope="col">Time (s)</th><th scope="col">Length (s)</th><th scope="col">String</th><th scope="col">Fret</th><th scope="col">Sounds</th><th scope="col"><span className="sr-only">Remove</span></th></tr></thead>
           <tbody>{visibleRows.slice(first, first + PAGE_SIZE).map((row, index) => {
             const number = first + index + 1;
             const string = Number(row.string), fret = Number(row.fret);
@@ -119,6 +135,7 @@ export function GuitarImportReview({ chart, disabled, onApply, onPendingChange }
               && Number.isInteger(fret) && fret >= 0 && fret <= 24;
             const band = confidenceBand(row.confidence);
             return <tr key={row.id} data-confidence={band}>
+              <td><input type="checkbox" aria-label={`Select note ${number}`} checked={selected.has(row.id)} disabled={disabled} onChange={() => setSelected(current => { const next = new Set(current); if (next.has(row.id)) next.delete(row.id); else next.add(row.id); return next; })} /></td>
               <th scope="row">{number}{band !== "unknown" ? <span className="ml-1 text-[10px] text-muted">· {band}</span> : null}</th>
               <td><input aria-label={`Note ${number} time`} type="number" min={0} max={3600} step="any" value={row.time} disabled={disabled} onChange={(e) => update(row.id, "time", e.target.value)} /></td>
               <td><input aria-label={`Note ${number} length`} type="number" min={0.02} max={3600} step="any" value={row.duration} disabled={disabled} onChange={(e) => update(row.id, "duration", e.target.value)} /></td>
