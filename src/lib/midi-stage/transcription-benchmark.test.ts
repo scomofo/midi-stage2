@@ -1,5 +1,6 @@
 import {describe,expect,it} from "./test-compat.ts";
-import fixtures from "../../../tests/fixtures/transcription-benchmarks.json";
+import fs from "node:fs";
+const fixtures = JSON.parse(fs.readFileSync(new URL("../../../tests/fixtures/transcription-benchmarks.json", import.meta.url), "utf8")) as Record<string, { reference: Array<{time:number;duration:number;pitch:number}>; detected: Array<{time:number;duration:number;pitch:number}> }>;
 import {benchmarkPass,scoreTranscription} from "./transcription-benchmark.ts";
 
 describe("transcription benchmark harness",()=>{
