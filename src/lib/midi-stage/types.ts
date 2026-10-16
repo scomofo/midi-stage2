@@ -13,6 +13,8 @@ export type Note = {
   duration: number;
   pitch: number;
   velocity: number;
+  /** Optional 0–1 model confidence retained for generated/imported drafts. */
+  confidence?: number;
   arcadeFret?: ArcadeFret;
   /** Authored physical string and fret, never inferred from pitch alone. */
   guitarPosition?: GuitarPosition;
