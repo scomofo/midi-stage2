@@ -19,6 +19,7 @@ import { isReviewableDrumDraft } from "@/lib/midi-stage/drum-chart-review";
 import { isReviewableKeyboardDraft } from "@/lib/midi-stage/keyboard-draft";
 import type { AudioImportMode } from "@/lib/midi-stage/audio-file-types";
 import { importWorkflowState } from "@/lib/midi-stage/import-workflow";
+import { scoreChartQuality } from "@/lib/midi-stage/chart-quality";
 import { formatTime } from "@/lib/midi-stage/engine";
 import { LABELS } from "@/lib/midi-stage/songs";
 import { INSTRUMENTS, type Instrument } from "@/lib/midi-stage/types";
@@ -100,6 +101,7 @@ export function SongLibraryPanel({
   const drumDraft = isReviewableDrumDraft(candidate?.chart);
   const keysDraft = isReviewableKeyboardDraft(candidate?.chart);
   const audioDraft = drumDraft || keysDraft;
+  const quality = candidate?.chart ? scoreChartQuality(candidate.chart) : null;
   const reviewRequired = Boolean(candidate?.chart?.guitarMode === "strings" || audioDraft);
   const workflow = importWorkflowState({
     mode: audioMode,
@@ -311,6 +313,15 @@ export function SongLibraryPanel({
         </div>
 
         {candidate ? (
+          <>
+          {quality ? <div className="rounded-xl border border-border bg-surface px-3 py-3" data-chart-quality={quality.grade}>
+            <div className="flex items-center justify-between gap-3">
+              <strong className="text-sm">Chart quality · {quality.score}/100</strong>
+              <span className="text-xs capitalize text-muted">{quality.grade}</span>
+            </div>
+            <p className="mt-1 text-xs text-muted">{quality.issues[0]?.message}</p>
+            {quality.needsReview ? <p className="mt-1 text-xs text-muted">{quality.needsReview} detected notes are below high confidence.</p> : null}
+          </div> : null}
           <section
             ref={previewRef}
             aria-labelledby="song-preview-title"
@@ -400,6 +411,7 @@ export function SongLibraryPanel({
               <ArrowRight className="size-4" aria-hidden="true" />
             </Button>
           </section>
+          </>
         ) : null}
 
         <section
