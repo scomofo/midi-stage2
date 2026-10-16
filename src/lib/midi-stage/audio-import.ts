@@ -384,6 +384,10 @@ export async function analyzeDecodedSongAudio(
     const { transcribeKeyboardAudio } = await import("./keyboard-transcription.ts");
     return transcribeKeyboardAudio(buffer, filename, fingerprint, { signal, onProgress });
   }
+  if (mode === "guitar") {
+    const { transcribeGuitarAudio } = await import("./guitar-transcription.ts");
+    return transcribeGuitarAudio(buffer, filename, fingerprint, { signal, onProgress });
+  }
   onProgress?.({ phase: "analyzing", progress: 0 });
   await yieldToBrowser(signal);
   const steps = analyzeSongAudioSteps(buffer, filename, fingerprint, mode);
