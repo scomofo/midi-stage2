@@ -5,6 +5,7 @@ import { DRUMS, noteName } from "@/lib/midi-stage/engine";
 import { serializeSharedChart, type SharedChart } from "@/lib/midi-stage/chart-format";
 import { applyDrumReview, drumReviewRows } from "@/lib/midi-stage/drum-chart-review";
 import { applyKeyboardReview, keyboardReviewRows } from "@/lib/midi-stage/keyboard-chart-review";
+import { confidenceBand, transcriptionConfidenceSummary } from "@/lib/midi-stage/transcription-confidence";
 import "./drum-import-review.css";
 
 const PAGE_SIZE = 16;
@@ -23,9 +24,14 @@ export function AudioDraftReview({ chart, disabled, audioAttached, onApply, onPe
   const [dirty, setDirty] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
-  const currentPage = Math.min(page, Math.max(0, Math.ceil(rows.length / PAGE_SIZE) - 1));
-  const first = currentPage * PAGE_SIZE;
+  const [showNeedsReview, setShowNeedsReview] = useState(false);
   const notes = chart.parts.find((part) => part.type === instrument)!.notes;
+  const confidence = transcriptionConfidenceSummary(notes);
+  const visibleRows = keyboard && showNeedsReview
+    ? rows.filter((row) => row.confidence !== undefined && confidenceBand(row.confidence) !== "high")
+    : rows;
+  const currentPage = Math.min(page, Math.max(0, Math.ceil(visibleRows.length / PAGE_SIZE) - 1));
+  const first = currentPage * PAGE_SIZE;
   function pending() { setDirty(true); setError(""); setNotice(""); onPendingChange(true); }
   function update(id: number, field: "time" | "pitch" | "duration", value: string) {
     pending(); setRows((rows) => rows.map((row) => row.id === id ? { ...row, [field]: value } : row));
@@ -51,7 +57,12 @@ export function AudioDraftReview({ chart, disabled, audioAttached, onApply, onPe
         <p className="text-xs leading-relaxed text-muted">{keyboard ? "Estimated pitches, chords and holds. Listen above, then correct notes and lengths." : "Estimated kick, snare and hi-hat. Listen above, then correct misplaced or misidentified hits."}</p></div>
       <Button type="button" variant="secondary" disabled={disabled || dirty} onClick={download}><Download size={16} aria-hidden="true" /> Download chart</Button>
     </div>
-    {keyboard ? <p className="font-mono text-xs text-muted">{notes.length} notes · {noteName(Math.min(...notes.map((n) => n.pitch)))}–{noteName(Math.max(...notes.map((n) => n.pitch)))}</p>
+    {keyboard ? <div className="flex flex-wrap items-center justify-between gap-2">
+      <p className="font-mono text-xs text-muted">{notes.length} notes · {noteName(Math.min(...notes.map((n) => n.pitch)))}–{noteName(Math.max(...notes.map((n) => n.pitch)))} · {confidence.needsReview} need review</p>
+      {confidence.scored ? <Button type="button" size="sm" variant={showNeedsReview ? "primary" : "secondary"} onClick={() => { setShowNeedsReview((value) => !value); setPage(0); }}>
+        {showNeedsReview ? "Show all notes" : "Show needs review"}
+      </Button> : null}
+    </div>
       : <dl className="drum-review-counts" aria-label="Drum hit counts">{DRUMS.map((lane) => <div key={lane.pitch}><dt>{lane.name}</dt><dd>{notes.filter((note) => lane.notes!.includes(note.pitch)).length}</dd></div>)}</dl>}
     <label className="drum-review-tempo">Count-in tempo<input aria-label={`${keyboard ? "Keyboard" : "Drum"} count-in tempo`} type="number" min={20} max={400} step="any" value={tempo} disabled={disabled}
       onChange={(e) => { pending(); setTempo(e.target.value); }} /><span>BPM</span></label>
@@ -59,9 +70,10 @@ export function AudioDraftReview({ chart, disabled, audioAttached, onApply, onPe
     <div className="drum-review-table" tabIndex={0} aria-label={`${keyboard ? "Keyboard note" : "Drum hit"} review table`}><table>
       <caption className="sr-only">Correct {keyboard ? "note timing, length and pitch" : "hit timing and drum assignment"} before adding the draft.</caption>
       <thead><tr><th scope="col">{label}</th><th scope="col">Time (s)</th>{keyboard ? <th scope="col">Length (s)</th> : null}<th scope="col">{keyboard ? "Pitch" : "Drum"}</th><th scope="col"><span className="sr-only">Remove</span></th></tr></thead>
-      <tbody>{rows.slice(first, first + PAGE_SIZE).map((row, i) => {
+      <tbody>{visibleRows.slice(first, first + PAGE_SIZE).map((row, i) => {
         const number = first + i + 1;
-        return <tr key={row.id}><th scope="row">{number}</th>
+        const band = confidenceBand(row.confidence);
+        return <tr key={row.id} data-confidence={band}><th scope="row">{number}{keyboard && band !== "unknown" ? <span className="ml-1 text-[10px] text-muted">· {band}</span> : null}</th>
           <td><input aria-label={`${label} ${number} time`} type="number" min={0} max={chart.duration - 0.02} step="any" value={row.time} disabled={disabled} onChange={(e) => update(row.id, "time", e.target.value)} /></td>
           {keyboard ? <td><input aria-label={`Note ${number} length`} type="number" min={0.02} max={chart.duration} step="any" value={row.duration ?? ""} disabled={disabled} onChange={(e) => update(row.id, "duration", e.target.value)} /></td> : null}
           <td><select aria-label={`${label} ${number} ${keyboard ? "pitch" : "drum"}`} value={row.pitch} disabled={disabled} onChange={(e) => update(row.id, "pitch", e.target.value)}>{keyboard
@@ -71,9 +83,9 @@ export function AudioDraftReview({ chart, disabled, audioAttached, onApply, onPe
         </tr>;
       })}</tbody>
     </table></div>
-    <div className="drum-review-row text-xs text-muted"><span>{rows.length ? `${first + 1}–${Math.min(first + PAGE_SIZE, rows.length)} of ${rows.length} ${keyboard ? "notes" : "hits"}` : keyboard ? "No notes" : "No hits"}</span><div className="flex gap-2">
+    <div className="drum-review-row text-xs text-muted"><span>{visibleRows.length ? `${first + 1}–${Math.min(first + PAGE_SIZE, visibleRows.length)} of ${visibleRows.length} ${keyboard ? "notes" : "hits"}` : keyboard ? "No notes in this confidence filter" : "No hits"}</span><div className="flex gap-2">
       <Button type="button" variant="ghost" disabled={disabled || currentPage === 0} onClick={() => setPage(currentPage - 1)}>Previous {keyboard ? "notes" : "hits"}</Button>
-      <Button type="button" variant="ghost" disabled={disabled || first + PAGE_SIZE >= rows.length} onClick={() => setPage(currentPage + 1)}>Next {keyboard ? "notes" : "hits"}</Button></div></div>
+      <Button type="button" variant="ghost" disabled={disabled || first + PAGE_SIZE >= visibleRows.length} onClick={() => setPage(currentPage + 1)}>Next {keyboard ? "notes" : "hits"}</Button></div></div>
     {error ? <p role="alert" className="text-sm text-tungsten">{error}</p> : null}
     <div className="drum-review-row justify-start">
       <Button type="button" disabled={disabled || !dirty} onClick={apply}>Apply corrections</Button>
