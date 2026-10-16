@@ -1,3 +1,4 @@
+import type { FingeringEvent } from "./guitar-fingering-solver.ts";
 import { describe, expect, it } from "vitest";
 import { solveGuitarFingering } from "./guitar-fingering-solver.ts";
 
