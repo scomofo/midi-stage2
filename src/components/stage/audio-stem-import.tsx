@@ -2,6 +2,7 @@ import { useId, useState } from "react";
 import { FileAudio } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AUDIO_IMPORT_ACCEPT } from "@/lib/midi-stage/audio-file-types";
+import { stemCompatibility } from "@/lib/midi-stage/stem-handoff";
 
 /** The same local audio files used by SparkSuite's Stem Lab; no cross-app session or upload. */
 export function AudioStemImport({ disabled, onImport, instrument = "drums" }: {
@@ -11,6 +12,7 @@ export function AudioStemImport({ disabled, onImport, instrument = "drums" }: {
   const helpId = useId();
   const [original, setOriginal] = useState<File | null>(null);
   const [stem, setStem] = useState<File | null>(null);
+  const compatibility = stem ? stemCompatibility(stem.name, instrument) : null;
   return <details className="rounded-xl border border-border bg-surface p-3 text-fg">
     <summary className="min-h-11 cursor-pointer text-sm font-medium">Use a separated {part} stem</summary>
     <p id={helpId} className="mb-3 text-xs leading-relaxed text-muted">
@@ -29,7 +31,8 @@ export function AudioStemImport({ disabled, onImport, instrument = "drums" }: {
           disabled={disabled} className="mt-2 block min-h-11 w-full min-w-0 text-xs text-muted file:mr-3 file:cursor-pointer file:rounded-lg file:border file:border-border file:bg-surface file:px-3 file:py-3 file:text-fg"
           onChange={(event) => setStem(event.target.files?.[0] ?? null)} />
       </label>
-      <Button type="button" variant="secondary" disabled={disabled || !original || !stem} onClick={() => { if (original && stem) onImport(original, stem); }}>
+      {compatibility?.warning ? <p role="alert" className="text-xs leading-relaxed text-tungsten">{compatibility.warning}</p> : null}
+      <Button type="button" variant="secondary" disabled={disabled || !original || !stem || compatibility?.compatible === false} onClick={() => { if (original && stem) onImport(original, stem); }}>
         <FileAudio size={16} aria-hidden="true" /> Build from {part} stem
       </Button>
     </div>
