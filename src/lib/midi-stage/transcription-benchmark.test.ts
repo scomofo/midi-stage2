@@ -1,4 +1,4 @@
-import {describe,expect,it} from "vitest";
+import {describe,expect,it} from "./test-compat.ts";
 import fixtures from "../../../tests/fixtures/transcription-benchmarks.json";
 import {benchmarkPass,scoreTranscription} from "./transcription-benchmark.ts";
 
