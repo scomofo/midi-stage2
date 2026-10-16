@@ -1623,7 +1623,7 @@ export function StageApp() {
     setPracticeSelection({ songId: song.id, sectionId: section.id });
   }
 
-  async function readSongFile(file: File, audioMode = audioImportMode, stemFile?: File, stemMode?: "drums" | "keys") {
+  async function readSongFile(file: File, audioMode = audioImportMode, stemFile?: File, stemMode?: "drums" | "keys" | "guitar") {
     if (savingImport) return;
     const ticket = ++importTicket.current;
     importController.current?.abort();
