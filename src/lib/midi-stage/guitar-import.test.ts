@@ -14,6 +14,7 @@ const parseXml = (xml: string) => new DOMParser({ onError: (level, message) => {
   if (level !== "warning") throw new Error(message);
 } }).parseFromString(xml, "application/xml") as unknown as Document;
 const read = (xml = example) => importGuitarMusicXml(xml, "study.musicxml", parseXml);
+const withInitialDirection = (direction: string) => example.replace(/<direction>[\s\S]*?<\/direction>/, direction);
 const player: Player = { id: "guitar", type: "guitar", label: "Guitar", enabled: true, source: "guitar" };
 const clone = () => structuredClone(read().chart);
 
@@ -134,6 +135,46 @@ describe("authored guitar import", () => {
     const result = read(example.replaceAll('<type>eighth</type>', '<type size="cue">eighth</type>'));
     assert.deepEqual(result.chart.parts[2]!.notes, read().chart.parts[2]!.notes);
     assert.deepEqual(result.warnings, []);
+  });
+
+  it("keeps visual-only direction offsets out of playback tempo timing", () => {
+    const original = read().chart;
+    const metronome = '<direction-type><metronome><beat-unit>quarter</beat-unit><per-minute>96</per-minute></metronome></direction-type>';
+    for (const attribute of ['', ' sound="no"']) {
+      for (const offset of ['4', '-4']) {
+        for (const sound of ['', '<sound tempo="96"/>']) {
+          const direction = `<direction>${metronome}<offset${attribute}>${offset}</offset>${sound}</direction>`;
+          const result = read(withInitialDirection(direction)).chart;
+          assert.equal(result.bpm, 96);
+          assert.deepEqual(result.parts, original.parts);
+        }
+      }
+    }
+  });
+
+  it("honors standalone sound offsets and direction playback offsets", () => {
+    const metronome = '<direction-type><metronome><beat-unit>quarter</beat-unit><per-minute>96</per-minute></metronome></direction-type>';
+    for (const sound of ['', '<sound tempo="96"/>']) {
+      const later = `<direction>${metronome}<offset sound="yes">4</offset>${sound}</direction>`;
+      assert.throws(() => read(withInitialDirection(later)), /initial tempo at the start/);
+    }
+    assert.throws(() => read(withInitialDirection('<sound tempo="96"><offset>4</offset></sound>')), /initial tempo at the start/);
+    const initial = '<forward><duration>4</duration></forward><sound tempo="96"><offset>-4</offset></sound><backup><duration>4</duration></backup>';
+    assert.deepEqual(read(withInitialDirection(initial)).chart.parts, read().chart.parts);
+    assert.throws(() => read(withInitialDirection('<sound tempo="96"><offset>-4</offset></sound>')), /invalid timing/);
+  });
+
+  it("lets a nested sound offset override the direction without moving rehearsal markers", () => {
+    const metronome = '<direction-type><metronome><beat-unit>quarter</beat-unit><per-minute>96</per-minute></metronome></direction-type>';
+    const direction = `<direction>${metronome}<direction-type><rehearsal>Offset section</rehearsal></direction-type><offset sound="yes">4</offset><sound tempo="96"><offset>0</offset></sound></direction>`;
+    const result = read(withInitialDirection(direction)).chart;
+    assert.equal(result.bpm, 96);
+    assert.deepEqual(result.parts, read().chart.parts);
+    assert.equal(result.sections.find((s) => s.name === 'Offset section')!.time, 0.625);
+    const later = `<direction>${metronome}<offset sound="yes">0</offset><sound tempo="96"><offset>4</offset></sound></direction>`;
+    assert.throws(() => read(withInitialDirection(later)), /initial tempo at the start/);
+    const change = example.replace('<measure number="2">', '<measure number="2"><sound tempo="96"><offset>0</offset></sound><sound tempo="100"><offset>4</offset></sound>');
+    assert.throws(() => read(change), /Tempo changes/);
   });
 
   it("applies row corrections atomically, derives pitches, and retimes the whole chart for tempo changes", () => {

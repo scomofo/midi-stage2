@@ -40,6 +40,11 @@ Tied notes become one sustained target instead of repeated attacks. Silent cue
 notes are omitted with a warning, while their durations still position later
 notes. Ordinary sounding notes printed at cue size remain playable.
 
+Direction offsets affect playback only when marked `sound="yes"`. A sound's
+own offset takes precedence; rehearsal markers retain their notation positions.
+Explicit playback tempo takes precedence over a printed metronome mark. A tempo
+that starts after time zero is rejected instead of being assumed from the start.
+
 Absent tuning uses standard E2 A2 D3 G3 B3 E4 with a visible warning; absent numeric
 tempo uses 120 BPM with a warning and remains correctable in review. Other parts
 and duplicate notation staves are omitted and reported. Non-4/4 note timing is
@@ -56,13 +61,15 @@ physical string used.
 
 Format behavior follows the W3C MusicXML 4.0 references for
 [tablature](https://www.w3.org/2021/06/musicxml40/tutorial/tablature/),
-[note timing, chords and ties](https://www.w3.org/2021/06/musicxml40/tutorial/midi-compatible-part/)
-and [transposition](https://www.w3.org/2021/06/musicxml40/musicxml-reference/elements/transpose/).
+[note timing, chords and ties](https://www.w3.org/2021/06/musicxml40/tutorial/midi-compatible-part/),
+[transposition](https://www.w3.org/2021/06/musicxml40/musicxml-reference/elements/transpose/),
+[offsets](https://www.w3.org/2021/06/musicxml40/musicxml-reference/elements/offset/)
+and [sound](https://www.w3.org/2021/06/musicxml40/musicxml-reference/elements/sound/).
 
 ## Verification
 
 `guitar-import.test.ts` covers literal note timing, custom tuning, transposition,
-chords, unisons, ties, silent cues and their timing, validation failures, atomic
+chords, unisons, ties, silent cues, playback offsets, validation failures, atomic
 review, tempo scaling and storage/canonical round trips. Existing shared-chart
 and library tests guard the older formats and their identities. The XML parser
 used by unit tests is a dev dependency; the browser import uses native DOMParser
@@ -71,7 +78,8 @@ and does not fetch DTDs.
 `npm run test:guitar-import` drives the desktop UI through file selection, invalid
 and valid edits, export/reimport, exact MIDI pitch scoring, unison holds, reload,
 restore, deletion/addition, closing an unsaved preview and silent cue omission
-without timing shifts. Only song time is controlled; the real React UI,
+without timing shifts, plus direction/sound offset handling. Only song time is
+controlled; the real React UI,
 renderer, Judge, file picker and MIDI route are
 used. The dedicated CI job retains screenshots and the downloaded chart under
 `authored-guitar-import-desktop` for visual review. Automated fixtures do not
