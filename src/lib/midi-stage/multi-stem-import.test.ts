@@ -6,7 +6,7 @@ import { combineStemCharts } from "./multi-stem-import.ts";
 function chart(type:"drums"|"keys"|"guitar"|"bass", guitar=false){
   return validateSharedChart({
     schema:CHART_SCHEMA,version:guitar?4:1,...(guitar?{guitarMode:"strings",guitarTuning:[40,45,50,55,59,64]}:{}),
-    id:\`chart-\${type}\`,title:type,bpm:120,duration:10,firstBeat:.1,audioOffset:0,audioName:"song.wav",origin:\`audio-\${type}-draft\`,
+    id:`chart-${type}`,title:type,bpm:120,duration:10,firstBeat:.1,audioOffset:0,audioName:"song.wav",origin:`audio-${type}-draft`,
     parts:INSTRUMENTS.map(p=>({type:p,notes:p===type?[{time:.1,duration:.2,pitch:type==="drums"?36:type==="guitar"?40:60,velocity:100,...(type==="guitar"?{guitarPosition:{string:6,fret:0}}:{})}]:[]}))
   });
 }

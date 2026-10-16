@@ -21,8 +21,8 @@ function combineCharts(charts: Partial<Record<Instrument, SharedChart>>, filenam
   });
   return validateSharedChart({
     ...base,
-    id: \`chart-full-band-\${entries.map(([, chart]) => chart.id.replace(/^chart-/, "")).join("-").slice(0, 110)}\`,
-    title: filename.replace(/\\.[^.]+$/, "").replace(/_/g, " ").trim().slice(0, 160) || "Full band draft",
+    id: `chart-full-band-${entries.map(([, chart]) => chart.id.replace(/^chart-/, "")).join("-").slice(0, 110)}`,
+    title: filename.replace(/\.[^.]+$/, "").replace(/_/g, " ").trim().slice(0, 160) || "Full band draft",
     origin: "audio-full-band-draft",
     matching: undefined,
     duration,
@@ -53,12 +53,12 @@ export async function importFullBandStemSet(
       onProgress: (progress) => options.onProgress?.(instrument, progress),
     });
     charts[instrument] = result.chart;
-    warnings.push(...result.warnings.map((warning) => \`\${instrument}: \${warning}\`));
+    warnings.push(...result.warnings.map((warning) => `${instrument}: ${warning}`));
     backing ??= result.buffer;
   }
   return {
     chart: combineCharts(charts, original.name),
-    warnings: [\`Full-band draft combined \${order.join(", ")} on the original recording timeline.\`, ...warnings],
+    warnings: [`Full-band draft combined ${order.join(", ")} on the original recording timeline.`, ...warnings],
     buffer: backing!,
   };
 }
