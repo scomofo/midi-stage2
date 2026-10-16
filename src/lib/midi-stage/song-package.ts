@@ -31,9 +31,9 @@ export type SongPackage = {
 };
 
 function asset(raw: unknown, expectedRole: SongPackageAsset["role"]): SongPackageAsset {
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new Error(\`Package \${expectedRole} asset must be an object.\`);
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new Error(`Package ${expectedRole} asset must be an object.`);
   const value=raw as Record<string,unknown>;
-  if(value.role!==expectedRole) throw new Error(\`Package asset role must be \${expectedRole}.\`);
+  if(value.role!==expectedRole) throw new Error(`Package asset role must be ${expectedRole}.`);
   if(typeof value.name!=="string"||!value.name.trim()) throw new Error("Package asset needs a name.");
   if("bytes" in value && (!Number.isInteger(value.bytes)||Number(value.bytes)<0)) throw new Error("Package asset byte size is invalid.");
   return {...value,name:value.name.trim()} as SongPackageAsset;
@@ -83,7 +83,7 @@ export function makeSongPackage(chart: SharedChart, options: {
   createdAt?: string;
 } = {}): SongPackage {
   return validateSongPackage({
-    schema:SONG_PACKAGE_SCHEMA,version:SONG_PACKAGE_VERSION,id:\`package-\${chart.id}\`,title:chart.title,
+    schema:SONG_PACKAGE_SCHEMA,version:SONG_PACKAGE_VERSION,id:`package-${chart.id}`,title:chart.title,
     createdAt:options.createdAt??new Date().toISOString(),
     ...(options.masterAudioName?{masterAudio:{role:"master",name:options.masterAudioName}}:{}),
     stems:options.stems??[],
