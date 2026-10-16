@@ -1,4 +1,4 @@
-import {describe,expect,it} from "vitest";
+import {describe,expect,it} from "./test-compat.ts";
 import {duplicateRows,quantizeRows,shiftRows} from "./authoring-operations.ts";
 const rows=[{id:1,time:"0.123",duration:"0.31",pitch:"60"},{id:2,time:"0.52",duration:"0.2",pitch:"62"}];
 describe("authoring operations",()=>{
