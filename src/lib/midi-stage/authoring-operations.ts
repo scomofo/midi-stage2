@@ -5,7 +5,6 @@ export type AuthoringRow = {
   pitch?: string;
   string?: string;
   fret?: string;
-  [key: string]: unknown;
 };
 
 function number(text: string | undefined, label: string) {
