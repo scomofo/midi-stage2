@@ -1,5 +1,6 @@
 import { CHART_SCHEMA, validateSharedChart, type SharedChart } from "./chart-format.ts";
 import { INSTRUMENTS, type GuitarPosition } from "./types.ts";
+import { solveGuitarFingering } from "./guitar-fingering-solver.ts";
 import type { KeyboardEvent } from "./keyboard-draft.ts";
 
 export const STANDARD_GUITAR_TUNING = [40, 45, 50, 55, 59, 64] as const;
@@ -10,43 +11,6 @@ type Candidate = {
   string: GuitarPosition["string"];
   fret: number;
 };
-
-function candidatePositions(pitch: number, tuning: readonly number[]) {
-  const positions: { string: GuitarPosition["string"]; fret: number }[] = [];
-  for (let lowIndex = 0; lowIndex < tuning.length; lowIndex++) {
-    const fret = pitch - tuning[lowIndex]!;
-    if (fret >= 0 && fret <= 24) {
-      positions.push({ string: (6 - lowIndex) as GuitarPosition["string"], fret });
-    }
-  }
-  return positions;
-}
-
-function choosePosition(
-  event: KeyboardEvent,
-  tuning: readonly number[],
-  activeUntil: number[],
-  previousFret: number,
-): Candidate | null {
-  const positions = candidatePositions(event.pitchMidi, tuning)
-    .filter((position) => activeUntil[position.string] <= event.startTimeSeconds + 0.015);
-
-  if (!positions.length) return null;
-
-  const ranked = positions
-    .map((position) => ({
-      ...position,
-      cost:
-        Math.abs(position.fret - previousFret) * 1.5 +
-        position.fret * 0.08 +
-        (position.fret > 17 ? 4 : 0) +
-        (position.string === 1 || position.string === 6 ? 0.2 : 0),
-    }))
-    .sort((a, b) => a.cost - b.cost || a.fret - b.fret || b.string - a.string);
-
-  const selected = ranked[0]!;
-  return { event, string: selected.string, fret: selected.fret };
-}
 
 export function makeGuitarDraft(
   events: KeyboardEvent[],
@@ -74,7 +38,8 @@ export function makeGuitarDraft(
 
   const limited = candidates.length > MAX_GUITAR_DRAFT_NOTES;
   const selectedEvents = candidates.slice(0, MAX_GUITAR_DRAFT_NOTES);
-  const activeUntil = Array(7).fill(-Infinity) as number[];
+  const solved = solveGuitarFingering(selectedEvents, tuning);
+  const droppedUnplayable = solved.dropped.length;
   const notes: Array<{
     time: number;
     duration: number;
@@ -82,33 +47,18 @@ export function makeGuitarDraft(
     velocity: number;
     confidence?: number;
     guitarPosition: GuitarPosition;
-  }> = [];
-  let previousFret = 5;
-  let droppedUnplayable = 0;
-
-  for (const event of selectedEvents) {
-    const placement = choosePosition(event, tuning, activeUntil, previousFret);
-    if (!placement) {
-      droppedUnplayable++;
-      continue;
-    }
-
+  }> = solved.assignments.map((event) => {
     const time = Math.max(0, Math.round(event.startTimeSeconds * 1e6) / 1e6);
     const end = Math.min(duration, event.startTimeSeconds + event.durationSeconds);
-    const noteDuration = Math.max(0.02, Math.round((end - time) * 1e6) / 1e6);
-    const velocity = Math.max(1, Math.min(127, Math.round(event.amplitude * 127)));
-
-    notes.push({
+    return {
       time,
-      duration: noteDuration,
+      duration: Math.max(0.02, Math.round((end - time) * 1e6) / 1e6),
       pitch: event.pitchMidi,
-      velocity,
+      velocity: Math.max(1, Math.min(127, Math.round(event.amplitude * 127))),
       confidence: Math.max(0, Math.min(1, event.amplitude)),
-      guitarPosition: { string: placement.string, fret: placement.fret },
-    });
-    activeUntil[placement.string] = time + noteDuration;
-    previousFret = placement.fret;
-  }
+      guitarPosition: { string: event.string, fret: event.fret },
+    };
+  });
 
   if (!notes.length) {
     throw new Error("No playable guitar notes were found. Try a clean isolated guitar stem, or import authored tablature.");
