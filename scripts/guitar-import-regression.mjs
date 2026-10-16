@@ -209,8 +209,27 @@ try {
   assert.equal(cueChart.parts[2].notes.length, 15);
   assert.equal(cueChart.parts[2].notes[0].time, 0.3125);
   await capture('guitar-import-cue-desktop');
+
+  phase = 'direction and sound offsets use playback timing';
+  const metronome = '<direction-type><metronome><beat-unit>quarter</beat-unit><per-minute>96</per-minute></metronome></direction-type>';
+  for (const [index, direction] of [
+    `<direction>${metronome}<offset>4</offset><sound tempo="96"/></direction>`,
+    `<direction>${metronome}<offset sound="yes">4</offset><sound tempo="96"><offset>0</offset></sound></direction>`,
+  ].entries()) {
+    const filename = `offset-${index + 1}.musicxml`;
+    await upload(filename, xml.replace(/<direction>[\s\S]*?<\/direction>/, direction));
+    await library.getByText(filename, { exact: true }).waitFor();
+    await library.getByRole('heading', { name: 'Review the guitar arrangement', exact: true }).waitFor();
+    assert.equal(await library.locator('tbody tr').count(), 16);
+    assert.equal(await library.getByLabel('Note 1 time', { exact: true }).inputValue(), '0');
+    assert.equal(await library.getByLabel('Chart tempo', { exact: true }).inputValue(), '96');
+  }
+  await capture('guitar-import-offset-desktop');
+  await upload('delayed-tempo.musicxml', xml.replace(/<direction>[\s\S]*?<\/direction>/, '<sound tempo="96"><offset>4</offset></sound>'));
+  await library.getByRole('alert').filter({ hasText: /initial tempo at the start/ }).waitFor();
+  assert.equal(await add.count(), 0, 'a delayed initial tempo cannot create a chart at the wrong speed');
   assert.deepEqual(errors, []);
-  console.log('PASS: MusicXML preview, correction validation, tempo scaling, export, six-string MIDI scoring, independent unisons/holds, playback gate, persistence, duplicate identity, restore/add/remove, cancelled-edit isolation and silent cue omission/timing. Desktop only.');
+  console.log('PASS: MusicXML preview, correction validation, tempo scaling, export, six-string MIDI scoring, independent unisons/holds, playback gate, persistence, duplicate identity, restore/add/remove, cancelled-edit isolation, silent cue omission/timing and playback offsets. Desktop only.');
 } catch (error) {
   console.error(`Guitar import phase: ${phase}`);
   const page = browser.contexts()[0]?.pages()[0];

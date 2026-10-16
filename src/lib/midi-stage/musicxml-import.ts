@@ -145,25 +145,41 @@ export function importGuitarMusicXml(
         furthest = Math.max(furthest, cursor);
         previousStart = null;
       } else if (tag === "direction" || tag === "sound") {
-        const offset = tag === "direction" && text(element, "offset")
-          ? number(text(element, "offset"), "Direction offset", -1000000) / divisions : 0;
-        const at = measureStart + cursor + offset;
-        if (!Number.isFinite(at) || at < 0) fail("A direction has invalid timing.");
+        const offsetOf = (offset?: Element) => {
+          if (!offset) return 0;
+          const value = number(offset.textContent, "Direction/sound offset", -1000000);
+          if (value === 0) return 0;
+          if (!divisions) fail("Set divisions before direction/sound offsets.");
+          return value / divisions;
+        };
+        const atOffset = (offset: number) => {
+          const at = measureStart + cursor + offset;
+          if (!Number.isFinite(at) || at < 0) fail("A direction/sound has invalid timing.");
+          return at;
+        };
+        const directionOffset = tag === "direction" ? child(element, "offset") : undefined;
+        const visualOffset = offsetOf(directionOffset);
+        const playbackOffset = directionOffset?.getAttribute("sound") === "yes" ? visualOffset : 0;
         const sounds = tag === "sound" ? [element] : descendants(element, "sound");
         for (const sound of sounds) {
+          const ownOffset = child(sound, "offset");
+          const at = atOffset(ownOffset ? offsetOf(ownOffset) : playbackOffset);
           if (sound.hasAttribute("tempo")) tempos.push({ time: at, bpm: number(sound.getAttribute("tempo"), "Tempo", 20, 400) });
           if (descendants(sound, "swing").length && !descendants(sound, "straight").length) fail("Export swing as explicit note durations before importing.");
         }
-        for (const mark of descendants(element, "metronome")) {
+        // Explicit playback tempo supersedes the printed metronome, including
+        // its timing; otherwise a visual mark could mask a delayed sound tempo.
+        const metronomes = sounds.some((sound) => sound.hasAttribute("tempo")) ? [] : descendants(element, "metronome");
+        for (const mark of metronomes) {
           const unit = { whole: 4, half: 2, quarter: 1, eighth: 0.5, "16th": 0.25 }[text(mark, "beat-unit")];
           if (!unit || children(mark, "beat-unit").length !== 1) fail("Use a numeric metronome mark for the initial tempo.");
           const dots = children(mark, "beat-unit-dot").length;
           const bpm = number(text(mark, "per-minute"), "Metronome tempo", 1, 1000) * unit * (2 - 1 / 2 ** dots);
-          tempos.push({ time: at, bpm });
+          tempos.push({ time: atOffset(playbackOffset), bpm });
         }
         for (const mark of descendants(element, "rehearsal")) {
           const label = mark.textContent?.trim().slice(0, 160);
-          if (label) sections.push({ time: at, name: label });
+          if (label) sections.push({ time: atOffset(visualOffset), name: label });
         }
       } else if (tag === "note") {
         const selected = (text(element, "staff") || "1") === staff;
