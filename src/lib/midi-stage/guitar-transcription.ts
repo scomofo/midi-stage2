@@ -1,6 +1,7 @@
 import type { AudioAnalysis, AudioImportProgress, SongAudioSamples } from "./audio-import.ts";
 import { keyboardMono } from "./keyboard-transcription.ts";
 import { makeGuitarDraft } from "./guitar-draft.ts";
+import { cleanGuitarEvents } from "./guitar-event-cleanup.ts";
 import type { KeyboardEvent } from "./keyboard-draft.ts";
 
 function cancelled(signal?: AbortSignal) {
@@ -52,7 +53,7 @@ export async function transcribeGuitarAudio(
   });
 
   cancelled(signal);
-  const result = makeGuitarDraft(events, buffer.duration, filename, fingerprint);
+  const result = makeGuitarDraft(cleanGuitarEvents(events), buffer.duration, filename, fingerprint);
   onProgress?.({ phase: "analyzing", progress: 1 });
   cancelled(signal);
   return result;
