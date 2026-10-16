@@ -166,7 +166,7 @@ export function StageApp() {
   const audioBuffers = useRef(new Map<string, AudioBuffer>());
   const sessionAudioFiles = useRef(new Map<string, Blob>());
   const volatileAudioIds = useRef(new Set<string>());
-  const [importCandidate, setImportCandidate] = useState<{ entry: SavedChart; warnings: string[]; kind: "audio" | "midi" | "chart" | "musicxml"; buffer?: AudioBuffer; audioFile?: File; stemFile?: File; stemMode?: "drums" | "keys" | "guitar" } | null>(null);
+  const [importCandidate, setImportCandidate] = useState<{ entry: SavedChart; warnings: string[]; kind: "audio" | "midi" | "chart" | "musicxml"; buffer?: AudioBuffer; audioFile?: File; stemFile?: File; stemMode?: "drums" | "keys" | "guitar" | "bass" } | null>(null);
   const [chartReviewPending, setChartReviewPending] = useState(false);
   const [audioImportMode, setAudioImportMode] = useState<AudioImportMode>("rhythm");
   const [savingImport, setSavingImport] = useState(false);
@@ -2438,8 +2438,8 @@ export function StageApp() {
               reading={readingImport}
               readingLabel={importProgress?.phase === "checking" ? importProgress.source === "stem" ? "Checking instrument stem…" : "Checking song…"
                 : importProgress?.phase === "decoding" ? importProgress.source === "stem" ? "Decoding instrument stem…" : "Decoding audio…"
-                : importProgress?.phase === "model" ? audioImportMode === "guitar" ? "Loading guitar pitch model…" : "Loading keyboard transcriber…"
-                : importProgress?.phase === "analyzing" ? audioImportMode === "keys" ? "Transcribing keyboard notes…" : audioImportMode === "guitar" ? "Building a six-string guitar draft…" : audioImportMode === "drums" ? "Building a drum draft…" : "Finding rhythm hits…"
+                : importProgress?.phase === "model" ? audioImportMode === "guitar" ? "Loading guitar pitch model…" : audioImportMode === "bass" ? "Loading bass pitch model…" : "Loading keyboard transcriber…"
+                : importProgress?.phase === "analyzing" ? audioImportMode === "keys" ? "Transcribing keyboard notes…" : audioImportMode === "guitar" ? "Building a six-string guitar draft…" : audioImportMode === "bass" ? "Building a bass draft…" : audioImportMode === "drums" ? "Building a drum draft…" : "Finding rhythm hits…"
                 : undefined}
               readingProgress={importProgress?.phase === "analyzing" ? importProgress.progress : undefined}
               onCancel={cancelSongImport}
