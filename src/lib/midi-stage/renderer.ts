@@ -1,4 +1,5 @@
 import type { Callout, ChartNote, Flash, Grade, Instrument, Particle, Player, Song } from "./types";
+import { highwayReadability } from "./highway-readability.ts";
 import { Judge, clamp, currentHarmony, keyLabel, KEYS } from "./engine";
 import type { Feel, GoboMotion, GoboPattern, HeadCue } from "./feel";
 import { createClubArt, createNoteArt, createPerformerArt } from "./concert-art";
@@ -1352,7 +1353,7 @@ export class StageRenderer {
             ctx.shadowColor = color;
             ctx.shadowBlur = 10 * state.feel.trails;
           }
-          ribbon(0.1, hexA(color, n.state === 2 ? 0.14 : isHeld ? 0.8 : 0.42));
+          ribbon(0.1 * readability.sustainScale, hexA(color, n.state === 2 ? 0.14 : isHeld ? 0.8 : 0.42));
           ctx.shadowBlur = 0;
           ribbon(0.022, hexA("#e8fff4", n.state === 2 ? 0.08 : isHeld ? 0.94 : 0.55));
           // Only show an end cap when the actual release point is in view;
@@ -1376,7 +1377,7 @@ export class StageRenderer {
 
         if (n.chord && n.lanes && n.lanes[0] === n.lane) {
           const mates = n.lanes.map((l) => point(l + 0.5, pr));
-          if (pr > 0.42 && n.name) {
+          if (pr > 0.42 && n.name && readability.showChordLabels) {
             const center = mates.reduce((s, m) => s + m.x, 0) / mates.length;
             this.text(
               `${n.roman ? n.roman + "  " : ""}${n.name}`,
@@ -1390,7 +1391,7 @@ export class StageRenderer {
         }
 
         const alpha = n.state === 2 ? 0.22 : isPop ? 0.95 * (1 - popK) : 0.95;
-        const grow = state.reduced ? 1 : isPop ? 1 + popK * 0.55 : pr > 0.82 && n.state === 0 ? 1.06 : 1;
+        const grow = (state.reduced ? 1 : isPop ? 1 + popK * 0.55 : pr > 0.82 && n.state === 0 ? 1.06 : 1) * readability.attackScale;
         const rw = Math.min(laneCount === 1 ? 70 : 42, Math.max(4.5, lw * 0.37)) * pos.scale * grow;
         if (strings && n.guitarPosition) {
           // Authored fret numbers are the target; zero is an open string.
@@ -1455,6 +1456,7 @@ export class StageRenderer {
       };
 
       const notes = judge.notes;
+      const readability = highwayReadability(notes, t, state.speed);
       const candidates = rendererNoteWindow(notes, t, state.speed);
       ctx.save();
       ctx.beginPath();
