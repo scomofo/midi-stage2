@@ -25,8 +25,27 @@ export function drumFixture(sampleRate = 44100, channels = 1) {
     /** @param {number} i */ getChannelData: i => buffers[i], events };
 }
 
-export function drumWav() {
+export function stemPairFixture() {
   const source = drumFixture();
+  const sampleRate = source.sampleRate;
+  const stem = new Float32Array(9 * sampleRate);
+  stem.set(source.getChannelData(0), sampleRate);
+  const backing = new Float32Array(10 * sampleRate);
+  backing.set(stem);
+  // A separate bass attack in the full mix must not enter the isolated drum chart.
+  for (let i = 0; i < sampleRate * 0.3; i++) {
+    const t = i / sampleRate;
+    backing[Math.round(0.3 * sampleRate) + i] += 0.7 * Math.sin(2 * Math.PI * 65 * t) * Math.exp(-t / 0.06);
+  }
+  /** @param {Float32Array<ArrayBuffer>} data */
+  const buffer = (data) => ({ sampleRate, duration: data.length / sampleRate, length: data.length, numberOfChannels: 1,
+    /** @param {number} index */
+    getChannelData(index) { if (index !== 0) throw new RangeError("Only one fixture channel exists."); return data; },
+  });
+  return { backing: buffer(backing), stem: buffer(stem) };
+}
+
+export function drumWav(source = drumFixture()) {
   const samples = source.getChannelData(0);
   const wav = Buffer.alloc(44 + samples.length * 2);
   wav.write('RIFF'); wav.writeUInt32LE(wav.length - 8, 4); wav.write('WAVEfmt ', 8);

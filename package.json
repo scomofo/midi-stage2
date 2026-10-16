@@ -31,7 +31,8 @@
     "test:graphics": "node scripts/graphics-regression.mjs",
     "test:guitar-import": "node scripts/guitar-import-regression.mjs",
     "test:performance-hud": "node scripts/performance-hud-regression.mjs",
-    "test:audio-drums": "node scripts/audio-drums-regression.mjs"
+    "test:audio-drums": "node scripts/audio-drums-regression.mjs",
+    "test:drum-stems": "node scripts/audio-drums-regression.mjs http://127.0.0.1:8082 --stems-only"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.4",

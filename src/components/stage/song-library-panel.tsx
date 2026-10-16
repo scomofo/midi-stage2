@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { AudioSourcePreview } from "./audio-source-preview";
 import { GuitarImportReview } from "./guitar-import-review";
 import { DrumImportReview } from "./drum-import-review";
+import { DrumStemImport } from "./drum-stem-import";
 import type { SharedChart } from "@/lib/midi-stage/chart-format";
 import { isReviewableDrumDraft } from "@/lib/midi-stage/drum-chart-review";
 import { formatTime } from "@/lib/midi-stage/engine";
@@ -25,6 +26,7 @@ type SongLibraryPanelProps = {
     kind?: "audio" | "midi" | "chart" | "musicxml";
     chart?: SharedChart;
     audioFile?: File;
+    stemName?: string;
     name: string;
     fileName: string;
     bpm: number;
@@ -51,6 +53,7 @@ type SongLibraryPanelProps = {
   onReviewApply?: (chart: SharedChart) => void;
   audioMode?: "rhythm" | "drums";
   onAudioMode?: (mode: "rhythm" | "drums") => void;
+  onStemFiles?: (original: File, stem: File) => void;
 };
 
 export function SongLibraryPanel({
@@ -74,6 +77,7 @@ export function SongLibraryPanel({
   onReviewApply,
   audioMode = "rhythm",
   onAudioMode,
+  onStemFiles,
 }: SongLibraryPanelProps) {
   const [dragging, setDragging] = useState(false);
   const [fileNotice, setFileNotice] = useState("");
@@ -164,6 +168,7 @@ export function SongLibraryPanel({
               ? "Estimate kick, snare and hi-hat from a recording, then review each hit. A drum-only track works best. Changing mode rebuilds the audio preview."
               : "One rhythm lane from detected attacks, with your original recording. This choice applies to audio files only."}</p>
           </fieldset> : null}
+          {audioMode === "drums" && onStemFiles ? <div className="mb-4"><DrumStemImport disabled={busy} onImport={onStemFiles} /></div> : null}
           <label
             className={cn(
               "flex min-h-36 cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed px-4 py-5 text-center transition-colors focus-within:outline-2 focus-within:outline-offset-3 focus-within:outline-accent",
@@ -292,6 +297,7 @@ export function SongLibraryPanel({
                 {drumDraft ? "Drum draft · estimated types and timing" : "Rhythm chart · detected hits"}
               </p>
             ) : null}
+            {drumDraft && candidate.stemName ? <p className="mt-2 break-all text-xs leading-relaxed text-muted">Analysis stem: {candidate.stemName}. The original song supplies backing audio.</p> : null}
             <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 border-y border-border py-3 font-mono text-sm tabular-nums">
               <span>
                 {Number(candidate.bpm.toFixed(2))}{" "}

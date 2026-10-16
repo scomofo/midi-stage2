@@ -25,7 +25,35 @@ Reimporting it preserves chart identity; an existing matching library entry can
 keep its saved recording. JSON alone in a new browser plays the synthesized guide.
 The existing **Rhythm** option keeps its original behavior.
 
-## Stem isolation integration
+## SparkSuite Stem Lab files
+
+[SparkSuite2.0 PR #62](https://github.com/scomofo/SparkSuite2.0/pull/62) adds a
+local stem mixer and a Demucs guide. The lab consumes already separated files;
+it does not perform separation or expose a stem export/service API. MIDI Stage
+uses those same local files, without a second mixer or a cross-app session.
+
+Choose **Drums (draft) → Use a separated drum stem**. Select the **original song**
+for backing audio and the **drum stem** for analysis, then **Build from drum
+stem**. A separate selector makes the drum assignment explicit, so renamed stem
+files work too. Review and save the result through the normal drum workflow.
+Switching Rhythm/Drums rebuilds from the appropriate input and retains the pair
+while its preview exists. Selecting a new song through the ordinary file picker
+starts a fresh import.
+
+Both files are decoded locally and are limited individually to 50 MB and
+1 second–6 minutes. MIDI Stage follows Stem Lab's rule: sample 0 is song time 0;
+leading silence remains, with no trimming, shifting, stretching or sample
+padding. A shorter drum stem ends naturally while the original song continues.
+A stem longer than the original is rejected; select matching files from the
+same song. Equal duration cannot prove alignment or that two files belong to
+the same recording, so the producer must preserve the start position.
+
+Only the original recording is stored for playback. The stem file is needed
+again to regenerate a draft, but is not needed to play a saved reviewed chart.
+Downloaded chart JSON still contains no audio. Keyboard/piano stems do not yet
+produce pitched highways.
+
+## Programmatic stem integration
 
 The isolation feature can supply a decoded, aligned stem without replacing the
 original mix used for playback:
@@ -33,17 +61,17 @@ original mix used for playback:
 ```ts
 const { chart, warnings, buffer: originalBacking } = await importAudioFile(
   originalSongFile,
-  { mode: "drums", analysisBuffer: alignedDrumStem, signal, onProgress },
+  { mode: "drums", analysisFile: drumStemFile, signal, onProgress },
 );
 ```
 
-`analysisBuffer` accepts an AudioBuffer or the equivalent sample interface
+Alternatively, `analysisBuffer` accepts an AudioBuffer or the equivalent sample interface
 (`sampleRate`, `length`, `duration`, `numberOfChannels`, `getChannelData`). Keep
-leading silence, timing and total duration aligned with the original recording;
-the importer rejects a duration mismatch greater than two original audio samples.
-Duration validation cannot detect an equally long shifted stem, so the isolation
-producer must preserve the start position. Do not trim, time-stretch or normalize
-timing independently. Sample-rate conversion must preserve elapsed seconds.
+the source timeline intact. Supply exactly one of `analysisFile` and
+`analysisBuffer`. Shorter stems are accepted without modifying their samples;
+the resulting chart keeps the original recording's duration. A longer stem is
+rejected. File imports fingerprint both inputs. Sample-rate conversion must
+preserve elapsed seconds.
 
 For an already decoded pipeline, `analyzeDecodedSongAudio(stem, name, fingerprint,
 { mode: "drums", signal, onProgress })` returns chart data only and cooperatively
@@ -75,6 +103,12 @@ export/reimport, mode changes, six drum lanes, mapped MIDI judging, original
 backing and IndexedDB reload. CI retains desktop captures and the reviewed chart.
 The production UI check uses `--ui-only`; its import/review/export behavior uses
 the same native decoding and analysis.
+
+`test:drum-stems` focuses on the paired-file path: native WAV decoding, a known
+1.3-second first drum attack after leading silence, a nine-second stem against
+a ten-second backing, mode rebuilds, reviewed export, six-lane MIDI scoring,
+saved backing reload, longer-stem rejection and cancellation. Unit tests also
+verify that stem samples remain unchanged and late cancelled decodes are ignored.
 
 ## Next: keyboard stems
 

@@ -1,7 +1,7 @@
 import { describe, it, mock, type TestContext } from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { drumFixture } from "../../../scripts/fixtures/drum-draft.mjs";
+import { drumFixture, stemPairFixture } from "../../../scripts/fixtures/drum-draft.mjs";
 import {
   analyzeSongAudio,
   decodeSongAudio,
@@ -151,7 +151,53 @@ describe("audio file import", () => {
     assert.ok(result.chart.parts[0]!.notes.length > 20);
     assert.equal(result.chart.audioName, "Full mix.wav");
     assert.match(result.warnings.join(" "), /aligned stem.*original selected recording/);
-    await assert.rejects(importAudioFile(new File(["mix"], "Mix.wav"), { mode: "drums", analysisBuffer: { ...stem, duration: 7 } }), /full timeline/);
+    await assert.rejects(importAudioFile(new File(["mix"], "Mix.wav"), { mode: "drums", analysisBuffer: { ...stem, duration: 9 } }), /longer than the original/);
+  });
+
+  it("accepts Stem Lab files with leading silence and a shorter stem, keeping the original backing and end time", async (context) => {
+    installMetadataAudio(context, 10);
+    const { backing, stem } = stemPairFixture();
+    const original = samples(10) as AudioBuffer;
+    const before = stem.getChannelData(0).slice();
+    installDecoder(context, async (data) => new TextDecoder().decode(data) === "original" ? original : stem as unknown as AudioBuffer);
+    const file = new File(["original"], "Full song.wav");
+    const analysisFile = new File(["stem"], "drums.wav");
+    const progress: AudioImportProgress[] = [];
+    const result = await importAudioFile(file, { mode: "drums", analysisFile, onProgress: (p) => progress.push(p) });
+    assert.equal(backing.duration, 10);
+    assert.equal(result.buffer, original, "an isolated stem must never become backing audio");
+    assert.equal(result.chart.duration, 10);
+    assert.equal(result.chart.audioName, "Full song.wav");
+    assert.equal(result.chart.parts[0]!.notes[0]!.time, 1.3, "leading silence stays on the song clock");
+    assert.ok(result.chart.parts[0]!.notes.every((note) => note.time + note.duration <= 9));
+    assert.deepEqual(stem.getChannelData(0), before, "no sample trimming, padding or alignment");
+    assert.match(result.warnings.join(" "), /drums.wav.*original selected recording/);
+    assert.ok(progress.some((p) => p.phase === "decoding" && p.source === "stem"));
+    const again = await importAudioFile(file, { mode: "drums", analysisFile });
+    const other = await importAudioFile(file, { mode: "drums", analysisFile: new File(["different stem bytes"], "drums.wav") });
+    assert.equal(again.chart.id, result.chart.id);
+    assert.notEqual(other.chart.id, result.chart.id, "both source fingerprints contribute to stem chart identity");
+  });
+
+  it("validates stem inputs before reading the original and cancels a completed stem decode before analysis", async (context) => {
+    installMetadataAudio(context, 10);
+    const file = new File(["original"], "Song.wav");
+    const read = context.mock.method(file, "arrayBuffer");
+    await assert.rejects(importAudioFile(file, { analysisFile: new File(["not audio"], "Chart.json") }), /audio file for the drum stem/);
+    await assert.rejects(importAudioFile(file, { analysisFile: new File([], "drums.wav") }), /empty/);
+    await assert.rejects(importAudioFile(file, { analysisFile: new File(["stem"], "drums.wav"), analysisBuffer: drumFixture() }), /one analysis source/);
+    assert.equal(read.mock.callCount(), 0);
+    const controller = new AbortController();
+    let decoding = 0;
+    installDecoder(context, async () => {
+      decoding++;
+      if (decoding === 2) controller.abort();
+      return (decoding === 1 ? samples(10) : drumFixture()) as AudioBuffer;
+    });
+    const progress: AudioImportProgress[] = [];
+    await assert.rejects(importAudioFile(file, { mode: "drums", analysisFile: new File(["stem"], "drums.wav"), signal: controller.signal, onProgress: (p) => progress.push(p) }), { name: "AbortError" });
+    assert.equal(decoding, 2);
+    assert.equal(progress.some((p) => p.phase === "analyzing"), false);
   });
 
   it("cancels cooperative drum analysis without returning a partial chart", async (context) => {

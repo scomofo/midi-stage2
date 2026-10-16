@@ -159,6 +159,10 @@ library to cancel; long analysis yields so the controls remain responsive.
   and download the chart. Drum-only stems work best; this is an editable estimate,
   not source separation or a complete drum transcription. Audio is limited to
   50 MB and six minutes. Tempo changes playback speed and pitch.
+  To use SparkSuite Stem Lab files, choose **Drums (draft) → Use a separated drum
+  stem**, select the original song and its `drums.wav`, then **Build from drum
+  stem**. Detection uses the stem; saved playback uses the original song. Leading
+  silence stays intact, and a shorter stem ends without shortening the song.
 - **MIDI (.mid/.midi):** preserves note timing, chords and holds from constant-tempo
   format 0/1 files, grouping General MIDI drums, guitar, bass and other instruments
   into the stage parts. Unsupported percussion/expression is reported. Variable

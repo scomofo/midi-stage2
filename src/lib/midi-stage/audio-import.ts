@@ -1,12 +1,11 @@
 import { CHART_SCHEMA, validateSharedChart, type SharedChart } from "./chart-format.ts";
 import { INSTRUMENTS } from "./types.ts";
 import { detectDrumAttacks } from "./audio-drum-analysis.ts";
+import { isSupportedAudioFile } from "./audio-file-types.ts";
+export { AUDIO_IMPORT_ACCEPT, isSupportedAudioFile } from "./audio-file-types.ts";
 
 export const MAX_AUDIO_IMPORT_BYTES = 50 * 1024 * 1024;
 export const MAX_AUDIO_SECONDS = 360;
-export const AUDIO_IMPORT_ACCEPT = ".mp3,.wav,.wave,.flac,.m4a,.aac,.ogg,.oga,.opus,.webm,.aif,.aiff,audio/*";
-
-const AUDIO_EXTENSION = /\.(mp3|wav|wave|flac|m4a|aac|ogg|oga|opus|webm|aif|aiff)$/i;
 const HOP_SECONDS = 0.02;
 const MIN_ONSET_GAP = 0.16;
 const MAX_ONSETS = 3000;
@@ -14,11 +13,13 @@ const ANALYSIS_CHUNK_SAMPLES = 131072;
 
 export type SongAudioSamples = Pick<AudioBuffer, "sampleRate" | "length" | "duration" | "numberOfChannels" | "getChannelData">;
 export type AudioAnalysis = { chart: SharedChart; warnings: string[] };
-export type AudioImportProgress = { phase: "checking" | "decoding" | "analyzing"; progress?: number };
+export type AudioImportProgress = { phase: "checking" | "decoding" | "analyzing"; progress?: number; source?: "stem" };
 export type AudioImportOptions = {
   mode?: "rhythm" | "drums";
-  /** Optional isolated audio for analysis; the selected file remains the backing recording. Preserve its complete timeline. */
+  /** Optional isolated audio for analysis; sample 0 remains song time 0. A shorter stem ends early. */
   analysisBuffer?: SongAudioSamples;
+  /** File handoff from the SparkSuite Stem Lab / Demucs workflow. The original file remains the backing recording. */
+  analysisFile?: File;
   signal?: AbortSignal;
   onProgress?: (progress: AudioImportProgress) => void;
 };
@@ -42,11 +43,6 @@ function yieldToBrowser(signal?: AbortSignal): Promise<void> {
     }, 0);
     signal?.addEventListener("abort", onAbort, { once: true });
   });
-}
-
-export function isSupportedAudioFile(file: Pick<File, "name" | "type">): boolean {
-  if (/\.(mid|midi|json)$/i.test(file.name) || /midi/i.test(file.type)) return false;
-  return AUDIO_EXTENSION.test(file.name) || file.type.startsWith("audio/");
 }
 
 function checkAudioSize(size: number) {
@@ -312,8 +308,8 @@ export function analyzeSongAudio(buffer: SongAudioSamples, filename: string, fin
   return next.value;
 }
 
-/** Read, fingerprint, decode, and analyze a user-selected file entirely locally. */
-export async function importAudioFile(file: File, options: AudioImportOptions = {}): Promise<AudioAnalysis & { buffer: AudioBuffer }> {
+/** Read and decode either source locally, hashing before native decoding can detach the bytes. */
+async function readAudioSource(file: File, options: Pick<AudioImportOptions, "signal" | "onProgress">) {
   const { signal, onProgress } = options;
   throwIfCancelled(signal);
   checkAudioSize(file.size);
@@ -336,12 +332,45 @@ export async function importAudioFile(file: File, options: AudioImportOptions = 
   // Native decoding cannot be aborted, but a dismissed import must never start
   // the expensive sample analysis when that outstanding decode completes.
   throwIfCancelled(signal);
-  const analysisBuffer = options.analysisBuffer ?? buffer;
-  if (Math.abs(analysisBuffer.duration - buffer.duration) > 2 / buffer.sampleRate) {
-    throw new Error("The isolated stem must cover the original recording's full timeline. Keep leading silence and pad or crop its end to the original length.");
+  if (!Number.isFinite(buffer.duration) || buffer.duration < 1 || buffer.duration > MAX_AUDIO_SECONDS) {
+    throw new Error("Choose a song between 1 second and 6 minutes long.");
   }
-  const analysis = await analyzeDecodedSongAudio(analysisBuffer, file.name, fingerprint, options);
-  if (options.analysisBuffer) analysis.warnings.push("The chart was analyzed from an aligned stem; playback uses the original selected recording.");
+  return { buffer, fingerprint };
+}
+
+/** Read, fingerprint, decode, and analyze user-selected files entirely locally. */
+export async function importAudioFile(file: File, options: AudioImportOptions = {}): Promise<AudioAnalysis & { buffer: AudioBuffer }> {
+  const { signal, onProgress, analysisFile } = options;
+  throwIfCancelled(signal);
+  if (analysisFile && options.analysisBuffer) throw new Error("Choose one analysis source: a stem file or a decoded stem.");
+  if (analysisFile) {
+    checkAudioSize(analysisFile.size);
+    if (!isSupportedAudioFile(analysisFile)) throw new Error("Choose a browser-supported audio file for the drum stem.");
+  }
+  const { buffer, fingerprint: backingFingerprint } = await readAudioSource(file, options);
+  let fingerprint = backingFingerprint;
+  let analysisBuffer = options.analysisBuffer ?? buffer;
+  const stemProgress = (progress: AudioImportProgress) => onProgress?.({ ...progress, source: "stem" });
+  if (analysisFile) {
+    const stem = await readAudioSource(analysisFile, { signal, onProgress: stemProgress });
+    analysisBuffer = stem.buffer;
+    const hash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`${backingFingerprint}:${stem.fingerprint}`));
+    fingerprint = Array.from(new Uint8Array(hash), (value) => value.toString(16).padStart(2, "0")).join("");
+    throwIfCancelled(signal);
+  }
+  // Stem Lab's timeline rule: keep every decoded sample at its original time.
+  // A shorter stem ends naturally; do not pad, stretch or trim either input.
+  if (analysisBuffer.duration > buffer.duration) {
+    throw new Error("The drum stem is longer than the original recording. Choose matching files from the same song; keep leading silence and do not shift or trim the stem.");
+  }
+  const hasStem = Boolean(analysisFile || options.analysisBuffer);
+  const analysis = await analyzeDecodedSongAudio(analysisBuffer, file.name, fingerprint, {
+    ...options, onProgress: hasStem ? stemProgress : onProgress,
+  });
+  if (hasStem) {
+    analysis.chart = validateSharedChart({ ...analysis.chart, duration: buffer.duration });
+    analysis.warnings.push(`The chart was analyzed from an aligned stem${analysisFile ? ` (${analysisFile.name})` : ""}; playback uses the original selected recording. Leading silence is kept. A shorter stem ends early without moving its hits.`);
+  }
   return { ...analysis, buffer };
 }
 
