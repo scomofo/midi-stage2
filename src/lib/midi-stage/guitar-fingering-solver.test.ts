@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "./test-compat.ts";
 import { solveGuitarFingering } from "./guitar-fingering-solver.ts";
 
 const tuning = [40, 45, 50, 55, 59, 64];

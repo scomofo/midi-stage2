@@ -43,9 +43,12 @@ export function validateSongPackage(raw: unknown): SongPackage {
   if(!raw||typeof raw!=="object"||Array.isArray(raw)) throw new Error("Song package must be an object.");
   const value=raw as Record<string,unknown>;
   if(value.schema!==SONG_PACKAGE_SCHEMA||value.version!==SONG_PACKAGE_VERSION) throw new Error("Unsupported song package format.");
-  if(typeof value.id!=="string"||!value.id.trim()) throw new Error("Song package needs an id.");
-  if(typeof value.title!=="string"||!value.title.trim()) throw new Error("Song package needs a title.");
-  if(typeof value.createdAt!=="string"||!Number.isFinite(Date.parse(value.createdAt))) throw new Error("Song package createdAt is invalid.");
+  const id = value.id;
+  const title = value.title;
+  const createdAt = value.createdAt;
+  if(typeof id!=="string"||!id.trim()) throw new Error("Song package needs an id.");
+  if(typeof title!=="string"||!title.trim()) throw new Error("Song package needs a title.");
+  if(typeof createdAt!=="string"||!Number.isFinite(Date.parse(createdAt))) throw new Error("Song package createdAt is invalid.");
   const stems=Array.isArray(value.stems)?value.stems.map(v=>asset(v,"stem")):[];
   const chartsRaw=value.charts;
   if(!chartsRaw||typeof chartsRaw!=="object"||Array.isArray(chartsRaw)) throw new Error("Song package needs charts.");
@@ -60,8 +63,8 @@ export function validateSongPackage(raw: unknown): SongPackage {
   const source=(provenance as Record<string,unknown>).source;
   if(!["authored","audio-analysis","mixed"].includes(String(source))) throw new Error("Song package provenance source is invalid.");
   return {
-    schema:SONG_PACKAGE_SCHEMA,version:SONG_PACKAGE_VERSION,id:value.id.trim(),title:value.title.trim(),
-    createdAt:new Date(value.createdAt).toISOString(),
+    schema:SONG_PACKAGE_SCHEMA,version:SONG_PACKAGE_VERSION,id:id.trim(),title:title.trim(),
+    createdAt:new Date(createdAt).toISOString(),
     ...(value.masterAudio?{masterAudio:asset(value.masterAudio,"master")}:{ }),
     stems,
     charts,

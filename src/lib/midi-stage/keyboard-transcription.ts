@@ -1,5 +1,6 @@
 import type { AudioAnalysis, AudioImportProgress, SongAudioSamples } from "./audio-import.ts";
-import { makeKeyboardDraft, type KeyboardEvent } from "./keyboard-draft.ts";
+import { makeKeyboardDraft } from "./keyboard-draft.ts";
+import { transcribePitchedEvents } from "./pitched-transcription.ts";
 
 function cancelled(signal?: AbortSignal) {
   if (signal?.aborted) throw new DOMException("Song import was cancelled.", "AbortError");
@@ -35,33 +36,12 @@ export async function keyboardMono(buffer: SongAudioSamples, signal?: AbortSigna
   return rendered.getChannelData(0).slice();
 }
 
-/** One worker per import: abort terminates inference and frees all model memory. */
+/** One disposable worker per import: abort terminates inference and frees model memory. */
 export async function transcribeKeyboardAudio(buffer: SongAudioSamples, filename: string, fingerprint: string,
   { signal, onProgress }: { signal?: AbortSignal; onProgress?: (progress: AudioImportProgress) => void } = {}): Promise<AudioAnalysis> {
   onProgress?.({ phase: "analyzing", progress: 0 });
   const samples = await keyboardMono(buffer, signal); cancelled(signal);
-  const events = await new Promise<KeyboardEvent[]>((resolve, reject) => {
-    const worker = new Worker(new URL("./keyboard-transcription.worker.ts", import.meta.url), { type: "module" });
-    let settled = false;
-    const finish = (error?: Error, events?: KeyboardEvent[]) => {
-      if (settled) return;
-      settled = true; signal?.removeEventListener("abort", abort); worker.terminate();
-      if (error) reject(error); else resolve(events!);
-    };
-    const abort = () => finish(new DOMException("Song import was cancelled.", "AbortError"));
-    signal?.addEventListener("abort", abort, { once: true });
-    worker.onerror = () => finish(new Error("The keyboard transcriber could not start. Retry the import in a browser with worker support."));
-    worker.onmessage = ({ data }) => {
-      if (data.type === "progress") onProgress?.({ phase: data.phase, progress: data.progress });
-      else if (data.type === "complete") finish(undefined, data.events);
-      else if (data.type === "error") finish(new Error(data.phase === "model"
-        ? "Keyboard model could not load. Check your connection and retry the import."
-        : "Keyboard transcription failed. Try a shorter, clean piano or keyboard recording."));
-    };
-    try { worker.postMessage({ samples, modelUrl: new URL("/models/basic-pitch/model.json", location.href).href }, [samples.buffer]); }
-    catch { finish(new Error("The keyboard source could not be sent to the transcriber. Retry the import.")); }
-    if (signal?.aborted) abort();
-  });
+  const events = await transcribePitchedEvents(samples, { signal, onProgress, failureLabel: "Keyboard transcription" });
   cancelled(signal);
   const result = makeKeyboardDraft(events, buffer.duration, filename, fingerprint);
   onProgress?.({ phase: "analyzing", progress: 1 }); cancelled(signal);

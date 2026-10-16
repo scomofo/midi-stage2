@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "./test-compat.ts";
 import { highwayReadability, sectionApproach } from "./highway-readability.ts";
 
 function note(time:number):any { return { time, state:0 }; }

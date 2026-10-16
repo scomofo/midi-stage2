@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "./test-compat.ts";
 import { CHART_SCHEMA, validateSharedChart } from "./chart-format.ts";
 import { INSTRUMENTS } from "./types.ts";
 import { scoreChartQuality } from "./chart-quality.ts";

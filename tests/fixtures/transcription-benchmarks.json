@@ -1,0 +1,9 @@
+{
+  "cleanGuitar": {"reference":[{"time":0.10,"duration":0.40,"pitch":40},{"time":0.70,"duration":0.30,"pitch":45}],"detected":[{"time":0.11,"duration":0.38,"pitch":40},{"time":0.72,"duration":0.32,"pitch":45}]},
+  "distortedGuitar": {"reference":[{"time":0.10,"duration":0.55,"pitch":52}],"detected":[{"time":0.11,"duration":0.52,"pitch":52},{"time":0.11,"duration":0.07,"pitch":64}]},
+  "palmMutedGuitar": {"reference":[{"time":0.10,"duration":0.09,"pitch":40},{"time":0.30,"duration":0.08,"pitch":43}],"detected":[{"time":0.105,"duration":0.08,"pitch":40},{"time":0.305,"duration":0.075,"pitch":43}]},
+  "guitarChord": {"reference":[{"time":0.20,"duration":0.40,"pitch":40},{"time":0.20,"duration":0.40,"pitch":47},{"time":0.20,"duration":0.40,"pitch":55}],"detected":[{"time":0.21,"duration":0.38,"pitch":40},{"time":0.205,"duration":0.39,"pitch":47},{"time":0.215,"duration":0.37,"pitch":55}]},
+  "keys": {"reference":[{"time":0.0,"duration":0.5,"pitch":60},{"time":0.0,"duration":0.5,"pitch":64},{"time":0.0,"duration":0.5,"pitch":67}],"detected":[{"time":0.02,"duration":0.48,"pitch":60},{"time":0.01,"duration":0.49,"pitch":64},{"time":0.02,"duration":0.47,"pitch":67}]},
+  "bass": {"reference":[{"time":0.1,"duration":0.35,"pitch":28},{"time":0.6,"duration":0.4,"pitch":33}],"detected":[{"time":0.12,"duration":0.34,"pitch":28},{"time":0.61,"duration":0.38,"pitch":33}]},
+  "drums": {"reference":[{"time":0.1,"duration":0.05,"pitch":36},{"time":0.5,"duration":0.05,"pitch":38},{"time":0.75,"duration":0.05,"pitch":42}],"detected":[{"time":0.11,"duration":0.05,"pitch":36},{"time":0.49,"duration":0.05,"pitch":38},{"time":0.76,"duration":0.05,"pitch":42}]}
+}
