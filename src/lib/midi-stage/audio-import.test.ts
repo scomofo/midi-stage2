@@ -1,6 +1,7 @@
 import { describe, it, mock, type TestContext } from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
+import { drumFixture } from "../../../scripts/fixtures/drum-draft.mjs";
 import {
   analyzeSongAudio,
   decodeSongAudio,
@@ -140,6 +141,31 @@ describe("audio rhythm analysis", () => {
 });
 
 describe("audio file import", () => {
+  it("analyzes an aligned drum stem while keeping the full recording as playback audio", async (context) => {
+    installMetadataAudio(context, 8);
+    const original = samples(8) as AudioBuffer;
+    const stem = drumFixture();
+    installDecoder(context, async () => original);
+    const result = await importAudioFile(new File(["original mix bytes"], "Full mix.wav"), { mode: "drums", analysisBuffer: stem });
+    assert.equal(result.buffer, original);
+    assert.ok(result.chart.parts[0]!.notes.length > 20);
+    assert.equal(result.chart.audioName, "Full mix.wav");
+    assert.match(result.warnings.join(" "), /aligned stem.*original selected recording/);
+    await assert.rejects(importAudioFile(new File(["mix"], "Mix.wav"), { mode: "drums", analysisBuffer: { ...stem, duration: 7 } }), /full timeline/);
+  });
+
+  it("cancels cooperative drum analysis without returning a partial chart", async (context) => {
+    installMetadataAudio(context, 8);
+    installDecoder(context, async () => drumFixture(44100, 2) as unknown as AudioBuffer);
+    const controller = new AbortController();
+    const progress: number[] = [];
+    await assert.rejects(importAudioFile(new File(["drums"], "Drums.wav"), {
+      mode: "drums", signal: controller.signal,
+      onProgress(value) { if (value.phase === "analyzing" && value.progress !== undefined) { progress.push(value.progress); if (value.progress > 0.1) controller.abort(); } },
+    }), { name: "AbortError" });
+    assert.ok(progress.length > 1);
+    assert.ok(Math.max(...progress) < 1);
+  });
   it("recognizes common audio formats without treating MIDI or chart JSON as recordings", () => {
     for (const name of ["Song.MP3", "Song.wav", "Song.flac", "Song.m4a", "Song.ogg", "Song.opus", "Song.aiff"]) {
       assert.equal(isSupportedAudioFile({ name, type: "" }), true, name);

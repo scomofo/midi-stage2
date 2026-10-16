@@ -76,8 +76,10 @@ export function songFromSavedChart(entry: SavedChart): Song {
     ...sharedChartToSong(entry.chart),
     id: entry.id,
     subtitle: entry.fileName,
-    arrangement: entry.chart.guitarMode === "strings" ? "Authored guitar" : entry.audio === true ? "Audio rhythm" : "Imported chart",
-    arrangementDescription: entry.audio === true
+    arrangement: entry.chart.guitarMode === "strings" ? "Authored guitar" : entry.chart.origin === "audio-drums-draft" ? "Drum draft" : entry.audio === true ? "Audio rhythm" : "Imported chart",
+    arrangementDescription: entry.chart.origin === "audio-drums-draft"
+      ? `Estimated drum types and timing; corrections may be needed. ${entry.audio === true ? "The original recording plays with you." : "This chart plays stage instruments; the original recording is not attached."}`
+      : entry.audio === true
       ? "Rhythm chart detected from your audio. Play any MIDI note or the shown key; the original track plays with you."
       : entry.chart.guitarMode === "strings"
       ? "Authored strings and frets. All difficulty levels keep the imported notes. Play along with the guide, or connect guitar MIDI for pitch scoring. Backing audio is not attached."

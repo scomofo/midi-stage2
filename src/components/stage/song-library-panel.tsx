@@ -12,6 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { AudioSourcePreview } from "./audio-source-preview";
 import { GuitarImportReview } from "./guitar-import-review";
+import { DrumImportReview } from "./drum-import-review";
 import type { SharedChart } from "@/lib/midi-stage/chart-format";
 import { formatTime } from "@/lib/midi-stage/engine";
 import { LABELS } from "@/lib/midi-stage/songs";
@@ -47,6 +48,8 @@ type SongLibraryPanelProps = {
   reviewPending?: boolean;
   onReviewPending?: (pending: boolean) => void;
   onReviewApply?: (chart: SharedChart) => void;
+  audioMode?: "rhythm" | "drums";
+  onAudioMode?: (mode: "rhythm" | "drums") => void;
 };
 
 export function SongLibraryPanel({
@@ -68,6 +71,8 @@ export function SongLibraryPanel({
   reviewPending = false,
   onReviewPending,
   onReviewApply,
+  audioMode = "rhythm",
+  onAudioMode,
 }: SongLibraryPanelProps) {
   const [dragging, setDragging] = useState(false);
   const [fileNotice, setFileNotice] = useState("");
@@ -76,6 +81,7 @@ export function SongLibraryPanel({
   const fileRef = useRef<HTMLInputElement>(null);
   const returnToFile = useRef(false);
   const previewRef = useRef<HTMLElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
   const previewTitleRef = useRef<HTMLHeadingElement>(null);
   const errorRef = useRef<HTMLParagraphElement>(null);
   const busy = reading || saving;
@@ -83,11 +89,13 @@ export function SongLibraryPanel({
   const candidateName = candidate?.name;
   const candidateFileName = candidate?.fileName;
   const notice = fileNotice || error;
+  const drumDraft = candidate?.chart?.origin === "audio-drums-draft";
 
   useEffect(() => {
     if (!previewReady) return;
     previewTitleRef.current?.focus({ preventScroll: true });
-    previewRef.current?.scrollIntoView({ block: "start", behavior: "auto" });
+    const viewport = scrollRef.current, preview = previewRef.current;
+    if (viewport && preview) viewport.scrollTop += preview.getBoundingClientRect().top - viewport.getBoundingClientRect().top;
     // The parent refreshes the HUD throughout the session. Only a newly read
     // preview should move focus, never those unrelated renders.
   }, [previewReady, candidateName, candidateFileName]);
@@ -95,7 +103,8 @@ export function SongLibraryPanel({
   useEffect(() => {
     if (!notice) return;
     errorRef.current?.focus({ preventScroll: true });
-    errorRef.current?.scrollIntoView({ block: "nearest", behavior: "auto" });
+    const viewport = scrollRef.current, error = errorRef.current;
+    if (viewport && error) viewport.scrollTop += error.getBoundingClientRect().top - viewport.getBoundingClientRect().top;
   }, [notice]);
 
   useEffect(() => {
@@ -117,7 +126,7 @@ export function SongLibraryPanel({
 
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-col">
-      <div className="flex items-start justify-between gap-3 px-5 pt-5">
+      <div className="flex shrink-0 items-start justify-between gap-3 px-5 pt-5">
         <div className="min-w-0">
           <div className="text-xs font-medium tracking-widest text-accent">MAKE THE SET YOURS</div>
           <h2
@@ -142,8 +151,18 @@ export function SongLibraryPanel({
         </Button>
       </div>
 
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-5 overflow-y-auto px-5 py-5">
+      <div ref={scrollRef} className="flex min-h-0 min-w-0 flex-1 flex-col gap-5 overflow-y-auto px-5 py-5">
         <div>
+          {onAudioMode ? <fieldset disabled={busy} className="mb-4 space-y-2">
+            <legend className="mb-2 text-sm font-medium">Audio highway</legend>
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" variant={audioMode === "rhythm" ? "primary" : "secondary"} aria-pressed={audioMode === "rhythm"} disabled={busy} onClick={() => onAudioMode("rhythm")}>Rhythm</Button>
+              <Button type="button" variant={audioMode === "drums" ? "primary" : "secondary"} aria-pressed={audioMode === "drums"} disabled={busy} onClick={() => onAudioMode("drums")}>Drums (draft)</Button>
+            </div>
+            <p className="text-xs leading-relaxed text-muted">{audioMode === "drums"
+              ? "Estimate kick, snare and hi-hat from a recording, then review each hit. A drum-only track works best. Changing mode rebuilds the audio preview."
+              : "One rhythm lane from detected attacks, with your original recording. This choice applies to audio files only."}</p>
+          </fieldset> : null}
           <label
             className={cn(
               "flex min-h-36 cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed px-4 py-5 text-center transition-colors focus-within:outline-2 focus-within:outline-offset-3 focus-within:outline-accent",
@@ -194,7 +213,7 @@ export function SongLibraryPanel({
           </label>
           <p id="song-file-help" className="mt-3 text-xs leading-relaxed text-muted">
             MP3, WAV, FLAC and other browser-supported audio. Rhythm hits are detected from your
-            track. Audio creates a one-lane rhythm chart and plays your original track. Up to 50 MB
+            track. Choose Rhythm or an editable drum draft; both play your original track. Up to 50 MB
             and 6 minutes.
           </p>
           <p className="mt-2 text-xs leading-relaxed text-muted">
@@ -253,7 +272,8 @@ export function SongLibraryPanel({
             className="min-w-0 rounded-xl border border-accent/30 bg-surface p-4 text-fg"
           >
             <div className="mb-3 flex items-center gap-2 text-xs font-medium tracking-widest text-accent">
-              <Check className="size-4" aria-hidden="true" /> READY FOR THE SETLIST
+              {drumDraft ? <FileMusic className="size-4" aria-hidden="true" /> : <Check className="size-4" aria-hidden="true" />}
+              {drumDraft ? "DRUM DRAFT · REVIEW HITS" : "READY FOR THE SETLIST"}
             </div>
             <h3
               ref={previewTitleRef}
@@ -268,14 +288,14 @@ export function SongLibraryPanel({
             </p>
             {candidate.kind === "audio" ? (
               <p className="mt-2 text-xs leading-relaxed text-accent">
-                Rhythm chart · detected hits
+                {drumDraft ? "Drum draft · estimated types and timing" : "Rhythm chart · detected hits"}
               </p>
             ) : null}
             <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 border-y border-border py-3 font-mono text-sm tabular-nums">
               <span>
                 {Number(candidate.bpm.toFixed(2))}{" "}
                 <span className="text-xs text-muted">
-                  {candidate.kind === "audio" ? "EST. BPM" : "BPM"}
+                  {drumDraft ? "COUNT-IN BPM" : candidate.kind === "audio" ? "EST. BPM" : "BPM"}
                 </span>
               </span>
               <span>
@@ -306,6 +326,10 @@ export function SongLibraryPanel({
             {candidate.chart?.guitarMode === "strings" && onReviewApply && onReviewPending ? (
               <GuitarImportReview key={reviewKey} chart={candidate.chart} disabled={busy}
                 onApply={onReviewApply} onPendingChange={onReviewPending} />
+            ) : null}
+            {drumDraft && candidate.chart && onReviewApply && onReviewPending ? (
+              <DrumImportReview key={reviewKey} chart={candidate.chart} disabled={busy}
+                audioAttached={candidate.kind === "audio"} onApply={onReviewApply} onPendingChange={onReviewPending} />
             ) : null}
             {candidate.warnings.length > 0 ? (
               <ul

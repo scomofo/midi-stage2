@@ -1,5 +1,6 @@
 import { CHART_SCHEMA, validateSharedChart, type SharedChart } from "./chart-format.ts";
 import { INSTRUMENTS } from "./types.ts";
+import { detectDrumAttacks } from "./audio-drum-analysis.ts";
 
 export const MAX_AUDIO_IMPORT_BYTES = 50 * 1024 * 1024;
 export const MAX_AUDIO_SECONDS = 360;
@@ -15,6 +16,9 @@ export type SongAudioSamples = Pick<AudioBuffer, "sampleRate" | "length" | "dura
 export type AudioAnalysis = { chart: SharedChart; warnings: string[] };
 export type AudioImportProgress = { phase: "checking" | "decoding" | "analyzing"; progress?: number };
 export type AudioImportOptions = {
+  mode?: "rhythm" | "drums";
+  /** Optional isolated audio for analysis; the selected file remains the backing recording. Preserve its complete timeline. */
+  analysisBuffer?: SongAudioSamples;
   signal?: AbortSignal;
   onProgress?: (progress: AudioImportProgress) => void;
 };
@@ -144,7 +148,7 @@ function tempoFromOnsets(flux: Float64Array, hop: number, onsetCount: number): n
  * All highway notes come from local increases in the recording's energy;
  * estimating the count-in tempo never adds or snaps notes onto a fake grid.
  */
-function* analyzeSongAudioSteps(buffer: SongAudioSamples, filename: string, fingerprint: string): Generator<number, AudioAnalysis> {
+function* analyzeSongAudioSteps(buffer: SongAudioSamples, filename: string, fingerprint: string, mode: "rhythm" | "drums" = "rhythm"): Generator<number, AudioAnalysis> {
   const { duration, sampleRate, length, numberOfChannels } = buffer;
   if (!Number.isFinite(duration) || duration < 1 || duration > MAX_AUDIO_SECONDS) {
     throw new Error("Choose a song between 1 second and 6 minutes long.");
@@ -154,6 +158,25 @@ function* analyzeSongAudioSteps(buffer: SongAudioSamples, filename: string, fing
     throw new Error("The decoded audio is not valid. Try exporting the song as WAV or MP3.");
   }
   if (!/^[a-z0-9_-]{1,96}$/i.test(fingerprint)) throw new Error("The audio fingerprint is invalid. Please import the file again.");
+
+  if (mode === "drums") {
+    const { notes, flux, hop, limited } = yield* detectDrumAttacks(buffer);
+    const estimated = tempoFromOnsets(flux, hop, notes.length);
+    const chart = validateSharedChart({
+      schema: CHART_SCHEMA, version: 1, id: `chart-audio-drums-${fingerprint}`,
+      title: filename.replace(/\.[^.]+$/, "").replace(/[_]+/g, " ").trim().slice(0, 160) || "Drum draft",
+      bpm: estimated ?? 120, duration, firstBeat: notes[0]!.time, audioOffset: 0,
+      audioName: filename.slice(0, 256), origin: "audio-drums-draft",
+      parts: INSTRUMENTS.map((type) => ({ type, notes: type === "drums" ? notes : [] })),
+    });
+    return { chart, warnings: [
+      "Drum draft: kick, snare and hi-hat are estimated from frequency-band attacks. Other instruments can create false hits; review timing and drum types before adding. A clean drum track gives better results than a full mix.",
+      estimated === null ? "No steady tempo was found. Review the count-in tempo; hit times still follow the recording."
+        : "Review the estimated count-in tempo. Hit times follow the recording and are not snapped to a beat grid.",
+      ...(limited ? ["This draft reached 6,000 hits; only the strongest detected attacks were retained."] : []),
+      ...(numberOfChannels > 2 ? ["Analysis uses the first two audio channels."] : []),
+    ] };
+  }
 
   const hopSize = Math.max(1, Math.round(sampleRate * HOP_SECONDS));
   const hop = hopSize / sampleRate;
@@ -282,8 +305,8 @@ function* analyzeSongAudioSteps(buffer: SongAudioSamples, filename: string, fing
 }
 
 /** The synchronous analysis API uses exactly the same steps as browser imports. */
-export function analyzeSongAudio(buffer: SongAudioSamples, filename: string, fingerprint: string): AudioAnalysis {
-  const steps = analyzeSongAudioSteps(buffer, filename, fingerprint);
+export function analyzeSongAudio(buffer: SongAudioSamples, filename: string, fingerprint: string, mode: "rhythm" | "drums" = "rhythm"): AudioAnalysis {
+  const steps = analyzeSongAudioSteps(buffer, filename, fingerprint, mode);
   let next = steps.next();
   while (!next.done) next = steps.next();
   return next.value;
@@ -313,9 +336,24 @@ export async function importAudioFile(file: File, options: AudioImportOptions = 
   // Native decoding cannot be aborted, but a dismissed import must never start
   // the expensive sample analysis when that outstanding decode completes.
   throwIfCancelled(signal);
+  const analysisBuffer = options.analysisBuffer ?? buffer;
+  if (Math.abs(analysisBuffer.duration - buffer.duration) > 2 / buffer.sampleRate) {
+    throw new Error("The isolated stem must cover the original recording's full timeline. Keep leading silence and pad or crop its end to the original length.");
+  }
+  const analysis = await analyzeDecodedSongAudio(analysisBuffer, file.name, fingerprint, options);
+  if (options.analysisBuffer) analysis.warnings.push("The chart was analyzed from an aligned stem; playback uses the original selected recording.");
+  return { ...analysis, buffer };
+}
+
+/** Stem handoff: return only chart data; analysis audio is never made the backing source here. */
+export async function analyzeDecodedSongAudio(
+  buffer: SongAudioSamples, filename: string, fingerprint: string,
+  { signal, onProgress, mode }: Pick<AudioImportOptions, "signal" | "onProgress" | "mode"> = {},
+): Promise<AudioAnalysis> {
+  throwIfCancelled(signal);
   onProgress?.({ phase: "analyzing", progress: 0 });
   await yieldToBrowser(signal);
-  const steps = analyzeSongAudioSteps(buffer, file.name, fingerprint);
+  const steps = analyzeSongAudioSteps(buffer, filename, fingerprint, mode);
   let reportedProgress = 0;
   for (;;) {
     throwIfCancelled(signal);
@@ -323,7 +361,7 @@ export async function importAudioFile(file: File, options: AudioImportOptions = 
     if (next.done) {
       onProgress?.({ phase: "analyzing", progress: 1 });
       throwIfCancelled(signal);
-      return { ...next.value, buffer };
+      return next.value;
     }
     // Yield every bounded sample chunk, but avoid rerendering the panel for
     // tiny fractions on a long song. Five-percent steps keep feedback useful.
