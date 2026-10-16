@@ -1,11 +1,11 @@
 import { validateSharedChart, type SharedChart } from "./chart-format.ts";
 
-export type GuitarReviewRow = { id: number; time: string; duration: string; string: string; fret: string; velocity: number };
+export type GuitarReviewRow = { id: number; time: string; duration: string; string: string; fret: string; velocity: number; confidence?: number };
 
 export function guitarReviewRows(chart: SharedChart): GuitarReviewRow[] {
   return chart.parts.find((part) => part.type === "guitar")!.notes.map((note, id) => ({
     id, time: String(note.time), duration: String(note.duration),
-    string: String(note.guitarPosition!.string), fret: String(note.guitarPosition!.fret), velocity: note.velocity,
+    string: String(note.guitarPosition!.string), fret: String(note.guitarPosition!.fret), velocity: note.velocity, confidence: note.confidence,
   }));
 }
 
@@ -30,6 +30,7 @@ export function applyGuitarReview(source: SharedChart, rows: GuitarReviewRow[], 
       time: value(row.time, `Note ${index + 1} time`) * scale,
       duration: value(row.duration, `Note ${index + 1} length`) * scale,
       velocity: row.velocity,
+      ...(row.confidence !== undefined ? { confidence: row.confidence } : {}),
       pitch: source.guitarTuning![6 - string]! + fret,
       guitarPosition: { string, fret },
     };
