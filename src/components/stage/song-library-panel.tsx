@@ -14,6 +14,8 @@ import { AudioSourcePreview } from "./audio-source-preview";
 import { GuitarImportReview } from "./guitar-import-review";
 import { AudioDraftReview } from "./audio-draft-review";
 import { AudioStemImport } from "./audio-stem-import";
+import { FullBandStemImport } from "./full-band-stem-import";
+import type { FullBandStemFiles } from "@/lib/midi-stage/multi-stem-import";
 import type { SharedChart } from "@/lib/midi-stage/chart-format";
 import { isReviewableDrumDraft } from "@/lib/midi-stage/drum-chart-review";
 import { isReviewableKeyboardDraft } from "@/lib/midi-stage/keyboard-draft";
@@ -58,6 +60,7 @@ type SongLibraryPanelProps = {
   audioMode?: AudioImportMode;
   onAudioMode?: (mode: AudioImportMode) => void;
   onStemFiles?: (original: File, stem: File) => void;
+  onFullBandStems?: (original: File, stems: FullBandStemFiles) => void;
 };
 
 export function SongLibraryPanel({
@@ -82,6 +85,7 @@ export function SongLibraryPanel({
   audioMode = "rhythm",
   onAudioMode,
   onStemFiles,
+  onFullBandStems,
 }: SongLibraryPanelProps) {
   const [dragging, setDragging] = useState(false);
   const [fileNotice, setFileNotice] = useState("");
@@ -212,6 +216,7 @@ export function SongLibraryPanel({
               ? "Estimate kick, snare and hi-hat from a recording, then review each hit. A drum-only track works best. Changing mode rebuilds the audio preview."
               : "One rhythm lane from detected attacks, with your original recording. This choice applies to audio files only."}</p>
           </fieldset> : null}
+          {onFullBandStems ? <div className="mb-4"><FullBandStemImport disabled={busy} onImport={onFullBandStems} /></div> : null}
           {audioMode !== "rhythm" && onStemFiles ? <div className="mb-4"><AudioStemImport key={audioMode} instrument={audioMode} disabled={busy} onImport={onStemFiles} /></div> : null}
           <label
             className={cn(
