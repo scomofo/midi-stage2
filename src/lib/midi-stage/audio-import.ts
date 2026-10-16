@@ -1,7 +1,7 @@
 import { CHART_SCHEMA, validateSharedChart, type SharedChart } from "./chart-format.ts";
 import { INSTRUMENTS } from "./types.ts";
 import { detectDrumAttacks } from "./audio-drum-analysis.ts";
-import { isSupportedAudioFile } from "./audio-file-types.ts";
+import { isSupportedAudioFile, type AudioImportMode } from "./audio-file-types.ts";
 export { AUDIO_IMPORT_ACCEPT, isSupportedAudioFile } from "./audio-file-types.ts";
 
 export const MAX_AUDIO_IMPORT_BYTES = 50 * 1024 * 1024;
@@ -13,9 +13,9 @@ const ANALYSIS_CHUNK_SAMPLES = 131072;
 
 export type SongAudioSamples = Pick<AudioBuffer, "sampleRate" | "length" | "duration" | "numberOfChannels" | "getChannelData">;
 export type AudioAnalysis = { chart: SharedChart; warnings: string[] };
-export type AudioImportProgress = { phase: "checking" | "decoding" | "analyzing"; progress?: number; source?: "stem" };
+export type AudioImportProgress = { phase: "checking" | "decoding" | "analyzing" | "model"; progress?: number; source?: "stem" };
 export type AudioImportOptions = {
-  mode?: "rhythm" | "drums";
+  mode?: AudioImportMode;
   /** Optional isolated audio for analysis; sample 0 remains song time 0. A shorter stem ends early. */
   analysisBuffer?: SongAudioSamples;
   /** File handoff from the SparkSuite Stem Lab / Demucs workflow. The original file remains the backing recording. */
@@ -345,7 +345,7 @@ export async function importAudioFile(file: File, options: AudioImportOptions = 
   if (analysisFile && options.analysisBuffer) throw new Error("Choose one analysis source: a stem file or a decoded stem.");
   if (analysisFile) {
     checkAudioSize(analysisFile.size);
-    if (!isSupportedAudioFile(analysisFile)) throw new Error("Choose a browser-supported audio file for the drum stem.");
+    if (!isSupportedAudioFile(analysisFile)) throw new Error("Choose a browser-supported audio file for the instrument stem.");
   }
   const { buffer, fingerprint: backingFingerprint } = await readAudioSource(file, options);
   let fingerprint = backingFingerprint;
@@ -361,7 +361,7 @@ export async function importAudioFile(file: File, options: AudioImportOptions = 
   // Stem Lab's timeline rule: keep every decoded sample at its original time.
   // A shorter stem ends naturally; do not pad, stretch or trim either input.
   if (analysisBuffer.duration > buffer.duration) {
-    throw new Error("The drum stem is longer than the original recording. Choose matching files from the same song; keep leading silence and do not shift or trim the stem.");
+    throw new Error("The instrument stem is longer than the original recording. Choose matching files from the same song; keep leading silence and do not shift or trim the stem.");
   }
   const hasStem = Boolean(analysisFile || options.analysisBuffer);
   const analysis = await analyzeDecodedSongAudio(analysisBuffer, file.name, fingerprint, {
@@ -380,6 +380,10 @@ export async function analyzeDecodedSongAudio(
   { signal, onProgress, mode }: Pick<AudioImportOptions, "signal" | "onProgress" | "mode"> = {},
 ): Promise<AudioAnalysis> {
   throwIfCancelled(signal);
+  if (mode === "keys") {
+    const { transcribeKeyboardAudio } = await import("./keyboard-transcription.ts");
+    return transcribeKeyboardAudio(buffer, filename, fingerprint, { signal, onProgress });
+  }
   onProgress?.({ phase: "analyzing", progress: 0 });
   await yieldToBrowser(signal);
   const steps = analyzeSongAudioSteps(buffer, filename, fingerprint, mode);

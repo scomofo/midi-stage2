@@ -7,6 +7,7 @@ import {
 } from "./chart-format.ts";
 import type { Song } from "./types.ts";
 import { isReviewableDrumDraft } from "./drum-chart-review.ts";
+import { isReviewableKeyboardDraft } from "./keyboard-draft.ts";
 
 export type SavedChart = {
   /** Content identity, separate from the author-supplied chart id. */
@@ -77,8 +78,10 @@ export function songFromSavedChart(entry: SavedChart): Song {
     ...sharedChartToSong(entry.chart),
     id: entry.id,
     subtitle: entry.fileName,
-    arrangement: entry.chart.guitarMode === "strings" ? "Authored guitar" : isReviewableDrumDraft(entry.chart) ? "Drum draft" : entry.audio === true ? "Audio rhythm" : "Imported chart",
-    arrangementDescription: isReviewableDrumDraft(entry.chart)
+    arrangement: entry.chart.guitarMode === "strings" ? "Authored guitar" : isReviewableKeyboardDraft(entry.chart) ? "Keyboard draft" : isReviewableDrumDraft(entry.chart) ? "Drum draft" : entry.audio === true ? "Audio rhythm" : "Imported chart",
+    arrangementDescription: isReviewableKeyboardDraft(entry.chart)
+      ? `Estimated keyboard pitches, chords and holds; corrections may be needed. ${entry.audio === true ? "The original recording plays with you." : "The original recording is not attached."}`
+      : isReviewableDrumDraft(entry.chart)
       ? `Estimated drum types and timing; corrections may be needed. ${entry.audio === true ? "The original recording plays with you." : "This chart plays stage instruments; the original recording is not attached."}`
       : entry.audio === true
       ? "Rhythm chart detected from your audio. Play any MIDI note or the shown key; the original track plays with you."

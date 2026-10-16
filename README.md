@@ -163,6 +163,10 @@ library to cancel; long analysis yields so the controls remain responsive.
   stem**, select the original song and its `drums.wav`, then **Build from drum
   stem**. Detection uses the stem; saved playback uses the original song. Leading
   silence stays intact, and a shorter stem ends without shortening the song.
+  **Keys (draft)** estimates keyboard pitches, chords and holds with a local
+  Basic Pitch model. Select a clean recording or an original-song + piano-stem
+  pair, then review pitch, timing and length. Transcription runs in a cancellable
+  worker; audio stays local. See [keyboard drafts and limits](docs/keyboard-audio-drafts.md).
 - **MIDI (.mid/.midi):** preserves note timing, chords and holds from constant-tempo
   format 0/1 files, grouping General MIDI drums, guitar, bass and other instruments
   into the stage parts. Unsupported percussion/expression is reported. Variable
@@ -181,7 +185,8 @@ library to cancel; long analysis yields so the controls remain responsive.
 Up to 12 imports are remembered in this browser: chart metadata in local storage,
 original audio in IndexedDB. Files are processed locally and are never uploaded.
 See [audio drum drafts and the stem handoff](docs/audio-drum-drafts.md) for the
-current limits and the keyboard-transcription next step.
+current drum limits, or [keyboard audio drafts](docs/keyboard-audio-drafts.md)
+for the piano/keyboard workflow.
 If storage is unavailable, the current visit remains playable and a warning
 explains what was not saved. Reimporting the same file does not duplicate it.
 Remove imports from **Your songs**; the original files are unchanged. Parts with

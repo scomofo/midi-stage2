@@ -50,8 +50,8 @@ the same recording, so the producer must preserve the start position.
 
 Only the original recording is stored for playback. The stem file is needed
 again to regenerate a draft, but is not needed to play a saved reviewed chart.
-Downloaded chart JSON still contains no audio. Keyboard/piano stems do not yet
-produce pitched highways.
+Downloaded chart JSON still contains no audio. Choose **Keys (draft)** for the
+separate [keyboard transcription workflow](keyboard-audio-drafts.md).
 
 ## Programmatic stem integration
 
@@ -110,12 +110,8 @@ a ten-second backing, mode rebuilds, reviewed export, six-lane MIDI scoring,
 saved backing reload, longer-stem rejection and cancellation. Unit tests also
 verify that stem samples remain unchanged and late cancelled decodes are ignored.
 
-## Next: keyboard stems
+## Keyboard stems
 
-The shared stem handoff supplies the analysis/backing boundary. Keyboard charts
-still need polyphonic note onset, pitch and duration transcription plus a pitched
-note review UI. [Basic Pitch](https://github.com/spotify/basic-pitch-ts) is a
-candidate browser transcriber; its own documentation says it works best on one
-instrument at a time. It is not integrated in this milestone. Full-mix instrument
-separation belongs to the separate isolation feature, then each stem can feed
-the appropriate transcriber and share the original recording's clock.
+The shared stem handoff also feeds **Keys (draft)**. Its local polyphonic model
+and pitch/length review are described in [keyboard audio drafts](keyboard-audio-drafts.md).
+Each analysis source shares the original recording's clock.

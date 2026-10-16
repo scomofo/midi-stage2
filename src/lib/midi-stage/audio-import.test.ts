@@ -183,7 +183,7 @@ describe("audio file import", () => {
     installMetadataAudio(context, 10);
     const file = new File(["original"], "Song.wav");
     const read = context.mock.method(file, "arrayBuffer");
-    await assert.rejects(importAudioFile(file, { analysisFile: new File(["not audio"], "Chart.json") }), /audio file for the drum stem/);
+    await assert.rejects(importAudioFile(file, { analysisFile: new File(["not audio"], "Chart.json") }), /audio file for the instrument stem/);
     await assert.rejects(importAudioFile(file, { analysisFile: new File([], "drums.wav") }), /empty/);
     await assert.rejects(importAudioFile(file, { analysisFile: new File(["stem"], "drums.wav"), analysisBuffer: drumFixture() }), /one analysis source/);
     assert.equal(read.mock.callCount(), 0);

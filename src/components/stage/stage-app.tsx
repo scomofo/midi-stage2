@@ -34,11 +34,13 @@ import "./stage-launcher.css";
 import { PracticeControls } from "@/components/stage/practice-controls";
 import { loadAudioAsset, saveAudioAsset, deleteAudioAsset } from "@/lib/midi-stage/audio-assets";
 import type { AudioImportProgress } from "@/lib/midi-stage/audio-import";
+import type { AudioImportMode } from "@/lib/midi-stage/audio-file-types";
 import { SongLibraryPanel } from "@/components/stage/song-library-panel";
 import { addLibraryEntry, chartIdentity, loadSongLibrary, MAX_CHART_IMPORT_BYTES, prepareChartImport, saveSongLibrary, songFromSavedChart, type SavedChart } from "@/lib/midi-stage/song-library";
 import { SoundcheckPanel } from "@/components/stage/soundcheck-panel";
 import type { SharedChart } from "@/lib/midi-stage/chart-format";
 import { isReviewableDrumDraft } from "@/lib/midi-stage/drum-chart-review";
+import { isReviewableKeyboardDraft } from "@/lib/midi-stage/keyboard-draft";
 import { defaultMidiRoutes, loadMidiRoutes, remapMidiRouteInputIds, saveMidiRoutes, resolveMidiPlayer, type MidiRoute } from "@/lib/midi-stage/midi-routing";
 import { loadSessionPreferences, saveSessionPreferences } from "@/lib/midi-stage/preferences";
 import { clearRehearsalBookmark, loadRehearsalBookmark, resolveRehearsalBookmark, saveRehearsalBookmark, type RehearsalBookmark } from "@/lib/midi-stage/rehearsal-bookmark";
@@ -164,9 +166,9 @@ export function StageApp() {
   const audioBuffers = useRef(new Map<string, AudioBuffer>());
   const sessionAudioFiles = useRef(new Map<string, Blob>());
   const volatileAudioIds = useRef(new Set<string>());
-  const [importCandidate, setImportCandidate] = useState<{ entry: SavedChart; warnings: string[]; kind: "audio" | "midi" | "chart" | "musicxml"; buffer?: AudioBuffer; audioFile?: File; stemFile?: File } | null>(null);
+  const [importCandidate, setImportCandidate] = useState<{ entry: SavedChart; warnings: string[]; kind: "audio" | "midi" | "chart" | "musicxml"; buffer?: AudioBuffer; audioFile?: File; stemFile?: File; stemMode?: "drums" | "keys" } | null>(null);
   const [chartReviewPending, setChartReviewPending] = useState(false);
-  const [audioImportMode, setAudioImportMode] = useState<"rhythm" | "drums">("rhythm");
+  const [audioImportMode, setAudioImportMode] = useState<AudioImportMode>("rhythm");
   const [savingImport, setSavingImport] = useState(false);
   const [readingImport, setReadingImport] = useState(false);
   const [importProgress, setImportProgress] = useState<AudioImportProgress | null>(null);
@@ -1621,7 +1623,7 @@ export function StageApp() {
     setPracticeSelection({ songId: song.id, sectionId: section.id });
   }
 
-  async function readSongFile(file: File, audioMode = audioImportMode, stemFile?: File) {
+  async function readSongFile(file: File, audioMode = audioImportMode, stemFile?: File, stemMode?: "drums" | "keys") {
     if (savingImport) return;
     const ticket = ++importTicket.current;
     importController.current?.abort();
@@ -1640,13 +1642,13 @@ export function StageApp() {
         const { importAudioFile } = await import("@/lib/midi-stage/audio-import");
         const { chart, warnings, buffer } = await importAudioFile(file, {
           mode: audioMode,
-          analysisFile: audioMode === "drums" ? stemFile : undefined,
+          analysisFile: audioMode === stemMode ? stemFile : undefined,
           signal: controller.signal,
           onProgress: (progress) => {
             if (ticket === importTicket.current) setImportProgress(progress);
           },
         });
-        candidate = { entry: { id: chartIdentity(chart), chart, fileName: file.name, addedAt: Date.now(), audio: true }, warnings, buffer, audioFile: file, stemFile, kind: "audio" };
+        candidate = { entry: { id: chartIdentity(chart), chart, fileName: file.name, addedAt: Date.now(), audio: true }, warnings, buffer, audioFile: file, stemFile, stemMode, kind: "audio" };
       } else if (/\.midi?$/i.test(file.name)) {
         if (file.size > MAX_CHART_IMPORT_BYTES) throw new Error("Choose a MIDI file smaller than 4 MB.");
         const { importMidiFile } = await import("@/lib/midi-stage/midi-file-import");
@@ -2419,13 +2421,13 @@ export function StageApp() {
       {libraryOpen ? (
         <>
           <button type="button" className="fixed inset-0 z-40 bg-bg/55" aria-label="Dismiss song library" onClick={closeSongLibrary} />
-          <div ref={libraryRef} role="dialog" aria-modal="true" aria-labelledby="song-library-title" className={cn("feel-sheet fixed inset-y-0 right-0 z-50 flex w-[min(480px,96vw)] flex-col overflow-hidden bg-bg shadow-[0_0_0_1px_rgba(239,232,220,0.1)]", (importCandidate?.entry.chart.guitarMode === "strings" || isReviewableDrumDraft(importCandidate?.entry.chart)) && "guitar-library-sheet")}>
+          <div ref={libraryRef} role="dialog" aria-modal="true" aria-labelledby="song-library-title" className={cn("feel-sheet fixed inset-y-0 right-0 z-50 flex w-[min(480px,96vw)] flex-col overflow-hidden bg-bg shadow-[0_0_0_1px_rgba(239,232,220,0.1)]", (importCandidate?.entry.chart.guitarMode === "strings" || isReviewableDrumDraft(importCandidate?.entry.chart) || isReviewableKeyboardDraft(importCandidate?.entry.chart)) && "guitar-library-sheet")}>
             <SongLibraryPanel
               candidate={importCandidate ? {
                 kind: importCandidate.kind,
                 chart: importCandidate.entry.chart,
                 audioFile: importCandidate.audioFile,
-                stemName: importCandidate.stemFile?.name,
+                stemName: importCandidate.stemMode === audioImportMode ? importCandidate.stemFile?.name : undefined,
                 name: importCandidate.entry.chart.title,
                 fileName: importCandidate.entry.fileName,
                 bpm: importCandidate.entry.chart.bpm,
@@ -2434,9 +2436,10 @@ export function StageApp() {
                 warnings: importCandidate.warnings,
               } : null}
               reading={readingImport}
-              readingLabel={importProgress?.phase === "checking" ? importProgress.source === "stem" ? "Checking drum stem…" : "Checking song…"
-                : importProgress?.phase === "decoding" ? importProgress.source === "stem" ? "Decoding drum stem…" : "Decoding audio…"
-                : importProgress?.phase === "analyzing" ? audioImportMode === "drums" ? "Building a drum draft…" : "Finding rhythm hits…"
+              readingLabel={importProgress?.phase === "checking" ? importProgress.source === "stem" ? "Checking instrument stem…" : "Checking song…"
+                : importProgress?.phase === "decoding" ? importProgress.source === "stem" ? "Decoding instrument stem…" : "Decoding audio…"
+                : importProgress?.phase === "model" ? "Loading keyboard transcriber…"
+                : importProgress?.phase === "analyzing" ? audioImportMode === "keys" ? "Transcribing keyboard notes…" : audioImportMode === "drums" ? "Building a drum draft…" : "Finding rhythm hits…"
                 : undefined}
               readingProgress={importProgress?.phase === "analyzing" ? importProgress.progress : undefined}
               onCancel={cancelSongImport}
@@ -2446,11 +2449,11 @@ export function StageApp() {
               songs={importedCharts.map((entry) => ({ id: entry.id, name: entry.chart.title, fileName: entry.fileName }))}
               onFile={(file) => void readSongFile(file)}
               audioMode={audioImportMode}
-              onStemFiles={(original, stem) => void readSongFile(original, "drums", stem)}
+              onStemFiles={(original, stem) => { if (audioImportMode !== "rhythm") void readSongFile(original, audioImportMode, stem, audioImportMode); }}
               onAudioMode={(mode) => {
                 if (readingImport || savingImport || mode === audioImportMode) return;
                 setAudioImportMode(mode);
-                if (importCandidate?.kind === "audio" && importCandidate.audioFile) void readSongFile(importCandidate.audioFile, mode, importCandidate.stemFile);
+                if (importCandidate?.kind === "audio" && importCandidate.audioFile) void readSongFile(importCandidate.audioFile, mode, importCandidate.stemFile, importCandidate.stemMode);
               }}
               onAdd={() => void addImportedSong()}
               onClose={closeSongLibrary}
