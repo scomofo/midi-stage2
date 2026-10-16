@@ -31,7 +31,8 @@ export function expect(actual: any): any {
     toBeInstanceOf: (expected: any) => assert.ok(actual instanceof expected),
     toThrow: (expected?: RegExp | string) => {
       assert.equal(typeof actual, "function");
-      assert.throws(actual, expected instanceof RegExp ? expected : expected ? new RegExp(expected) : undefined);
+      if (expected === undefined) assert.throws(actual);
+      else assert.throws(actual, expected instanceof RegExp ? expected : new RegExp(expected));
     },
   };
   api.not = {
