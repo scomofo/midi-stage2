@@ -18,6 +18,7 @@ import type { SharedChart } from "@/lib/midi-stage/chart-format";
 import { isReviewableDrumDraft } from "@/lib/midi-stage/drum-chart-review";
 import { isReviewableKeyboardDraft } from "@/lib/midi-stage/keyboard-draft";
 import type { AudioImportMode } from "@/lib/midi-stage/audio-file-types";
+import { importWorkflowState } from "@/lib/midi-stage/import-workflow";
 import { formatTime } from "@/lib/midi-stage/engine";
 import { LABELS } from "@/lib/midi-stage/songs";
 import { INSTRUMENTS, type Instrument } from "@/lib/midi-stage/types";
@@ -99,6 +100,14 @@ export function SongLibraryPanel({
   const drumDraft = isReviewableDrumDraft(candidate?.chart);
   const keysDraft = isReviewableKeyboardDraft(candidate?.chart);
   const audioDraft = drumDraft || keysDraft;
+  const reviewRequired = Boolean(candidate?.chart?.guitarMode === "strings" || audioDraft);
+  const workflow = importWorkflowState({
+    mode: audioMode,
+    reading,
+    hasCandidate: Boolean(candidate),
+    reviewRequired,
+    reviewPending,
+  });
 
   useEffect(() => {
     if (!previewReady) return;
@@ -161,6 +170,23 @@ export function SongLibraryPanel({
       </div>
 
       <div ref={scrollRef} className="flex min-h-0 min-w-0 flex-1 flex-col gap-5 overflow-y-auto px-5 py-5">
+        <nav aria-label="Song import progress" className="rounded-xl border border-border bg-surface px-3 py-3">
+          <ol className="grid grid-cols-5 gap-2">
+            {workflow.steps.map((step, index) => {
+              const current = step.id === workflow.current;
+              return <li key={step.id} aria-current={current ? "step" : undefined} className={cn(
+                "min-w-0 rounded-lg px-2 py-2 text-center text-[11px] font-medium",
+                current ? "bg-accent/15 text-accent" : step.done ? "text-fg" : "text-muted",
+              )}>
+                <span className="block font-mono text-[10px] opacity-70">{index + 1}</span>
+                <span className="block truncate">{step.label}</span>
+              </li>;
+            })}
+          </ol>
+          <p className="mt-2 text-center text-xs text-muted">
+            Song → instrument/stem → local analysis → correction → save and play.
+          </p>
+        </nav>
         <div>
           {onAudioMode ? <fieldset disabled={busy} className="mb-4 space-y-2">
             <legend className="mb-2 text-sm font-medium">Audio highway</legend>
