@@ -80,6 +80,7 @@ export function makeGuitarDraft(
     duration: number;
     pitch: number;
     velocity: number;
+    confidence?: number;
     guitarPosition: GuitarPosition;
   }> = [];
   let previousFret = 5;
@@ -102,6 +103,7 @@ export function makeGuitarDraft(
       duration: noteDuration,
       pitch: event.pitchMidi,
       velocity,
+      confidence: Math.max(0, Math.min(1, event.amplitude)),
       guitarPosition: { string: placement.string, fret: placement.fret },
     });
     activeUntil[placement.string] = time + noteDuration;
