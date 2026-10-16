@@ -2,15 +2,23 @@ import { validateSharedChart, type SharedChart } from "./chart-format.ts";
 import { DRUMS } from "./engine.ts";
 
 export type DrumReviewRow = { id: number; time: string; pitch: string; velocity: number };
+/** Origin is author-supplied metadata; rhythm charts can contain any MIDI pitch. */
+export function isReviewableDrumDraft(chart: SharedChart | null | undefined): boolean {
+  if (!chart || chart.origin !== "audio-drums-draft" || chart.matching === "rhythm") return false;
+  const notes = chart.parts.find((part) => part.type === "drums")?.notes;
+  return Boolean(notes?.length && notes.every((note) => DRUMS.some((lane) => lane.notes?.includes(note.pitch))));
+}
+
 export function drumReviewRows(chart: SharedChart): DrumReviewRow[] {
-  return chart.parts.find((part) => part.type === "drums")!.notes.map((note, id) => ({
-    id, time: String(note.time), pitch: String(DRUMS.find((lane) => lane.notes?.includes(note.pitch))!.pitch), velocity: note.velocity,
+  if (!isReviewableDrumDraft(chart)) return [];
+  return (chart.parts.find((part) => part.type === "drums")?.notes ?? []).map((note, id) => ({
+    id, time: String(note.time), pitch: String(DRUMS.find((lane) => lane.notes?.includes(note.pitch))?.pitch ?? note.pitch), velocity: note.velocity,
   }));
 }
 
 /** Audio time never stretches when the estimated count-in tempo is corrected. */
 export function applyDrumReview(source: SharedChart, rows: DrumReviewRow[], tempo: string): SharedChart {
-  if (source.origin !== "audio-drums-draft" || source.matching === "rhythm") throw new Error("This chart is not an audio drum draft.");
+  if (!isReviewableDrumDraft(source)) throw new Error("This chart is not a pitch-matched audio drum draft.");
   if (!rows.length) throw new Error("Keep at least one drum hit.");
   if (rows.length > 6000) throw new Error("Keep at most 6,000 drum hits.");
   const number = (text: string, label: string) => {

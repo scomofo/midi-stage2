@@ -38,6 +38,7 @@ import { SongLibraryPanel } from "@/components/stage/song-library-panel";
 import { addLibraryEntry, chartIdentity, loadSongLibrary, MAX_CHART_IMPORT_BYTES, prepareChartImport, saveSongLibrary, songFromSavedChart, type SavedChart } from "@/lib/midi-stage/song-library";
 import { SoundcheckPanel } from "@/components/stage/soundcheck-panel";
 import type { SharedChart } from "@/lib/midi-stage/chart-format";
+import { isReviewableDrumDraft } from "@/lib/midi-stage/drum-chart-review";
 import { defaultMidiRoutes, loadMidiRoutes, remapMidiRouteInputIds, saveMidiRoutes, resolveMidiPlayer, type MidiRoute } from "@/lib/midi-stage/midi-routing";
 import { loadSessionPreferences, saveSessionPreferences } from "@/lib/midi-stage/preferences";
 import { clearRehearsalBookmark, loadRehearsalBookmark, resolveRehearsalBookmark, saveRehearsalBookmark, type RehearsalBookmark } from "@/lib/midi-stage/rehearsal-bookmark";
@@ -2417,7 +2418,7 @@ export function StageApp() {
       {libraryOpen ? (
         <>
           <button type="button" className="fixed inset-0 z-40 bg-bg/55" aria-label="Dismiss song library" onClick={closeSongLibrary} />
-          <div ref={libraryRef} role="dialog" aria-modal="true" aria-labelledby="song-library-title" className={cn("feel-sheet fixed inset-y-0 right-0 z-50 flex w-[min(480px,96vw)] flex-col overflow-hidden bg-bg shadow-[0_0_0_1px_rgba(239,232,220,0.1)]", (importCandidate?.entry.chart.guitarMode === "strings" || importCandidate?.entry.chart.origin === "audio-drums-draft") && "guitar-library-sheet")}>
+          <div ref={libraryRef} role="dialog" aria-modal="true" aria-labelledby="song-library-title" className={cn("feel-sheet fixed inset-y-0 right-0 z-50 flex w-[min(480px,96vw)] flex-col overflow-hidden bg-bg shadow-[0_0_0_1px_rgba(239,232,220,0.1)]", (importCandidate?.entry.chart.guitarMode === "strings" || isReviewableDrumDraft(importCandidate?.entry.chart)) && "guitar-library-sheet")}>
             <SongLibraryPanel
               candidate={importCandidate ? {
                 kind: importCandidate.kind,

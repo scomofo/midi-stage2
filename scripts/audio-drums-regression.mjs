@@ -134,6 +134,32 @@ try {
   await library.getByRole('button', { name: 'Add hit', exact: true }).click(); await apply.click();
   await library.getByRole('button', { name: 'Restore original', exact: true }).click();
   assert.equal(await library.getByLabel('Hit 1 time', { exact: true }).inputValue(), '0.3');
+
+  phase = 'clear all false hits and add replacements before applying';
+  const single = { ...exported, title: 'Replacement study', parts: exported.parts.map((part) => ({ ...part, notes: part.type === 'drums' ? part.notes.slice(0, 1) : [] })) };
+  await upload('Replacement study.midistage.json', Buffer.from(JSON.stringify(single))); await ready();
+  await library.getByRole('button', { name: 'Remove hit 1', exact: true }).click();
+  await apply.click();
+  await library.getByRole('alert').filter({ hasText: /Keep at least one drum hit/ }).waitFor();
+  assert.equal(await library.getByRole('button', { name: 'Add hit', exact: true }).isEnabled(), true);
+  await library.getByRole('button', { name: 'Add hit', exact: true }).click();
+  await library.getByLabel('Hit 1 drum', { exact: true }).selectOption('38');
+  await library.getByLabel('Hit 1 time', { exact: true }).fill('0.5');
+  await library.getByRole('button', { name: 'Add hit', exact: true }).click();
+  assert.equal(await library.locator('tbody tr').count(), 2, 'pending edits must allow multiple replacement hits');
+  await apply.click();
+  assert.equal(await add.isEnabled(), true);
+  assert.equal(await library.getByLabel('Hit 1 drum', { exact: true }).inputValue(), '38');
+  await capture('drum-draft-replacements-desktop');
+
+  phase = 'rhythm chart with drum origin metadata and unmapped pitch';
+  const rhythm = { ...single, title: 'Unmapped rhythm', version: 2, matching: 'rhythm', parts: single.parts.map((part) => ({ ...part, notes: part.type === 'drums' ? [{ time: 0.3, pitch: 60, duration: 0.06, velocity: 100 }] : [] })) };
+  await upload('Unmapped rhythm.midistage.json', Buffer.from(JSON.stringify(rhythm)));
+  await library.getByRole('heading', { name: 'Unmapped rhythm', exact: true }).waitFor();
+  assert.equal(await library.getByRole('heading', { name: 'Review the drum draft', exact: true }).count(), 0);
+  assert.equal(await add.isEnabled(), true, 'valid rhythm chart stays importable');
+
+  phase = 'audio mode changes';
   await library.getByRole('button', { name: 'Drums (draft)', exact: true }).click();
   await upload('Mode Study.wav', drumWav()); await ready();
   await library.getByRole('button', { name: 'Rhythm', exact: true }).click();

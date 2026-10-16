@@ -14,6 +14,7 @@ import { AudioSourcePreview } from "./audio-source-preview";
 import { GuitarImportReview } from "./guitar-import-review";
 import { DrumImportReview } from "./drum-import-review";
 import type { SharedChart } from "@/lib/midi-stage/chart-format";
+import { isReviewableDrumDraft } from "@/lib/midi-stage/drum-chart-review";
 import { formatTime } from "@/lib/midi-stage/engine";
 import { LABELS } from "@/lib/midi-stage/songs";
 import { INSTRUMENTS, type Instrument } from "@/lib/midi-stage/types";
@@ -89,7 +90,7 @@ export function SongLibraryPanel({
   const candidateName = candidate?.name;
   const candidateFileName = candidate?.fileName;
   const notice = fileNotice || error;
-  const drumDraft = candidate?.chart?.origin === "audio-drums-draft";
+  const drumDraft = isReviewableDrumDraft(candidate?.chart);
 
   useEffect(() => {
     if (!previewReady) return;

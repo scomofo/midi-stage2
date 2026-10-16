@@ -68,7 +68,7 @@ export function DrumImportReview({ chart, disabled, audioAttached, onApply, onPe
     {error ? <p role="alert" className="text-sm text-tungsten">{error}</p> : null}
     <div className="drum-review-row justify-start">
       <Button type="button" disabled={disabled || !dirty} onClick={apply}>Apply corrections</Button>
-      <Button type="button" variant="secondary" disabled={disabled || dirty || rows.length >= 6000} onClick={() => {
+      <Button type="button" variant="secondary" disabled={disabled || rows.length >= 6000} onClick={() => {
         const last = Math.max(0, ...rows.map((row) => Number(row.time)).filter(Number.isFinite));
         const time = Math.min(chart.duration - 0.02, last + 0.25);
         pending(); setRows((rows) => [...rows, { id: nextId.current++, time: String(time), pitch: "36", velocity: 100 }]); setPage(Math.floor(rows.length / PAGE_SIZE));

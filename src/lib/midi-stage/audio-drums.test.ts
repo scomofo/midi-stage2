@@ -2,9 +2,9 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { drumFixture } from "../../../scripts/fixtures/drum-draft.mjs";
 import { analyzeSongAudio } from "./audio-import.ts";
-import { applyDrumReview, drumReviewRows } from "./drum-chart-review.ts";
-import { serializeSharedChart, parseSharedChartText, sharedChartToSong } from "./chart-format.ts";
-import { chartIdentity } from "./song-library.ts";
+import { applyDrumReview, drumReviewRows, isReviewableDrumDraft } from "./drum-chart-review.ts";
+import { serializeSharedChart, parseSharedChartText, sharedChartToSong, validateSharedChart } from "./chart-format.ts";
+import { chartIdentity, prepareChartImport, songFromSavedChart } from "./song-library.ts";
 import { Judge, makeChart, laneForPitch } from "./engine.ts";
 
 describe("audio drum drafts", () => {
@@ -86,5 +86,18 @@ describe("audio drum drafts", () => {
     assert.equal(hit(36)?.grade, "perfect");
     assert.equal(hit(42)?.grade, "perfect");
     assert.equal(judge.stats.perfect, 2);
+  });
+
+  it("keeps author-labeled rhythm charts importable without opening pitch review", () => {
+    const source = analyzeSongAudio(drumFixture(), "Study.wav", "rhythm-origin", "drums").chart;
+    const rhythm = validateSharedChart({ ...source, version: 2, matching: "rhythm",
+      parts: source.parts.map((part) => ({ ...part, notes: part.type === "drums" ? [{ time: 0.3, pitch: 60, duration: 0.06, velocity: 100 }] : [] })) });
+    const { entry } = prepareChartImport(serializeSharedChart(rhythm), "Rhythm.json");
+    assert.equal(entry.chart.parts[0]!.notes[0]!.pitch, 60);
+    assert.equal(isReviewableDrumDraft(entry.chart), false);
+    assert.deepEqual(drumReviewRows(entry.chart), []);
+    assert.throws(() => applyDrumReview(entry.chart, [], "120"), /pitch-matched/);
+    assert.equal(songFromSavedChart(entry).arrangement, "Imported chart");
+    assert.equal(isReviewableDrumDraft(source), true);
   });
 });
