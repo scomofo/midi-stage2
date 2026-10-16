@@ -35,6 +35,7 @@ export function makeBassDraft(
         duration: Math.max(0.02, Math.round((end - time) * 1e6) / 1e6),
         pitch: event.pitchMidi,
         velocity: Math.max(1, Math.min(127, Math.round(event.amplitude * 127))),
+        confidence: Math.max(0, Math.min(1, event.amplitude)),
       };
     })
     .sort((a, b) => a.time - b.time || a.pitch - b.pitch);
