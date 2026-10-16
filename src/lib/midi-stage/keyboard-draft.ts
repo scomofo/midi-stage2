@@ -16,7 +16,7 @@ export function makeKeyboardDraft(events: KeyboardEvent[], duration: number, fil
     const time = Math.round(Math.max(0, n.startTimeSeconds) * 1e6) / 1e6;
     const end = Math.min(duration, n.startTimeSeconds + n.durationSeconds);
     return { time, duration: Math.max(0.02, Math.round((end - time) * 1e6) / 1e6), pitch: n.pitchMidi,
-      velocity: Math.max(1, Math.min(127, Math.round(n.amplitude * 127))) };
+      velocity: Math.max(1, Math.min(127, Math.round(n.amplitude * 127))), confidence: Math.max(0, Math.min(1, n.amplitude)) };
   }).sort((a, b) => a.time - b.time || a.pitch - b.pitch);
   if (!notes.length) throw new Error("No clear keyboard notes were found. Try a clean piano/keyboard stem, or import a MIDI arrangement.");
   const chart = validateSharedChart({ schema: CHART_SCHEMA, version: 1, id: `chart-audio-keys-${fingerprint}`,

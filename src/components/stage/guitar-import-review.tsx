@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { noteName } from "@/lib/midi-stage/engine";
 import { serializeSharedChart, type SharedChart } from "@/lib/midi-stage/chart-format";
 import { applyGuitarReview, guitarReviewRows, type GuitarReviewRow } from "@/lib/midi-stage/guitar-chart-review";
+import { confidenceBand, transcriptionConfidenceSummary } from "@/lib/midi-stage/transcription-confidence";
 import "./guitar-import-review.css";
 
 const PAGE_SIZE = 16;
@@ -22,7 +23,12 @@ export function GuitarImportReview({ chart, disabled, onApply, onPendingChange }
   const [dirty, setDirty] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
-  const pages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+  const [showNeedsReview, setShowNeedsReview] = useState(false);
+  const confidence = transcriptionConfidenceSummary(chart.parts.find((part) => part.type === "guitar")!.notes);
+  const visibleRows = showNeedsReview
+    ? rows.filter((row) => row.confidence !== undefined && confidenceBand(row.confidence) !== "high")
+    : rows;
+  const pages = Math.max(1, Math.ceil(visibleRows.length / PAGE_SIZE));
   const currentPage = Math.min(page, pages - 1);
   const first = currentPage * PAGE_SIZE;
 
@@ -83,6 +89,12 @@ export function GuitarImportReview({ chart, disabled, onApply, onPendingChange }
           <Download size={16} aria-hidden="true" /> Download chart
         </Button>
       </div>
+      {confidence.scored ? <div className="guitar-review-setup">
+        <p><span>Transcription confidence</span><strong>{confidence.needsReview} of {confidence.scored} need review</strong></p>
+        <Button type="button" size="sm" variant={showNeedsReview ? "primary" : "secondary"} onClick={() => { setShowNeedsReview((value) => !value); setPage(0); }}>
+          {showNeedsReview ? "Show all notes" : "Show needs review"}
+        </Button>
+      </div> : null}
       <div className="guitar-review-setup">
         <p><span>Tuning · low to high</span><strong>{chart.guitarTuning!.map((pitch) => noteName(pitch)).join(" · ")}</strong></p>
         <label>Chart tempo
@@ -100,13 +112,14 @@ export function GuitarImportReview({ chart, disabled, onApply, onPendingChange }
         <table>
           <caption className="sr-only">Review note times, lengths, strings and frets before adding this arrangement.</caption>
           <thead><tr><th scope="col">Note</th><th scope="col">Time (s)</th><th scope="col">Length (s)</th><th scope="col">String</th><th scope="col">Fret</th><th scope="col">Sounds</th><th scope="col"><span className="sr-only">Remove</span></th></tr></thead>
-          <tbody>{rows.slice(first, first + PAGE_SIZE).map((row, index) => {
+          <tbody>{visibleRows.slice(first, first + PAGE_SIZE).map((row, index) => {
             const number = first + index + 1;
             const string = Number(row.string), fret = Number(row.fret);
             const valid = Number.isInteger(string) && string >= 1 && string <= 6 && row.fret.trim() !== ""
               && Number.isInteger(fret) && fret >= 0 && fret <= 24;
-            return <tr key={row.id}>
-              <th scope="row">{number}</th>
+            const band = confidenceBand(row.confidence);
+            return <tr key={row.id} data-confidence={band}>
+              <th scope="row">{number}{band !== "unknown" ? <span className="ml-1 text-[10px] text-muted">· {band}</span> : null}</th>
               <td><input aria-label={`Note ${number} time`} type="number" min={0} max={3600} step="any" value={row.time} disabled={disabled} onChange={(e) => update(row.id, "time", e.target.value)} /></td>
               <td><input aria-label={`Note ${number} length`} type="number" min={0.02} max={3600} step="any" value={row.duration} disabled={disabled} onChange={(e) => update(row.id, "duration", e.target.value)} /></td>
               <td><select aria-label={`Note ${number} string`} value={row.string} disabled={disabled} onChange={(e) => update(row.id, "string", e.target.value)}>
@@ -120,7 +133,7 @@ export function GuitarImportReview({ chart, disabled, onApply, onPendingChange }
         </table>
       </div>
       <div className="guitar-review-pagination">
-        <span>{rows.length ? `${first + 1}–${Math.min(first + PAGE_SIZE, rows.length)} of ${rows.length} notes` : "No notes"}</span>
+        <span>{visibleRows.length ? `${first + 1}–${Math.min(first + PAGE_SIZE, visibleRows.length)} of ${visibleRows.length} notes` : "No notes in this confidence filter"}</span>
         <div>
           <Button type="button" variant="ghost" disabled={disabled || currentPage === 0} onClick={() => setPage(currentPage - 1)}>Previous notes</Button>
           <Button type="button" variant="ghost" disabled={disabled || currentPage >= pages - 1} onClick={() => setPage(currentPage + 1)}>Next notes</Button>

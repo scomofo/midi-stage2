@@ -58,6 +58,7 @@ export interface SharedNote {
   duration: number;
   pitch: number;
   velocity: number;
+  confidence?: number;
   guitarPosition?: GuitarPosition;
 }
 
@@ -189,6 +190,9 @@ function checkParts(raw: unknown, duration: number, rhythm = false, tuning?: num
       const velocity = n.velocity === undefined || n.velocity === null
         ? 100
         : int(n.velocity, 1, 127, "Velocity", `${np}.velocity`);
+      const confidence = n.confidence === undefined || n.confidence === null
+        ? undefined
+        : num(n.confidence, 0, 1, "Confidence", `${np}.confidence`);
       if (tuning && type === "guitar") {
         if (!isRecord(n.guitarPosition)) fail("INVALID_GUITAR_POSITION", "Every guitar note needs an authored string and fret", `${np}.guitarPosition`);
         const string = int(n.guitarPosition.string, 1, 6, "Guitar string", `${np}.guitarPosition.string`) as GuitarPosition["string"];
@@ -196,12 +200,12 @@ function checkParts(raw: unknown, duration: number, rhythm = false, tuning?: num
         if (pitch !== tuning[6 - string]! + fret) {
           fail("INVALID_GUITAR_POSITION", "Pitch must match the authored string, fret and tuning", np);
         }
-        return { time, duration: noteDur, pitch, velocity, guitarPosition: { string, fret } };
+        return { time, duration: noteDur, pitch, velocity, ...(confidence !== undefined ? { confidence } : {}), guitarPosition: { string, fret } };
       }
       if (n.guitarPosition !== undefined) {
         fail("INVALID_GUITAR_POSITION", "String/fret positions require a version 4 guitar arrangement", `${np}.guitarPosition`);
       }
-      return { time, duration: noteDur, pitch, velocity };
+      return { time, duration: noteDur, pitch, velocity, ...(confidence !== undefined ? { confidence } : {}) };
     });
     total += notes.length;
     if (total > MAX_NOTES) fail("TOO_MANY_NOTES", `A chart can contain at most ${MAX_NOTES} notes`, path);
