@@ -7,24 +7,34 @@ export const STANDARD_GUITAR_TUNING = [40, 45, 50, 55, 59, 64] as const;
 export const MAX_GUITAR_DRAFT_NOTES = 6000;
 
 type Candidate = {
-  startTimeSeconds: number;
-  durationSeconds: number;
-  pitchMidi: number;
-  amplitude: number;
+  event: KeyboardEvent;
+  string: GuitarPosition["string"];
+  fret: number;
 };
 
 export function makeGuitarDraft(
   events: KeyboardEvent[],
   duration: number,
+  filename: string,
+  fingerprint: string,
   tuning: readonly number[] = STANDARD_GUITAR_TUNING,
-  filename = "guitar.wav",
-  fingerprint = "",
-) {
+): { chart: SharedChart; warnings: string[] } {
   if (!/^[a-z0-9_-]{1,96}$/i.test(fingerprint)) throw new Error("The audio fingerprint is invalid. Please import the file again.");
+  if (tuning.length !== 6 || tuning.some((pitch) => !Number.isInteger(pitch) || pitch < 0 || pitch > 127)) {
+    throw new Error("Guitar tuning must contain six MIDI pitches from low string 6 to high string 1.");
+  }
 
   const candidates = events
-    .filter((e) => [e.startTimeSeconds, e.durationSeconds, e.pitchMidi, e.amplitude].every(Number.isFinite))
-    .sort((a, b) => b.amplitude - a.amplitude);
+    .filter((event) =>
+      [event.startTimeSeconds, event.durationSeconds, event.pitchMidi, event.amplitude].every(Number.isFinite) &&
+      Number.isInteger(event.pitchMidi) &&
+      event.pitchMidi >= Math.min(...tuning) &&
+      event.pitchMidi <= Math.max(...tuning) + 24 &&
+      event.amplitude >= 0.42 &&
+      event.durationSeconds >= 0.07 &&
+      event.startTimeSeconds < duration - 0.02,
+    )
+    .sort((a, b) => a.startTimeSeconds - b.startTimeSeconds || b.amplitude - a.amplitude);
 
   const limited = candidates.length > MAX_GUITAR_DRAFT_NOTES;
   const selectedEvents = candidates.slice(0, MAX_GUITAR_DRAFT_NOTES);
@@ -57,6 +67,8 @@ export function makeGuitarDraft(
   const chart = validateSharedChart({
     schema: CHART_SCHEMA,
     version: 4,
+    guitarMode: "strings",
+    guitarTuning: [...tuning],
     id: `chart-audio-guitar-${fingerprint}`,
     title: filename.replace(/\.[^.]+$/, "").replace(/_/g, " ").trim().slice(0, 160) || "Guitar draft",
     bpm: 120,
@@ -65,17 +77,27 @@ export function makeGuitarDraft(
     audioOffset: 0,
     audioName: filename.slice(0, 256),
     origin: "audio-guitar-draft",
-    guitarMode: "strings",
-    guitarTuning: tuning as number[],
     parts: INSTRUMENTS.map((type) => ({ type, notes: type === "guitar" ? notes : [] })),
   });
 
   return {
     chart,
     warnings: [
-      "Guitar draft: estimated pitches, onsets and holds from Basic Pitch. A fingering solver suggested playable strings/frets; review the result before playing.",
-      ...(limited ? ["This draft reached 6,000 notes; only the strongest candidates were retained."] : []),
-      ...(droppedUnplayable ? [`${droppedUnplayable} notes could not be assigned a playable standard-tuning position and were omitted.`] : []),
+      "Guitar draft: pitches, onsets and holds are estimated from Basic Pitch. String/fret positions are suggested for playability and are not a claim about the performer's actual fingering.",
+      "Review every uncertain chord, position jump and sustain in the six-string editor before adding the chart. Clean isolated guitar stems work best.",
+      "Review the count-in tempo. Changing it does not move the detected notes unless you explicitly apply a tempo rescale in the guitar editor.",
+      ...(droppedUnplayable ? [`${droppedUnplayable} detected notes were omitted because no non-overlapping position was available in the selected tuning.`] : []),
+      ...(limited ? ["This draft reached 6,000 detected notes; only the earliest retained candidates were considered."] : []),
     ],
   };
+}
+
+export function isReviewableGuitarDraft(chart: SharedChart | null | undefined): boolean {
+  return Boolean(
+    chart &&
+    chart.origin === "audio-guitar-draft" &&
+    chart.guitarMode === "strings" &&
+    chart.guitarTuning?.length === 6 &&
+    chart.parts.find((part) => part.type === "guitar")?.notes.length,
+  );
 }

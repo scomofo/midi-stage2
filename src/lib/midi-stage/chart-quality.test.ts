@@ -1,3 +1,4 @@
+import { describe, expect, it } from "vitest";
 import { CHART_SCHEMA, validateSharedChart } from "./chart-format.ts";
 import { INSTRUMENTS } from "./types.ts";
 import { scoreChartQuality } from "./chart-quality.ts";

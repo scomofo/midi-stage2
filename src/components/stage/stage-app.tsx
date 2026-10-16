@@ -35,6 +35,7 @@ import { PracticeControls } from "@/components/stage/practice-controls";
 import { loadAudioAsset, saveAudioAsset, deleteAudioAsset } from "@/lib/midi-stage/audio-assets";
 import type { AudioImportProgress } from "@/lib/midi-stage/audio-import";
 import type { AudioImportMode } from "@/lib/midi-stage/audio-file-types";
+import type { FullBandStemFiles } from "@/lib/midi-stage/multi-stem-import";
 import { SongLibraryPanel } from "@/components/stage/song-library-panel";
 import { addLibraryEntry, chartIdentity, loadSongLibrary, MAX_CHART_IMPORT_BYTES, prepareChartImport, saveSongLibrary, songFromSavedChart, type SavedChart } from "@/lib/midi-stage/song-library";
 import { SoundcheckPanel } from "@/components/stage/soundcheck-panel";
@@ -1623,7 +1624,7 @@ export function StageApp() {
     setPracticeSelection({ songId: song.id, sectionId: section.id });
   }
 
-  async function readSongFile(file: File, audioMode = audioImportMode, stemFile?: File, stemMode?: "drums" | "keys" | "guitar") {
+  async function readSongFile(file: File, audioMode = audioImportMode, stemFile?: File, stemMode?: "drums" | "keys" | "guitar" | "bass" | "vocals") {
     if (savingImport) return;
     const ticket = ++importTicket.current;
     importController.current?.abort();
@@ -1670,6 +1671,43 @@ export function StageApp() {
       if (ticket === importTicket.current) setImportCandidate(candidate);
     } catch (error) {
       if (ticket === importTicket.current) setImportError(error instanceof Error ? error.message : "This song could not be imported.");
+    } finally {
+      if (ticket === importTicket.current) {
+        setReadingImport(false);
+        setImportProgress(null);
+        importController.current = null;
+      }
+    }
+  }
+
+  async function readFullBandStemSet(file: File, stems: FullBandStemFiles) {
+    if (savingImport) return;
+    const ticket = ++importTicket.current;
+    importController.current?.abort();
+    const controller = new AbortController();
+    importController.current = controller;
+    setReadingImport(true);
+    setImportProgress(null);
+    setImportError(null);
+    setImportCandidate(null);
+    setChartReviewPending(false);
+    try {
+      const { importFullBandStemSet } = await import("@/lib/midi-stage/multi-stem-import");
+      const { chart, warnings, buffer } = await importFullBandStemSet(file, stems, {
+        signal: controller.signal,
+        onProgress: (_instrument, progress) => {
+          if (ticket === importTicket.current) setImportProgress(progress);
+        },
+      });
+      if (ticket === importTicket.current) setImportCandidate({
+        entry: { id: chartIdentity(chart), chart, fileName: file.name, addedAt: Date.now(), audio: true },
+        warnings,
+        buffer,
+        audioFile: file,
+        kind: "audio",
+      });
+    } catch (error) {
+      if (ticket === importTicket.current) setImportError(error instanceof Error ? error.message : "This full-band stem set could not be imported.");
     } finally {
       if (ticket === importTicket.current) {
         setReadingImport(false);
@@ -2450,6 +2488,7 @@ export function StageApp() {
               onFile={(file) => void readSongFile(file)}
               audioMode={audioImportMode}
               onStemFiles={(original, stem) => { if (audioImportMode !== "rhythm") void readSongFile(original, audioImportMode, stem, audioImportMode); }}
+              onFullBandStems={(original, stems) => void readFullBandStemSet(original, stems)}
               onAudioMode={(mode) => {
                 if (readingImport || savingImport || mode === audioImportMode) return;
                 setAudioImportMode(mode);
