@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "./test-compat.ts";
 import { makeBassDraft, isReviewableBassDraft } from "./bass-draft.ts";
 
 describe("bass audio draft", () => {
