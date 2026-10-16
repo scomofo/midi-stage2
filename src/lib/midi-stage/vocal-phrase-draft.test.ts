@@ -1,4 +1,4 @@
-import {describe,expect,it} from "vitest";
+import {describe,expect,it} from "./test-compat.ts";
 import {groupVocalPhrases,makeVocalPhraseDraft} from "./vocal-phrase-draft.ts";
 describe("vocal phrase highway",()=>{
  it("groups nearby sung notes into phrases",()=>{
