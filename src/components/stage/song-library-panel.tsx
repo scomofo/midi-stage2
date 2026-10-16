@@ -168,9 +168,12 @@ export function SongLibraryPanel({
               <Button type="button" variant={audioMode === "rhythm" ? "primary" : "secondary"} aria-pressed={audioMode === "rhythm"} disabled={busy} onClick={() => onAudioMode("rhythm")}>Rhythm</Button>
               <Button type="button" variant={audioMode === "drums" ? "primary" : "secondary"} aria-pressed={audioMode === "drums"} disabled={busy} onClick={() => onAudioMode("drums")}>Drums (draft)</Button>
               <Button type="button" variant={audioMode === "keys" ? "primary" : "secondary"} aria-pressed={audioMode === "keys"} disabled={busy} onClick={() => onAudioMode("keys")}>Keys (draft)</Button>
+              <Button type="button" variant={audioMode === "guitar" ? "primary" : "secondary"} aria-pressed={audioMode === "guitar"} disabled={busy} onClick={() => onAudioMode("guitar")}>Guitar (draft)</Button>
             </div>
             <p className="text-xs leading-relaxed text-muted">{audioMode === "keys"
               ? "Estimate keyboard pitches, chords and holds locally, then review each note. A clean piano/keyboard stem works best. Longer recordings can take several minutes. Changing mode rebuilds the preview."
+              : audioMode === "guitar"
+              ? "Estimate guitar pitches and holds locally, suggest playable strings/frets, then correct the six-string draft. A clean isolated guitar stem works best; inferred fingering is only a starting point."
               : audioMode === "drums"
               ? "Estimate kick, snare and hi-hat from a recording, then review each hit. A drum-only track works best. Changing mode rebuilds the audio preview."
               : "One rhythm lane from detected attacks, with your original recording. This choice applies to audio files only."}</p>
@@ -226,7 +229,7 @@ export function SongLibraryPanel({
           </label>
           <p id="song-file-help" className="mt-3 text-xs leading-relaxed text-muted">
             MP3, WAV, FLAC and other browser-supported audio. Rhythm hits are detected from your
-            track. Choose Rhythm, a drum draft or a keyboard draft; all play your original track. Up to 50 MB
+            track. Choose Rhythm, a drum, keyboard or guitar draft; all play your original track. Up to 50 MB
             and 6 minutes.
           </p>
           <p className="mt-2 text-xs leading-relaxed text-muted">
