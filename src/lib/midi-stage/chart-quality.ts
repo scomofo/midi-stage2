@@ -45,7 +45,7 @@ export function scoreChartQuality(chart: SharedChart): ChartQualityReport {
   let dense = 0;
   for (let i=1;i<sorted.length;i++) if (sorted[i]!.time - sorted[i-1]!.time < 0.035) dense++;
   const denseRatio = sorted.length > 1 ? dense / (sorted.length - 1) : 0;
-  if (denseRatio > 0.45) {
+  if (denseRatio >= 0.45) {
     penalty += 15;
     issues.push({ severity: "warning", code: "density", message: "Very dense note clusters may contain duplicated attacks or stem bleed." });
   }
