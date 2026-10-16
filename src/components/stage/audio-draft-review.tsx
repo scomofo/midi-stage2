@@ -18,7 +18,7 @@ export function AudioDraftReview({ chart, disabled, audioAttached, onApply, onPe
   const reviewRows = (chart: SharedChart) => keyboard ? keyboardReviewRows(chart) : drumReviewRows(chart);
   const original = useRef(chart);
   const nextId = useRef(reviewRows(chart).length);
-  const [rows, setRows] = useState<(ReturnType<typeof drumReviewRows>[number] & { duration?: string })[]>(() => reviewRows(chart));
+  const [rows, setRows] = useState<(ReturnType<typeof drumReviewRows>[number] & { duration?: string; confidence?: number })[]>(() => reviewRows(chart));
   const [tempo, setTempo] = useState(String(chart.bpm));
   const [page, setPage] = useState(0);
   const [dirty, setDirty] = useState(false);
