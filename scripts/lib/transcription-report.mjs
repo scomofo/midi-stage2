@@ -5,9 +5,15 @@ const ms = (value) => value === null ? '—' : value.toFixed(1);
 const measured = (entry) => entry.metrics.reference || entry.metrics.detected;
 
 export function renderTranscriptionReport(report) {
+  const revision = report.revision;
+  const provenance = revision?.testedTree
+    ? `Base commit: ${revision.baseCommit}. Tested Git tree: ${revision.testedTree}. Uncommitted changes: ${revision.dirty ? 'yes' : 'no'}.`
+    : revision?.pipelineCommit
+      ? `Verified pipeline revision: ${revision.pipelineCommit}; HEAD at run time: ${revision.baseCommit}. Historical run: pipeline files/model were verified against recorded hashes afterward; the full working tree was not captured.`
+      : `Base commit: ${report.baseCommit ?? report.commit ?? 'unknown'}. This historical report did not capture a tested working tree.`;
   return ['# Audio import transcription benchmark', '',
     'Actual local audio-file imports, browser decoding, Basic Pitch workers and chart post-processing. Exact MIDI pitch and 60 ms onset tolerance. Hold errors use pitch/onset matches, without a duration pre-filter.', '',
-    `Base commit: ${report.commit}. Source, model and audio hashes are in report.json.`, '',
+    `${provenance} Source, model and audio hashes are in report.json.`, '',
     'Source kinds stay separate: recorded-performance is an annotated GuitarSet excerpt; recorded-sample-render is digitally scheduled/transposed recorded timbre; analytical-render is a generated signal. The GuitarSet training/held-out relationship has not been established. This small corpus is not an estimate for arbitrary songs.', '',
     '| Case | Instrument | Source kind | Ref / detected | Precision | Recall | F1 | Missed / extra | Octave substitutions | Import / regression |',
     '|---|---|---|---:|---:|---:|---:|---:|---:|---|',

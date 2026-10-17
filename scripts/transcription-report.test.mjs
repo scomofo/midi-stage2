@@ -30,4 +30,8 @@ test('reports expose diagnostics and omit undefined silence accuracy', () => {
   assert.match(markdown, /Known limitation retained visibly/);
   assert.match(markdown, /added harmonic notes still count as extras/);
   assert.doesNotMatch(compareTranscriptionReports(report, report), /100\.0%/);
+  const dirty = { ...report, revision: { baseCommit: 'parent', testedTree: 'actual-tree', dirty: true } };
+  assert.match(renderTranscriptionReport(dirty), /Tested Git tree: actual-tree. Uncommitted changes: yes/);
+  const historical = { ...report, revision: { baseCommit: 'parent', pipelineCommit: 'verified-pipeline' } };
+  assert.match(renderTranscriptionReport(historical), /Verified pipeline revision: verified-pipeline; HEAD at run time: parent/);
 });

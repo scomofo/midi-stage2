@@ -2,11 +2,11 @@
 import assert from 'node:assert/strict';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { execFileSync } from 'node:child_process';
 import { chromium } from 'playwright';
 import { scoreTranscription, benchmarkPass } from '../src/lib/midi-stage/transcription-benchmark.ts';
 import { transcriptionAudioCases, sha256, fixtureRoot } from './fixtures/transcription-audio.mjs';
 import { renderTranscriptionReport } from './lib/transcription-report.mjs';
+import { captureTranscriptionRevision } from './lib/transcription-revision.mjs';
 
 const args = process.argv.slice(2);
 const url = args.find((arg) => /^https?:\/\//.test(arg)) ?? 'http://127.0.0.1:8082';
@@ -23,7 +23,7 @@ const sourceFiles = ['audio-import.ts', 'audio-drum-analysis.ts', 'keyboard-tran
 const sourceHashes = Object.fromEntries(await Promise.all(sourceFiles.map(async (path) => [path, sha256(await readFile(new URL(`../src/lib/midi-stage/${path}`, import.meta.url)))])));
 const model = JSON.parse(await readFile(new URL('../public/models/basic-pitch/model.json', import.meta.url), 'utf8'));
 const modelHashes = Object.fromEntries(await Promise.all(['model.json', ...model.weightsManifest.flatMap((group) => group.paths)].map(async (path) => [path, sha256(await readFile(new URL(`../public/models/basic-pitch/${path}`, import.meta.url)))])));
-const report = { schema: 'midi-stage-transcription-benchmark', version: 1, commit: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
+const report = { schema: 'midi-stage-transcription-benchmark', version: 1, revision: captureTranscriptionRevision(),
   generatedAt: new Date().toISOString(), runtime: process.version, sourceManifestHash, sourceHashes, modelHashes, policy: { onsetToleranceMs: 60, pitchTolerance: 0, holdLengths: 'measured on pitch/onset matches; omitted when unannotated' }, cases: [] };
 const browser = await chromium.launch({ headless: true, args: ['--no-sandbox'] });
 report.browser = browser.version();

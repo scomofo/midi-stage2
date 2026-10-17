@@ -28,8 +28,9 @@ node scripts/compare-transcription-benchmarks.mjs BEFORE.json AFTER.json compari
 `--record-only` bypasses quality gates, never import or browser errors. Comparisons
 refuse changed audio, reference labels, model hashes, case sets or metric policies.
 Keep source files stable during inference: development hot reload can interrupt
-an in-flight import. Reports include the base commit plus actual pipeline/model
-hashes so uncommitted experiments remain distinguishable.
+an in-flight import. Reports capture the base commit, actual tested Git tree (including staged,
+unstaged and untracked files), and a dirty flag. A temporary index preserves the
+user's existing staging. Pipeline/model hashes remain available for diagnosis.
 
 ## What is measured
 
@@ -97,7 +98,11 @@ The [complete comparison](transcription-benchmark-results/comparison.md),
 [Before JSON](transcription-benchmark-results/before.json) and
 [after JSON](transcription-benchmark-results/after.json) include notes, references,
 raw worker events and pipeline/model/audio hashes. These measurements use the
-same audio, labels, model and scoring policy. The after run passes 14 regression
+same audio, labels, model and scoring policy. Their original runs did not capture
+a full working-tree identity: historical metadata now identifies pipeline
+revisions verified against every recorded source/model hash (before: `6a10236`;
+after: `afc249a`), separately from HEAD at run time. No inference or metrics were
+regenerated for that attribution correction. The after run passes 14 regression
 policies; the remaining short-guitar case is diagnostic, not a quality pass.
 
 | Case | Missed before → after | Extra before → after | Matched length MAE before → after |

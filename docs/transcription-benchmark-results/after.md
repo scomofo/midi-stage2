@@ -2,7 +2,7 @@
 
 Actual local audio-file imports, browser decoding, Basic Pitch workers and chart post-processing. Exact MIDI pitch and 60 ms onset tolerance. Hold errors use pitch/onset matches, without a duration pre-filter.
 
-Base commit: 6a1023600cd690e0bfe8693d42ce03be4b3e084c. Source, model and audio hashes are in report.json.
+Verified pipeline revision: afc249aff86e8e4657dc6c0d0050972501e1fa68; HEAD at run time: 6a1023600cd690e0bfe8693d42ce03be4b3e084c. Historical run: pipeline files/model were verified against recorded hashes afterward; the full working tree was not captured. Source, model and audio hashes are in report.json.
 
 Source kinds stay separate: recorded-performance is an annotated GuitarSet excerpt; recorded-sample-render is digitally scheduled/transposed recorded timbre; analytical-render is a generated signal. The GuitarSet training/held-out relationship has not been established. This small corpus is not an estimate for arbitrary songs.
 
