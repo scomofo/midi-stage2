@@ -74,12 +74,25 @@ export function prepareChartImport(text: string, fileName: string): { entry: Sav
 }
 
 export function songFromSavedChart(entry: SavedChart): Song {
+  const fullBand = entry.chart.origin === "audio-full-band-draft";
+  const guitarDraft = entry.chart.origin === "audio-guitar-draft";
+  const bassDraft = entry.chart.origin === "audio-bass-draft";
+  const vocalDraft = entry.chart.origin === "audio-vocals-rhythm";
+  const backing = entry.audio === true ? "The original recording plays with you." : "The original recording is not attached.";
   return {
     ...sharedChartToSong(entry.chart),
     id: entry.id,
     subtitle: entry.fileName,
-    arrangement: entry.chart.guitarMode === "strings" ? "Authored guitar" : isReviewableKeyboardDraft(entry.chart) ? "Keyboard draft" : isReviewableDrumDraft(entry.chart) ? "Drum draft" : entry.audio === true ? "Audio rhythm" : "Imported chart",
-    arrangementDescription: isReviewableKeyboardDraft(entry.chart)
+    arrangement: fullBand ? "Full-band draft" : guitarDraft ? "Guitar draft" : bassDraft ? "Bass draft" : vocalDraft ? "Vocal phrases" : entry.chart.guitarMode === "strings" ? "Authored guitar" : isReviewableKeyboardDraft(entry.chart) ? "Keyboard draft" : isReviewableDrumDraft(entry.chart) ? "Drum draft" : entry.audio === true ? "Audio rhythm" : "Imported chart",
+    arrangementDescription: fullBand
+      ? `Estimated instrument parts share one recording timeline. Choose your lineup; guitar uses strings and frets with MIDI pitch scoring. ${backing}`
+      : guitarDraft
+      ? `Estimated guitar pitches and suggested strings/frets; corrections may be needed. Guitar MIDI scores pitch. ${backing}`
+      : bassDraft
+      ? `Estimated bass pitches and holds; physical fingering is not inferred. ${backing}`
+      : vocalDraft
+      ? `Experimental vocal phrase timing. Lyric alignment and singing pitch scoring are not available. ${backing}`
+      : isReviewableKeyboardDraft(entry.chart)
       ? `Estimated keyboard pitches, chords and holds; corrections may be needed. ${entry.audio === true ? "The original recording plays with you." : "The original recording is not attached."}`
       : isReviewableDrumDraft(entry.chart)
       ? `Estimated drum types and timing; corrections may be needed. ${entry.audio === true ? "The original recording plays with you." : "This chart plays stage instruments; the original recording is not attached."}`

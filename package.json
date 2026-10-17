@@ -33,7 +33,8 @@
     "test:performance-hud": "node scripts/performance-hud-regression.mjs",
     "test:audio-drums": "node scripts/audio-drums-regression.mjs",
     "test:drum-stems": "node scripts/audio-drums-regression.mjs http://127.0.0.1:8082 --stems-only",
-    "test:keyboard-import": "node scripts/keyboard-import-regression.mjs"
+    "test:keyboard-import": "node scripts/keyboard-import-regression.mjs",
+    "test:full-band-import": "node scripts/full-band-import-regression.mjs"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.4",

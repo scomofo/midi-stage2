@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
-  defaultMidiRoutes, loadMidiRoutes, MIDI_ROUTES_KEY, remapMidiRouteInputIds, resolveMidiPlayer, saveMidiRoutes,
+  canReceiveMidi, defaultMidiRoutes, loadMidiRoutes, MIDI_ROUTES_KEY, remapMidiRouteInputIds, resolveMidiPlayer, saveMidiRoutes,
   type MidiRoute,
 } from "./midi-routing.ts";
 import { INSTRUMENTS, type Player } from "./types.ts";
@@ -13,6 +13,17 @@ function players(...enabled: Player["id"][]): Player[] {
 const device = (inputId: string, channel: number | null = null): MidiRoute => ({ mode: "device", inputId, channel });
 
 describe("MIDI player routing", () => {
+  it("requires a reachable guitar route when another automatic melodic player owns input", () => {
+    const lineup = players("drums", "keys", "guitar", "bass"), routes = defaultMidiRoutes();
+    const inputs = [{ id: "controller" }];
+    assert.equal(canReceiveMidi("guitar", lineup, routes, inputs), false);
+    assert.equal(canReceiveMidi("guitar", players("guitar"), routes, inputs), true);
+    routes.guitar = device("controller", 3);
+    assert.equal(canReceiveMidi("guitar", lineup, routes, inputs), true);
+    routes.keys = device("controller", 3);
+    assert.equal(canReceiveMidi("guitar", lineup, routes, inputs), false);
+    assert.equal(canReceiveMidi("guitar", lineup, routes, []), false);
+  });
   it("routes automatic channel 10 to drums and melodic channels to the first melodic player", () => {
     const lineup = players("drums", "keys", "guitar", "bass");
     const routes = defaultMidiRoutes();

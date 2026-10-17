@@ -10,13 +10,15 @@ import "./guitar-import-review.css";
 
 const PAGE_SIZE = 16;
 
-export function GuitarImportReview({ chart, disabled, onApply, onPendingChange }: {
+export function GuitarImportReview({ chart, disabled, audioAttached = false, onApply, onPendingChange }: {
   chart: SharedChart;
   disabled: boolean;
+  audioAttached?: boolean;
   onApply: (chart: SharedChart) => void;
   onPendingChange: (pending: boolean) => void;
 }) {
   const original = useRef(chart);
+  const audioDraft = chart.origin.startsWith("audio-");
   const nextId = useRef(chart.parts.find((part) => part.type === "guitar")!.notes.length);
   const [rows, setRows] = useState(() => guitarReviewRows(chart));
   const [tempo, setTempo] = useState(String(chart.bpm));
@@ -86,7 +88,7 @@ export function GuitarImportReview({ chart, disabled, onApply, onPendingChange }
       <div className="guitar-review-heading">
         <div>
           <h4 id="guitar-review-title">Review the guitar arrangement</h4>
-          <p>Six strings, authored frets. String 1 is the highest string; string 6 is the lowest.</p>
+          <p>{audioDraft ? "Six strings, estimated frets." : "Six strings, authored frets."} String 1 is the highest string; string 6 is the lowest.</p>
         </div>
         <Button type="button" variant="secondary" disabled={disabled || dirty} onClick={download}>
           <Download size={16} aria-hidden="true" /> Download chart
@@ -100,8 +102,8 @@ export function GuitarImportReview({ chart, disabled, onApply, onPendingChange }
       </div> : null}
       <div className="guitar-review-setup">
         <p><span>Tuning · low to high</span><strong>{chart.guitarTuning!.map((pitch) => noteName(pitch)).join(" · ")}</strong></p>
-        <label>Chart tempo
-          <input aria-label="Chart tempo" type="number" min={20} max={400} step="any" value={tempo} disabled={disabled}
+        <label>{audioDraft ? "Count-in tempo" : "Chart tempo"}
+          <input aria-label={audioDraft ? "Guitar count-in tempo" : "Chart tempo"} type="number" min={20} max={400} step="any" value={tempo} disabled={disabled}
             aria-describedby="guitar-review-help" onChange={(event) => { pending(); setTempo(event.target.value); }} />
           <span>BPM</span>
         </label>
@@ -120,7 +122,7 @@ export function GuitarImportReview({ chart, disabled, onApply, onPendingChange }
         <Button type="button" size="sm" variant="ghost" disabled={disabled} onClick={() => setSelected(new Set(visibleRows.map(row => row.id)))}>Select visible</Button>
       </div>
       <p id="guitar-review-help" className="guitar-review-help">
-        Times and lengths are seconds. Changing tempo rescales the whole chart when you apply.
+        Times and lengths are seconds. {audioDraft ? "Changing count-in tempo keeps every part aligned with the original recording." : "Changing tempo rescales the whole chart when you apply."}{" "}
         String or fret edits update the sounding note. All difficulty levels keep these notes.
         {chart.chordHighways.guitar.length ? " Changing guitar notes clears imported guitar chord labels; the stage names chords from the reviewed pitches." : ""}
       </p>
@@ -168,7 +170,7 @@ export function GuitarImportReview({ chart, disabled, onApply, onPendingChange }
         <Button type="button" variant="ghost" disabled={disabled} onClick={restore}><RotateCcw size={16} aria-hidden="true" /> Restore original</Button>
       </div>
       <p role="status" className="guitar-review-help">{dirty ? "Apply or restore your corrections before adding or downloading this chart." : notice}</p>
-      <p className="guitar-review-help">The guide uses these positions. Guitar MIDI scores pitch; it cannot verify which string you used. Playback uses stage instruments; original audio is not attached.</p>
+      <p className="guitar-review-help">The guide uses these positions. Guitar MIDI scores pitch; it cannot verify which string you used. {audioAttached ? "Playback uses the original selected recording." : "Playback uses stage instruments; original audio is not attached."}</p>
     </section>
   );
 }

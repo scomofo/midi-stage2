@@ -1,3 +1,4 @@
+import { hasScoredGuitar, isGuitarOnlySong, lineupForSong } from "@/lib/midi-stage/lineup";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent } from "react";
 import {
   Lamp,
@@ -42,7 +43,7 @@ import { SoundcheckPanel } from "@/components/stage/soundcheck-panel";
 import type { SharedChart } from "@/lib/midi-stage/chart-format";
 import { isReviewableDrumDraft } from "@/lib/midi-stage/drum-chart-review";
 import { isReviewableKeyboardDraft } from "@/lib/midi-stage/keyboard-draft";
-import { defaultMidiRoutes, loadMidiRoutes, remapMidiRouteInputIds, saveMidiRoutes, resolveMidiPlayer, type MidiRoute } from "@/lib/midi-stage/midi-routing";
+import { canReceiveMidi, defaultMidiRoutes, loadMidiRoutes, remapMidiRouteInputIds, saveMidiRoutes, resolveMidiPlayer, type MidiRoute } from "@/lib/midi-stage/midi-routing";
 import { loadSessionPreferences, saveSessionPreferences } from "@/lib/midi-stage/preferences";
 import { clearRehearsalBookmark, loadRehearsalBookmark, resolveRehearsalBookmark, saveRehearsalBookmark, type RehearsalBookmark } from "@/lib/midi-stage/rehearsal-bookmark";
 import { useStageMidi } from "@/components/stage/use-stage-midi";
@@ -142,18 +143,6 @@ function bestKey(song: Song, difficulty: string, speed: number, players: Player[
   return `midi-stage-best/${song.id}/${difficulty}/${speed}/${players.filter((p) => p.enabled).map((p) => p.id).join(",")}`;
 }
 
-function lineupForSong(song: Song, current: Player[]): Player[] {
-  if (song.guitarMode) return current.map((player) => ({ ...player, enabled: player.id === "guitar" }));
-  if (song.original) return current;
-  const available = new Set(song.parts.filter((part) => part.notes.length > 0).map((part) => part.type));
-  const next = current.map((player) => ({ ...player, enabled: player.enabled && available.has(player.type) }));
-  if (!next.some((player) => player.enabled)) {
-    const preferred = next.find((player) => player.id === "keys" && available.has(player.type))
-      ?? next.find((player) => available.has(player.type));
-    if (preferred) preferred.enabled = true;
-  }
-  return next;
-}
 
 export function StageApp() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -167,12 +156,12 @@ export function StageApp() {
   const audioBuffers = useRef(new Map<string, AudioBuffer>());
   const sessionAudioFiles = useRef(new Map<string, Blob>());
   const volatileAudioIds = useRef(new Set<string>());
-  const [importCandidate, setImportCandidate] = useState<{ entry: SavedChart; warnings: string[]; kind: "audio" | "midi" | "chart" | "musicxml"; buffer?: AudioBuffer; audioFile?: File; stemFile?: File; stemMode?: "drums" | "keys" | "guitar" | "bass" | "vocals" } | null>(null);
+  const [importCandidate, setImportCandidate] = useState<{ entry: SavedChart; warnings: string[]; kind: "audio" | "midi" | "chart" | "musicxml"; buffer?: AudioBuffer; audioFile?: File; stemFile?: File; stemFiles?: FullBandStemFiles; stemMode?: "drums" | "keys" | "guitar" | "bass" | "vocals" } | null>(null);
   const [chartReviewPending, setChartReviewPending] = useState(false);
   const [audioImportMode, setAudioImportMode] = useState<AudioImportMode>("rhythm");
   const [savingImport, setSavingImport] = useState(false);
   const [readingImport, setReadingImport] = useState(false);
-  const [importProgress, setImportProgress] = useState<AudioImportProgress | null>(null);
+  const [importProgress, setImportProgress] = useState<(AudioImportProgress & { instrument?: keyof FullBandStemFiles }) | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
   const [libraryWarning, setLibraryWarning] = useState<string | null>(null);
   const guitarMidiReadyRef = useRef(false);
@@ -645,7 +634,7 @@ export function StageApp() {
   const startSession = useCallback(async (demo = false, repeating = false) => {
     const b = bag.current;
     if (!b || b.libraryOpen || b.status === "playing" || b.status === "starting") return;
-    if (b.song.guitarMode === "strings" && !demo && !(b.status === "paused" && b.demo) && !guitarMidiReadyRef.current) {
+    if (hasScoredGuitar(b.song, b.players) && !demo && !(b.status === "paused" && b.demo) && !guitarMidiReadyRef.current) {
       setToast("Connect a guitar MIDI input in Soundcheck, or choose Play along without scoring.");
       setSoundcheckOpen(true);
       focusSoundcheck();
@@ -735,7 +724,7 @@ export function StageApp() {
       setSoundcheckOpen(false);
       setMenu(false);
       if (!repeating) {
-        if (b.song.guitarMode) {
+        if (b.song.guitarMode && b.players.filter((player) => player.enabled).every((player) => player.id === "guitar")) {
           setFocusStage(true);
           setSongMapOpen(false);
           focusTransport(true);
@@ -847,7 +836,7 @@ export function StageApp() {
     const newBest = !b.demo && !b.practice && score > previousBest;
     const bestSaved = !newBest || saveBest(key, score);
     if (newBest && bestSaved) setBest(score);
-    const isGuitar = Boolean(b.song.guitarMode);
+    const isGuitar = Boolean(b.song.guitarMode && b.players.some((player) => player.enabled && player.id === "guitar"));
     let maxCombo = 0;
     let overdriveActivated = false;
     for (const j of b.judges.values()) {
@@ -1381,12 +1370,11 @@ export function StageApp() {
       const p = b?.players.find((player) => player.id === owner?.playerId);
       if (b && p && owner) release(b, p, owner.token);
     },
-    onDisconnect: () => pauseSession(bag.current?.song.guitarMode === "strings"
+    onDisconnect: () => pauseSession(bag.current && hasScoredGuitar(bag.current.song, bag.current.players)
       ? "Guitar MIDI disconnected. Reconnect in Soundcheck, or reset and choose Play along without scoring."
       : "MIDI disconnected. Reconnect your instrument or continue on keyboard."),
   });
-  const guitarMidiReady = midi.connected && midiRoutes.guitar.mode !== "off"
-    && (midiRoutes.guitar.mode !== "device" || midi.inputs.some((input) => input.id === midiRoutes.guitar.inputId));
+  const guitarMidiReady = midi.connected && canReceiveMidi("guitar", players, midiRoutes, midi.inputs);
   useEffect(() => { guitarMidiReadyRef.current = guitarMidiReady; }, [guitarMidiReady]);
 
   function changeMidiRoute(id: Instrument, route: MidiRoute) {
@@ -1695,8 +1683,8 @@ export function StageApp() {
       const { importFullBandStemSet } = await import("@/lib/midi-stage/multi-stem-import");
       const { chart, warnings, buffer } = await importFullBandStemSet(file, stems, {
         signal: controller.signal,
-        onProgress: (_instrument, progress) => {
-          if (ticket === importTicket.current) setImportProgress(progress);
+        onProgress: (instrument, progress) => {
+          if (ticket === importTicket.current) setImportProgress({ ...progress, instrument });
         },
       });
       if (ticket === importTicket.current) setImportCandidate({
@@ -1704,6 +1692,7 @@ export function StageApp() {
         warnings,
         buffer,
         audioFile: file,
+        stemFiles: stems,
         kind: "audio",
       });
     } catch (error) {
@@ -1775,7 +1764,7 @@ export function StageApp() {
   }
 
   function togglePlayer(id: Instrument) {
-    if (song.guitarMode) return;
+    if (isGuitarOnlySong(song)) return;
     if (!song.original && !song.parts.some((part) => part.type === id && part.notes.length > 0)) return;
     setPlayers((prev) => {
       const next = prev.map((p) => (p.id === id ? { ...p, enabled: !p.enabled } : p));
@@ -1785,13 +1774,15 @@ export function StageApp() {
     resetReady();
   }
 
+  const analysisInstrument = importProgress?.instrument ?? audioImportMode;
   const enabled = players.filter((p) => p.enabled);
   const busy = status === "playing" || status === "starting";
   const guitarMode = song.guitarMode === "fret-strum";
-  const realGuitar = song.guitarMode === "strings";
-  const needsGuitarMidi = realGuitar && !guitarMidiReady && status !== "playing" && !(status === "paused" && bag.current?.demo);
+  const scoredGuitar = hasScoredGuitar(song, players);
+  const realGuitar = scoredGuitar && enabled.length === 1;
+  const needsGuitarMidi = scoredGuitar && !guitarMidiReady && status !== "playing" && !(status === "paused" && bag.current?.demo);
   const connectGuitar = () => { setSoundcheckOpen(true); focusSoundcheck(); if (!midi.connected) void midi.connect(); };
-  const setupLabel = `${enabled.map((player) => player.label).join(" + ")} · ${difficulty[0]!.toUpperCase()}${difficulty.slice(1)} · ${Math.round(speed * 100)}% tempo · ${realGuitar ? guitarMidiReady ? "Guitar MIDI ready" : "Play along · MIDI needed for scoring" : guitarMode ? "Fret + strum" : midi.connected ? "MIDI connected" : "Keyboard ready"}`;
+  const setupLabel = `${enabled.map((player) => player.label).join(" + ")} · ${difficulty[0]!.toUpperCase()}${difficulty.slice(1)} · ${Math.round(speed * 100)}% tempo · ${scoredGuitar ? guitarMidiReady ? "Guitar MIDI ready" : "Play along · MIDI needed for scoring" : guitarMode ? "Fret + strum" : midi.connected ? "MIDI connected" : "Keyboard ready"}`;
   const rehearsalSetupLabel = savedRehearsal ? `${savedRehearsal.bookmark.setup.enabledPlayers.map((id) => players.find((player) => player.id === id)?.label ?? id).join(" + ")} · ${savedRehearsal.bookmark.setup.difficulty} · ${Math.round(savedRehearsal.bookmark.setup.speed * 100)}% tempo` : "";
   const finderItems: StageFinderItem[] = finderOpen ? [
     ...(savedRehearsal ? [{ id: "continue-rehearsal", group: "Stage" as const, icon: "passage" as const, label: "Continue last rehearsal", detail: `${savedRehearsal.song.name} · ${savedRehearsal.section.name} · ${rehearsalSetupLabel}`, keywords: ["saved", "continue", "practice", "bookmark", "return"], disabled: !ready || busy, onSelect: continueRehearsal }] : []),
@@ -1952,7 +1943,7 @@ export function StageApp() {
                   key={p.id}
                   type="button"
                   aria-pressed={p.enabled}
-                  disabled={busy || guitarMode || realGuitar || (!song.original && !song.parts.some((part) => part.type === p.id && part.notes.length > 0))}
+                  disabled={busy || isGuitarOnlySong(song) || (!song.original && !song.parts.some((part) => part.type === p.id && part.notes.length > 0))}
                   onClick={() => togglePlayer(p.id)}
                   className={cn(
                     "flex h-11 items-center justify-between rounded-xl px-3 text-[12px] font-medium shadow-[0_0_0_1px_rgba(239,232,220,0.1)]",
@@ -2221,6 +2212,7 @@ export function StageApp() {
                 rhythm={rhythm}
                 guitarMode={guitarMode}
                 realGuitar={realGuitar}
+                scoredGuitar={scoredGuitar}
                 guitarTuning={song.guitarTuning}
                 guitarMidiReady={guitarMidiReady}
                 guitarConnecting={midi.connecting}
@@ -2230,7 +2222,7 @@ export function StageApp() {
                 demo={bag.current?.demo ?? false}
                 results={results}
                 practice={practice ? { ...practice, pass: practicePass } : undefined}
-                controls={enabled.map((p) => ({ label: rhythm ? "Rhythm" : p.label, keys: (bag.current?.judges.get(p.id)?.lanes || []).map((lane, i) => `${keyLabel(KEYS[p.id][i] || "")}${spaceToHit && KEYS[p.id][i] !== "Space" ? " / SPACE" : ""} · ${lane.short}`) }))}
+                controls={enabled.filter((p) => !song.guitarMode || p.id !== "guitar").map((p) => ({ label: rhythm ? "Rhythm" : p.label, keys: (bag.current?.judges.get(p.id)?.lanes || []).map((lane, i) => `${keyLabel(KEYS[p.id][i] || "")}${spaceToHit && KEYS[p.id][i] !== "Space" ? " / SPACE" : ""} · ${lane.short}`) }))}
                 onStart={() => void startSession(false)}
                 onDemo={() => void startSession(true)}
                 onRestart={() => { resetReady(); void startSession(false); }}
@@ -2382,7 +2374,7 @@ export function StageApp() {
           )}
 
           <div className={cn("mt-4 flex-col gap-2", guitarMode || realGuitar ? "hidden" : "flex")}>
-            {enabled.map((p) => {
+            {enabled.filter((p) => !song.guitarMode || p.id !== "guitar").map((p) => {
               const lanes = bag.current?.judges.get(p.id)?.lanes || [];
               return (
                 <div key={p.id} className="flex items-center gap-2">
@@ -2476,8 +2468,8 @@ export function StageApp() {
               reading={readingImport}
               readingLabel={importProgress?.phase === "checking" ? importProgress.source === "stem" ? "Checking instrument stem…" : "Checking song…"
                 : importProgress?.phase === "decoding" ? importProgress.source === "stem" ? "Decoding instrument stem…" : "Decoding audio…"
-                : importProgress?.phase === "model" ? audioImportMode === "guitar" ? "Loading guitar pitch model…" : audioImportMode === "bass" ? "Loading bass pitch model…" : audioImportMode === "vocals" ? "Loading vocal phrase model…" : "Loading keyboard transcriber…"
-                : importProgress?.phase === "analyzing" ? audioImportMode === "keys" ? "Transcribing keyboard notes…" : audioImportMode === "guitar" ? "Building a six-string guitar draft…" : audioImportMode === "bass" ? "Building a bass draft…" : audioImportMode === "vocals" ? "Grouping vocal phrases…" : audioImportMode === "drums" ? "Building a drum draft…" : "Finding rhythm hits…"
+                : importProgress?.phase === "model" ? analysisInstrument === "guitar" ? "Loading guitar pitch model…" : analysisInstrument === "bass" ? "Loading bass pitch model…" : analysisInstrument === "vocals" ? "Loading vocal phrase model…" : "Loading keyboard transcriber…"
+                : importProgress?.phase === "analyzing" ? analysisInstrument === "keys" ? "Transcribing keyboard notes…" : analysisInstrument === "guitar" ? "Building a six-string guitar draft…" : analysisInstrument === "bass" ? "Building a bass draft…" : analysisInstrument === "vocals" ? "Grouping vocal phrases…" : analysisInstrument === "drums" ? "Building a drum draft…" : "Finding rhythm hits…"
                 : undefined}
               readingProgress={importProgress?.phase === "analyzing" ? importProgress.progress : undefined}
               onCancel={cancelSongImport}
@@ -2490,9 +2482,16 @@ export function StageApp() {
               onStemFiles={(original, stem) => { if (audioImportMode !== "rhythm") void readSongFile(original, audioImportMode, stem, audioImportMode); }}
               onFullBandStems={(original, stems) => void readFullBandStemSet(original, stems)}
               onAudioMode={(mode) => {
-                if (readingImport || savingImport || mode === audioImportMode) return;
+                if (readingImport || savingImport || (mode === audioImportMode && !importCandidate?.stemFiles)) return;
                 setAudioImportMode(mode);
-                if (importCandidate?.kind === "audio" && importCandidate.audioFile) void readSongFile(importCandidate.audioFile, mode, importCandidate.stemFile, importCandidate.stemMode);
+                if (importCandidate?.kind === "audio" && importCandidate.audioFile) {
+                  const selectedStem = mode !== "rhythm" && mode !== "vocals" ? importCandidate.stemFiles?.[mode] : undefined;
+                  if (importCandidate.stemFiles && mode !== "rhythm" && !selectedStem) {
+                    setImportError("Choose an isolated stem for this instrument before analyzing it separately.");
+                    return;
+                  }
+                  void readSongFile(importCandidate.audioFile, mode, selectedStem ?? importCandidate.stemFile, selectedStem && mode !== "rhythm" ? mode : importCandidate.stemMode);
+                }
               }}
               onAdd={() => void addImportedSong()}
               onClose={closeSongLibrary}

@@ -6,12 +6,6 @@ import type { KeyboardEvent } from "./keyboard-draft.ts";
 export const STANDARD_GUITAR_TUNING = [40, 45, 50, 55, 59, 64] as const;
 export const MAX_GUITAR_DRAFT_NOTES = 6000;
 
-type Candidate = {
-  event: KeyboardEvent;
-  string: GuitarPosition["string"];
-  fret: number;
-};
-
 export function makeGuitarDraft(
   events: KeyboardEvent[],
   duration: number,
@@ -85,7 +79,7 @@ export function makeGuitarDraft(
     warnings: [
       "Guitar draft: pitches, onsets and holds are estimated from Basic Pitch. String/fret positions are suggested for playability and are not a claim about the performer's actual fingering.",
       "Review every uncertain chord, position jump and sustain in the six-string editor before adding the chart. Clean isolated guitar stems work best.",
-      "Review the count-in tempo. Changing it does not move the detected notes unless you explicitly apply a tempo rescale in the guitar editor.",
+      "Review the count-in tempo. Changing it keeps the detected notes aligned with the original recording; it does not stretch the backing audio.",
       ...(droppedUnplayable ? [`${droppedUnplayable} detected notes were omitted because no non-overlapping position was available in the selected tuning.`] : []),
       ...(limited ? ["This draft reached 6,000 detected notes; only the earliest retained candidates were considered."] : []),
     ],

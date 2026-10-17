@@ -47,6 +47,12 @@ export function resolveMidiPlayer(
     ?? automatic[0];
 }
 
+/** Readiness must follow the same ownership rules as incoming MIDI events. */
+export function canReceiveMidi(instrument: Instrument, players: readonly Player[], routes: MidiRoutes, inputs: readonly { id: string }[]): boolean {
+  return inputs.some((input) => Array.from({ length: 16 }, (_, channel) => channel + 1)
+    .some((channel) => resolveMidiPlayer(players, routes, { inputId: input.id, channel })?.id === instrument));
+}
+
 function parseRoute(value: unknown): MidiRoute | undefined {
   if (!value || typeof value !== "object" || Array.isArray(value)) return;
   const route = value as Record<string, unknown>;

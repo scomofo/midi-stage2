@@ -16,11 +16,11 @@ export function FullBandStemImport({ disabled, onImport }: {
     <summary className="min-h-11 cursor-pointer text-sm font-medium">Build a full-band song from stems</summary>
     <p className="mb-3 text-xs leading-relaxed text-muted">Choose the original song plus any aligned drum, keyboard, guitar and bass stems. All stems must start at song time 0; the original remains the backing track.</p>
     <label className="block text-sm">Original song
-      <input type="file" accept={AUDIO_IMPORT_ACCEPT} disabled={disabled} className="mt-1 block w-full text-xs" onChange={e=>setOriginal(e.target.files?.[0]??null)}/>
+      <input type="file" aria-label="Full-band original song" accept={AUDIO_IMPORT_ACCEPT} disabled={disabled} className="mt-1 block w-full text-xs" onChange={e=>setOriginal(e.target.files?.[0]??null)}/>
     </label>
     <div className="mt-3 grid grid-cols-2 gap-3">
       {(["drums","keys","guitar","bass"] as const).map(kind=><label key={kind} className="block text-sm capitalize">{kind} stem
-        <input type="file" accept={AUDIO_IMPORT_ACCEPT} disabled={disabled} className="mt-1 block w-full text-xs" onChange={e=>set(kind,e.target.files?.[0]??null)}/>
+        <input type="file" aria-label={`Full-band ${kind === "keys" ? "keyboard" : kind} stem`} accept={AUDIO_IMPORT_ACCEPT} disabled={disabled} className="mt-1 block w-full text-xs" onChange={e=>set(kind,e.target.files?.[0]??null)}/>
       </label>)}
     </div>
     <Button type="button" variant="secondary" className="mt-3" disabled={disabled||!original||!count} onClick={()=>{if(original&&count)onImport(original,stems);}}>

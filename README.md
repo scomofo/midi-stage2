@@ -44,6 +44,7 @@ npm run dev   # serves the app on http://0.0.0.0:8082
 | `npm run test:imports` | Chart/MIDI import, playback, saved songs and mobile regression |
 | `npm run test:audio` | Real WAV/MP3/FLAC import, backing playback, storage and rhythm-input regression |
 | `npm run test:audio-drums` | Desktop drum drafts, correction/export, original backing, MIDI lanes and reload |
+| `npm run test:full-band-import` | Desktop four-stem import, shared timing, mixed lineup, MIDI routing, original backing and reload |
 | `npm run test:guitar` | Authored strings/frets, exact-pitch MIDI, arcade strums, holds and touch |
 | `npm run test:guitar-import` | Desktop MusicXML/string-fret imports, correction/export, reload and exact-pitch playback |
 | `npm run test:graphics` | Concert rendering, lane targets, reduced motion and saved/live strum arrows |
@@ -186,7 +187,8 @@ Up to 12 imports are remembered in this browser: chart metadata in local storage
 original audio in IndexedDB. Files are processed locally and are never uploaded.
 See [audio drum drafts and the stem handoff](docs/audio-drum-drafts.md) for the
 current drum limits, or [keyboard audio drafts](docs/keyboard-audio-drafts.md)
-for the piano/keyboard workflow.
+for the piano/keyboard workflow. See [full-band stem imports](docs/full-band-stem-import.md)
+for combined drum, keyboard, guitar and bass parts, count-in review and MIDI setup.
 If storage is unavailable, the current visit remains playable and a warning
 explains what was not saved. Reimporting the same file does not duplicate it.
 Remove imports from **Your songs**; the original files are unchanged. Parts with
