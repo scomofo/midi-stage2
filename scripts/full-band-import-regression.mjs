@@ -33,6 +33,34 @@ try {
       inputs.find((input) => input.id === `full-band-${kind}`).dispatchEvent(event);
     };
     window.bandWorkers = [];
+    window.bandAudio = [];
+    const NativeAudioContext = window.AudioContext;
+    window.AudioContext = class extends NativeAudioContext {
+      constructor(...args) {
+        super(...args);
+        const capture = { context: this, starts: [], tones: [], analyser: null };
+        window.bandAudio.push(capture);
+        const bufferSource = this.createBufferSource.bind(this);
+        this.createBufferSource = () => {
+          const source = bufferSource(), start = source.start.bind(source);
+          source.start = (...args) => {
+            capture.starts.push({ bufferDuration: source.buffer?.duration, at: args[0], offset: args[1], duration: args[2] });
+            return start(...args);
+          };
+          return source;
+        };
+        const oscillator = this.createOscillator.bind(this);
+        this.createOscillator = () => {
+          const source = oscillator(), start = source.start.bind(source);
+          source.start = (...args) => { capture.tones.push({ frequency: source.frequency.value, at: args[0] }); return start(...args); };
+          return source;
+        };
+        const compressor = this.createDynamicsCompressor.bind(this);
+        this.createDynamicsCompressor = () => {
+          const node = compressor(); capture.analyser = this.createAnalyser(); node.connect(capture.analyser); return node;
+        };
+      }
+    };
     const NativeWorker = Worker;
     window.Worker = class extends NativeWorker {
       constructor(...args) {
@@ -117,9 +145,116 @@ try {
   await library.getByLabel('Guitar count-in tempo', { exact: true }).fill('90');
   assert.equal(await library.getByRole('button', { name: 'Add to setlist', exact: true }).isDisabled(), true);
   await library.getByRole('button', { name: 'Apply corrections', exact: true }).click();
-  const reviewed = await download('full-band-reviewed');
+  let reviewed = await download('full-band-reviewed');
   assert.equal(reviewed.bpm, 90); assert.equal(reviewed.duration, 10);
   assert.deepEqual(reviewed.parts, detected.parts);
+  const tabs = library.getByRole('tablist', { name: 'Review instrument', exact: true });
+  const tab = (kind) => tabs.getByRole('tab', { name: labels[kind], exact: true });
+  const notes = (chart, kind) => chart.parts.find((part) => part.type === kind).notes;
+  const apply = () => library.getByRole('button', { name: 'Apply corrections', exact: true }).click();
+  const restore = () => library.getByRole('button', { name: 'Restore original', exact: true }).click();
+  const unchanged = (next, current, changed) => {
+    for (const kind of instruments.filter((kind) => kind !== changed)) assert.deepEqual(notes(next, kind), notes(current, kind), `${changed} changed ${kind}`);
+    for (const key of ['duration', 'audioOffset', 'audioName', 'beats', 'sections']) assert.deepEqual(next[key], current[key], key);
+    assert.equal(next.bpm, 90);
+    assert.equal(next.firstBeat, Math.min(...next.parts.flatMap((part) => part.notes.map((note) => note.time))));
+  };
+  phase = 'guitar edits stop audition and protect pending changes';
+  await library.getByRole('button', { name: 'Play corrected part', exact: true }).click();
+  await page.waitForFunction(() => window.bandAudio.at(-1)?.context.state === 'running');
+  const guitarFret = String(notes(detected, 'guitar')[0].guitarPosition.fret === 24 ? 23 : notes(detected, 'guitar')[0].guitarPosition.fret + 1);
+  await library.getByLabel('Note 1 fret', { exact: true }).fill(guitarFret);
+  await page.waitForFunction(() => window.bandAudio.at(-1)?.context.state === 'closed');
+  assert.equal(await tab('keys').isDisabled(), true);
+  assert.equal(await library.getByRole('button', { name: 'Download chart', exact: true }).isDisabled(), true);
+  assert.equal(await library.getByRole('button', { name: 'Play corrected part', exact: true }).isDisabled(), true);
+  await apply();
+  let next = await download('full-band-guitar-edit'); unchanged(next, reviewed, 'guitar'); reviewed = next;
+  assert.equal(notes(reviewed, 'guitar')[0].guitarPosition.fret, Number(guitarFret));
+
+  phase = 'drum corrections preserve guitar and the recording';
+  await tab('drums').click();
+  await library.getByLabel('Hit 1 time', { exact: true }).fill('0.12');
+  await library.getByLabel('Hit 1 drum', { exact: true }).selectOption('49');
+  await apply();
+  next = await download('full-band-drum-edit'); unchanged(next, reviewed, 'drums'); reviewed = next;
+  assert.equal(notes(reviewed, 'drums')[0].time, 0.12); assert.equal(notes(reviewed, 'drums')[0].pitch, 49);
+  await library.getByRole('heading', { name: 'Review the drum draft', exact: true }).scrollIntoViewIfNeeded();
+  await page.screenshot({ path: `${output}/full-band-drums-review-desktop.png` });
+
+  phase = 'keyboard pitch, length, timing and added notes';
+  await tab('keys').click();
+  await library.getByLabel('Note 1 time', { exact: true }).fill('0.18');
+  await library.getByLabel('Note 1 length', { exact: true }).fill('0.3');
+  await library.getByLabel('Note 1 pitch', { exact: true }).selectOption('61');
+  await library.getByRole('button', { name: 'Add note', exact: true }).click();
+  const addedNumber = notes(reviewed, 'keys').length + 1;
+  await library.getByLabel(`Note ${addedNumber} time`, { exact: true }).fill('8.8');
+  await library.getByLabel(`Note ${addedNumber} length`, { exact: true }).fill('0.2');
+  await library.getByLabel(`Note ${addedNumber} pitch`, { exact: true }).selectOption('72');
+  await apply();
+  next = await download('full-band-keys-edit'); unchanged(next, reviewed, 'keys'); reviewed = next;
+  assert.ok(notes(reviewed, 'keys').some((note) => note.pitch === 61 && note.time === 0.18 && note.duration === 0.3));
+  assert.ok(notes(reviewed, 'keys').some((note) => note.pitch === 72 && note.time === 8.8 && note.duration === 0.2));
+  assert.equal(await library.getByLabel('Preview start time', { exact: true }).inputValue(), '0', 'default audition follows an earlier corrected note');
+
+  phase = 'real corrected-pitch audition with synchronized backing, stop and restart';
+  await library.getByLabel('Preview start time', { exact: true }).fill('0.17');
+  await library.getByRole('button', { name: 'Play corrected part', exact: true }).click();
+  await page.waitForFunction(() => window.bandAudio.at(-1)?.tones.length > 0);
+  let preview = await page.evaluate(() => ({ starts: window.bandAudio.at(-1).starts, tones: window.bandAudio.at(-1).tones }));
+  const backing = preview.starts.find((source) => source.bufferDuration === 10);
+  assert.ok(backing); assert.equal(backing.offset, 0.17); assert.equal(backing.duration, 8);
+  assert.ok(preview.tones.some((tone) => Math.abs(tone.frequency - 440 * 2 ** ((61 - 69) / 12)) < 0.001 && Math.abs(tone.at - backing.at - 0.01) < 1e-6));
+  await page.waitForFunction(() => {
+    const analyser = window.bandAudio.at(-1)?.analyser; if (!analyser) return false;
+    const data = new Float32Array(analyser.fftSize); analyser.getFloatTimeDomainData(data);
+    return data.some((sample) => Math.abs(sample) > 0.001);
+  });
+  await page.screenshot({ path: `${output}/full-band-audition-desktop.png` });
+  await library.getByRole('button', { name: 'Stop preview', exact: true }).click();
+  await page.waitForFunction(() => window.bandAudio.at(-1)?.context.state === 'closed');
+  await library.getByRole('checkbox', { name: 'With original recording', exact: true }).uncheck();
+  await library.getByRole('button', { name: 'Play corrected part', exact: true }).click();
+  await page.waitForFunction(() => window.bandAudio.at(-1)?.tones.length > 0);
+  preview = await page.evaluate(() => ({ starts: window.bandAudio.at(-1).starts, tones: window.bandAudio.at(-1).tones }));
+  assert.ok(preview.tones.length); assert.equal(preview.starts.some((source) => source.bufferDuration === 10), false);
+  await tab('bass').click();
+  await page.waitForFunction(() => window.bandAudio.at(-1)?.context.state === 'closed');
+
+  phase = 'bass validation and corrections';
+  await library.getByLabel('Note 1 time', { exact: true }).fill('9.9');
+  await library.getByLabel('Note 1 length', { exact: true }).fill('0.35');
+  await library.getByLabel('Note 1 pitch', { exact: true }).selectOption('43');
+  await apply(); await library.getByRole('alert').filter({ hasText: /fit inside the recording/ }).waitFor();
+  assert.equal(await tab('keys').isDisabled(), true);
+  await library.getByLabel('Note 1 time', { exact: true }).fill('0.22');
+  await apply();
+  next = await download('full-band-bass-edit'); unchanged(next, reviewed, 'bass'); reviewed = next;
+  assert.ok(notes(reviewed, 'bass').some((note) => note.pitch === 43 && note.time === 0.22 && note.duration === 0.35));
+  await library.getByRole('heading', { name: 'Review the bass draft', exact: true }).scrollIntoViewIfNeeded();
+  await page.screenshot({ path: `${output}/full-band-bass-review-desktop.png` });
+
+  phase = 'audition completion and original-player ownership';
+  await library.getByLabel('Preview start time', { exact: true }).fill('9.8');
+  await library.getByRole('button', { name: 'Play corrected part', exact: true }).click();
+  await page.waitForFunction(() => window.bandAudio.at(-1)?.context.state === 'closed');
+  await library.getByRole('button', { name: 'Play corrected part', exact: true }).waitFor();
+  await library.getByLabel('Preview start time', { exact: true }).fill('0');
+  await library.getByRole('button', { name: 'Play corrected part', exact: true }).click();
+  await page.waitForFunction(() => window.bandAudio.at(-1)?.tones.length > 0);
+  await library.locator('audio').evaluate((audio) => audio.play());
+  await page.waitForFunction(() => window.bandAudio.at(-1)?.context.state === 'closed');
+  assert.equal(await library.locator('audio').evaluate((audio) => audio.paused), false);
+  await library.locator('audio').evaluate((audio) => audio.pause());
+
+  phase = 'restore one part after editing the other three';
+  await tab('guitar').click(); await restore();
+  next = await download('full-band-guitar-restored'); unchanged(next, reviewed, 'guitar');
+  assert.deepEqual(notes(next, 'guitar'), notes(detected, 'guitar')); reviewed = next;
+  await library.getByLabel('Note 1 fret', { exact: true }).fill(guitarFret); await apply();
+  next = await download('full-band-reviewed'); unchanged(next, reviewed, 'guitar'); reviewed = next;
+  assert.equal(await page.evaluate(() => window.bandWorkers.length), 3, 'edits and tabs must never rerun transcription');
   await library.getByRole('heading', { name: 'Review the guitar arrangement', exact: true }).scrollIntoViewIfNeeded();
   await page.screenshot({ path: `${output}/full-band-review-desktop.png` });
   await library.getByRole('button', { name: 'Add to setlist', exact: true }).click();
@@ -163,6 +298,8 @@ try {
   await page.getByRole('button', { name: 'Reset set', exact: true }).click();
   phase = 'saved full-band reload and original backing';
   await page.reload({ waitUntil: 'domcontentloaded' }); await page.locator('.pad').first().waitFor();
+  const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('midi-stage/song-library')));
+  assert.deepEqual(stored.entries.find((entry) => entry.chart.title === 'Full Band Study').chart.parts, reviewed.parts);
   if (!uiOnly) await probe();
   await page.getByRole('heading', { name: 'Full Band Study', level: 2, exact: true }).waitFor();
   assert.equal(await toggle('keys').getAttribute('aria-pressed'), 'true');
@@ -183,15 +320,35 @@ try {
   assert.equal(await library.getByRole('button', { name: 'Add to setlist', exact: true }).count(), 0);
   await page.waitForTimeout(200);
   assert.equal(await library.getByRole('heading', { name: 'Review the guitar arrangement', exact: true }).count(), 0);
+  phase = 'partial full-band JSON review without guitar or attached audio';
+  const partial = { ...reviewed, version: 1, guitarMode: undefined, guitarTuning: undefined,
+    parts: reviewed.parts.map((part) => ['drums', 'keys'].includes(part.type) ? part : { ...part, notes: [] }),
+    chordHighways: { keys: [], guitar: [] } };
+  await library.getByLabel('Choose song file', { exact: true }).setInputFiles({ name: 'Partial Band.midistage.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(partial)) });
+  await library.getByRole('heading', { name: 'Review the drum draft', exact: true }).waitFor();
+  assert.equal(await tab('drums').getAttribute('aria-selected'), 'true');
+  assert.equal(await tab('guitar').isDisabled(), true); assert.equal(await tab('bass').isDisabled(), true);
+  await tab('keys').click();
+  assert.equal(await library.locator('audio').count(), 0);
+  assert.equal(await library.getByRole('checkbox', { name: 'With original recording', exact: true }).isDisabled(), true);
+  await library.getByLabel('Note 1 pitch', { exact: true }).selectOption('62'); await apply();
+  const partialExport = await download('partial-band-reviewed');
+  assert.deepEqual(notes(partialExport, 'drums'), notes(partial, 'drums'));
+  assert.equal(notes(partialExport, 'keys')[0].pitch, 62);
+  await library.getByRole('button', { name: 'Play corrected part', exact: true }).click();
+  await page.waitForFunction(() => window.bandAudio.at(-1)?.tones.length > 0);
+  assert.equal(await page.evaluate(() => window.bandAudio.at(-1).starts.some((source) => source.bufferDuration === 10)), false);
+  await page.screenshot({ path: `${output}/partial-band-review-desktop.png` });
   phase = 'preserve the built-in solo guitar setup';
   await library.getByRole('button', { name: 'Close song library', exact: true }).click();
+  await page.waitForFunction(() => window.bandAudio.at(-1)?.context.state === 'closed');
   await page.keyboard.press('Control+k');
   await page.locator('[data-command-id="song:backline-drive"]').click();
   await page.locator('.stage-real-guitar').waitFor();
   assert.equal(await toggle('guitar').getAttribute('aria-pressed'), 'true');
   assert.equal(await toggle('keys').getAttribute('aria-pressed'), 'false');
   assert.deepEqual(errors, []);
-  console.log('PASS: real four-stem transcription, preflight, shared timeline/count-in, editable guitar, mixed lineup, MIDI ownership, original backing, solo/reload and cancellation. Desktop only.');
+  console.log('PASS: real four-stem transcription; independent drum/keys/guitar/bass edits and restore; pending-edit protection; native corrected-pitch/backing audition, stop/restart/completion and player ownership; canonical export and saved reload; mixed MIDI scoring; cancellation. Desktop only.');
 } catch (error) {
   console.error(`Full-band import phase: ${phase}`);
   const page = browser.contexts()[0]?.pages()[0];

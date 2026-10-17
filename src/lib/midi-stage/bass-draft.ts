@@ -70,7 +70,8 @@ export function makeBassDraft(
 }
 
 export function isReviewableBassDraft(chart: SharedChart | null | undefined): boolean {
-  if (!chart || chart.origin !== "audio-bass-draft" || chart.matching === "rhythm" || chart.guitarMode) return false;
+  if (!chart || !["audio-bass-draft", "audio-full-band-draft"].includes(chart.origin) || chart.matching === "rhythm"
+    || (chart.guitarMode && chart.origin !== "audio-full-band-draft")) return false;
   const notes = chart.parts.find((part) => part.type === "bass")?.notes;
   return Boolean(notes?.length && notes.every((note) => Number.isInteger(note.pitch)
     && note.pitch >= STANDARD_BASS_RANGE.min && note.pitch <= STANDARD_BASS_RANGE.max));

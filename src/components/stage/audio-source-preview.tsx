@@ -1,12 +1,16 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
+import { AudioPartAudition } from "./audio-part-audition";
+import type { SharedChart } from "@/lib/midi-stage/chart-format";
+import type { AudioReviewInstrument } from "@/lib/midi-stage/audio-part-review";
 
 type AudioSourcePreviewProps = {
   file: File;
   disabled?: boolean;
+  review?: { chart: SharedChart; instrument: AudioReviewInstrument; buffer?: AudioBuffer; pending: boolean };
 };
 
-export function AudioSourcePreview({ file, disabled = false }: AudioSourcePreviewProps) {
+export function AudioSourcePreview({ file, disabled = false, review }: AudioSourcePreviewProps) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const titleId = useId();
   const descriptionId = useId();
@@ -62,6 +66,8 @@ export function AudioSourcePreview({ file, disabled = false }: AudioSourcePrevie
           This browser couldn’t play the preview. You can still add the song to your setlist.
         </p>
       ) : null}
+      {review ? <AudioPartAudition key={review.instrument} chart={review.chart} instrument={review.instrument}
+        buffer={review.buffer} disabled={disabled || review.pending} originalAudioRef={audioRef} /> : null}
     </div>
   );
 }

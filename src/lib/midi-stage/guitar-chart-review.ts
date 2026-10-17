@@ -1,4 +1,6 @@
 import { validateSharedChart, type SharedChart } from "./chart-format.ts";
+import { withReviewedAudioPart } from "./audio-part-review.ts";
+import type { GuitarPosition } from "./types.ts";
 
 export type GuitarReviewRow = { id: number; time: string; duration: string; string: string; fret: string; velocity: number; confidence?: number };
 
@@ -33,7 +35,7 @@ export function applyGuitarReview(source: SharedChart, rows: GuitarReviewRow[], 
       velocity: row.velocity,
       ...(row.confidence !== undefined ? { confidence: row.confidence } : {}),
       pitch: source.guitarTuning![6 - string]! + fret,
-      guitarPosition: { string, fret },
+      guitarPosition: { string: string as GuitarPosition["string"], fret },
     };
   });
   const originalNotes = source.parts.find((part) => part.type === "guitar")!.notes;
@@ -45,6 +47,7 @@ export function applyGuitarReview(source: SharedChart, rows: GuitarReviewRow[], 
   if (fixedTimeline && notes.some((note) => note.time < 0 || note.duration < 0.02 || note.time + note.duration > source.duration + 1e-6)) {
     throw new Error("Guitar notes must fit inside the original recording and last at least 0.02 seconds.");
   }
+  if (fixedTimeline) return withReviewedAudioPart(source, "guitar", notes, bpm);
   const duration = fixedTimeline ? source.duration : Math.max(source.duration, ...notes.map((n) => n.time / scale + n.duration / scale)) * scale;
   return validateSharedChart({
     ...source, bpm, duration,

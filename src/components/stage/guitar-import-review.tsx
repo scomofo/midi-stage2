@@ -6,16 +6,18 @@ import { serializeSharedChart, type SharedChart } from "@/lib/midi-stage/chart-f
 import { applyGuitarReview, guitarReviewRows, type GuitarReviewRow } from "@/lib/midi-stage/guitar-chart-review";
 import { confidenceBand, transcriptionConfidenceSummary } from "@/lib/midi-stage/transcription-confidence";
 import { duplicateRows, quantizeRows, shiftRows } from "@/lib/midi-stage/authoring-operations";
+import { restoreAudioPart } from "@/lib/midi-stage/audio-part-review";
 import "./guitar-import-review.css";
 
 const PAGE_SIZE = 16;
 
-export function GuitarImportReview({ chart, disabled, audioAttached = false, onApply, onPendingChange }: {
+export function GuitarImportReview({ chart, disabled, audioAttached = false, onApply, onPendingChange, originalChart }: {
   chart: SharedChart;
   disabled: boolean;
   audioAttached?: boolean;
   onApply: (chart: SharedChart) => void;
   onPendingChange: (pending: boolean) => void;
+  originalChart?: SharedChart;
 }) {
   const original = useRef(chart);
   const audioDraft = chart.origin.startsWith("audio-");
@@ -62,7 +64,7 @@ export function GuitarImportReview({ chart, disabled, audioAttached = false, onA
     }
   }
   function restore() {
-    const source = original.current;
+    const source = chart.origin === "audio-full-band-draft" ? restoreAudioPart(chart, originalChart ?? original.current, "guitar") : original.current;
     onApply(source);
     setRows(guitarReviewRows(source));
     nextId.current = source.parts.find((part) => part.type === "guitar")!.notes.length;
@@ -71,7 +73,8 @@ export function GuitarImportReview({ chart, disabled, audioAttached = false, onA
     setSelected(new Set());
     setDirty(false);
     setError("");
-    setNotice("Original arrangement restored.");
+    setNotice(chart.origin === "audio-full-band-draft" ? "Original guitar part restored. Other parts and count-in are unchanged." : "Original arrangement restored.");
+    setShowNeedsReview(false);
     onPendingChange(false);
   }
   function download() {

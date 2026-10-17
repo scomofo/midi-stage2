@@ -1,10 +1,11 @@
-import { validateSharedChart, type SharedChart } from "./chart-format.ts";
+import type { SharedChart } from "./chart-format.ts";
 import { DRUMS } from "./engine.ts";
+import { withReviewedAudioPart } from "./audio-part-review.ts";
 
-export type DrumReviewRow = { id: number; time: string; pitch: string; velocity: number };
+export type DrumReviewRow = { id: number; time: string; pitch: string; velocity: number; originalPitch?: number; duration?: string; confidence?: number };
 /** Origin is author-supplied metadata; rhythm charts can contain any MIDI pitch. */
 export function isReviewableDrumDraft(chart: SharedChart | null | undefined): boolean {
-  if (!chart || chart.origin !== "audio-drums-draft" || chart.matching === "rhythm") return false;
+  if (!chart || !["audio-drums-draft", "audio-full-band-draft"].includes(chart.origin) || chart.matching === "rhythm") return false;
   const notes = chart.parts.find((part) => part.type === "drums")?.notes;
   return Boolean(notes?.length && notes.every((note) => DRUMS.some((lane) => lane.notes?.includes(note.pitch))));
 }
@@ -13,6 +14,7 @@ export function drumReviewRows(chart: SharedChart): DrumReviewRow[] {
   if (!isReviewableDrumDraft(chart)) return [];
   return (chart.parts.find((part) => part.type === "drums")?.notes ?? []).map((note, id) => ({
     id, time: String(note.time), pitch: String(DRUMS.find((lane) => lane.notes?.includes(note.pitch))?.pitch ?? note.pitch), velocity: note.velocity,
+    originalPitch: note.pitch, duration: String(note.duration), confidence: note.confidence,
   }));
 }
 
@@ -32,13 +34,16 @@ export function applyDrumReview(source: SharedChart, rows: DrumReviewRow[], temp
     const pitch = number(row.pitch, `Hit ${i + 1} drum`);
     if (time < 0 || time > source.duration - 0.02 + 1e-8) throw new Error(`Hit ${i + 1} must fall inside the recording.`);
     if (!DRUMS.some((lane) => lane.pitch === pitch)) throw new Error(`Hit ${i + 1} needs a supported drum type.`);
-    return { time, pitch, duration: Math.max(0.02, Math.min(0.06, source.duration - time)), velocity: row.velocity };
+    const originalLane = DRUMS.find((lane) => lane.notes?.includes(row.originalPitch ?? -1));
+    return { time, pitch: originalLane?.pitch === pitch ? row.originalPitch! : pitch,
+      duration: Math.max(0.02, Math.min(row.duration === undefined ? 0.06 : number(row.duration, `Hit ${i + 1} length`), source.duration - time)), velocity: row.velocity,
+      ...(row.confidence !== undefined ? { confidence: row.confidence } : {}) };
   }).sort((a, b) => a.time - b.time || a.pitch - b.pitch);
   const last = new Map<number, number>();
   for (const note of notes) {
-    if (note.time - (last.get(note.pitch) ?? -Infinity) < 0.02 - 1e-8) throw new Error("Two hits on the same drum must be at least 0.02 seconds apart.");
-    last.set(note.pitch, note.time);
+    const lane = DRUMS.find((lane) => lane.notes?.includes(note.pitch))!.pitch;
+    if (note.time - (last.get(lane) ?? -Infinity) < 0.02 - 1e-8) throw new Error("Two hits on the same drum must be at least 0.02 seconds apart.");
+    last.set(lane, note.time);
   }
-  return validateSharedChart({ ...source, bpm, firstBeat: notes[0]!.time, tempoMap: [{ time: 0, bpm }],
-    parts: source.parts.map((part) => ({ ...part, notes: part.type === "drums" ? notes : part.notes })) });
+  return withReviewedAudioPart(source, "drums", notes, bpm);
 }

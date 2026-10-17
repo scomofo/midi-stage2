@@ -15,6 +15,7 @@ import { GuitarImportReview } from "./guitar-import-review";
 import { AudioDraftReview } from "./audio-draft-review";
 import { AudioStemImport } from "./audio-stem-import";
 import { FullBandStemImport } from "./full-band-stem-import";
+import { FullBandDraftReview } from "./full-band-draft-review";
 import type { FullBandStemFiles } from "@/lib/midi-stage/multi-stem-import";
 import type { SharedChart } from "@/lib/midi-stage/chart-format";
 import { isReviewableDrumDraft } from "@/lib/midi-stage/drum-chart-review";
@@ -34,6 +35,7 @@ type SongLibraryPanelProps = {
     kind?: "audio" | "midi" | "chart" | "musicxml";
     chart?: SharedChart;
     audioFile?: File;
+    buffer?: AudioBuffer;
     stemName?: string;
     name: string;
     fileName: string;
@@ -106,14 +108,14 @@ export function SongLibraryPanel({
   const notice = fileNotice || error;
   const drumDraft = isReviewableDrumDraft(candidate?.chart);
   const keysDraft = isReviewableKeyboardDraft(candidate?.chart);
-  const audioDraft = drumDraft || keysDraft;
+  const bassDraft = isReviewableBassDraft(candidate?.chart);
+  const audioDraft = drumDraft || keysDraft || bassDraft;
   const fullBandDraft = candidate?.chart?.origin === "audio-full-band-draft";
   const guitarDraft = isReviewableGuitarDraft(candidate?.chart);
-  const bassDraft = isReviewableBassDraft(candidate?.chart);
   const vocalDraft = candidate?.chart?.origin === "audio-vocals-rhythm";
   const estimatedDraft = audioDraft || fullBandDraft || guitarDraft || bassDraft;
   const quality = candidate?.chart ? scoreChartQuality(candidate.chart) : null;
-  const reviewRequired = Boolean(candidate?.chart?.guitarMode === "strings" || audioDraft);
+  const reviewRequired = Boolean(candidate?.chart?.guitarMode === "strings" || audioDraft || fullBandDraft);
   const workflow = importWorkflowState({
     mode: audioMode,
     reading,
@@ -392,15 +394,19 @@ export function SongLibraryPanel({
                 ),
               )}
             </dl>
-            {candidate.kind === "audio" && candidate.audioFile ? (
+            {!fullBandDraft && candidate.kind === "audio" && candidate.audioFile ? (
               <AudioSourcePreview file={candidate.audioFile} disabled={busy} />
             ) : null}
-            {candidate.chart?.guitarMode === "strings" && onReviewApply && onReviewPending ? (
+            {fullBandDraft && candidate.chart && onReviewApply && onReviewPending ? (
+              <FullBandDraftReview key={reviewKey} chart={candidate.chart} audioFile={candidate.audioFile} buffer={candidate.buffer}
+                disabled={busy} onApply={onReviewApply} onPendingChange={onReviewPending} />
+            ) : null}
+            {!fullBandDraft && candidate.chart?.guitarMode === "strings" && onReviewApply && onReviewPending ? (
               <GuitarImportReview key={reviewKey} chart={candidate.chart} disabled={busy} audioAttached={candidate.kind === "audio"}
                 onApply={onReviewApply} onPendingChange={onReviewPending} />
             ) : null}
-            {audioDraft && candidate.chart && onReviewApply && onReviewPending ? (
-              <AudioDraftReview key={reviewKey} chart={candidate.chart} disabled={busy} instrument={keysDraft ? "keys" : "drums"}
+            {!fullBandDraft && audioDraft && candidate.chart && onReviewApply && onReviewPending ? (
+              <AudioDraftReview key={reviewKey} chart={candidate.chart} disabled={busy} instrument={bassDraft ? "bass" : keysDraft ? "keys" : "drums"}
                 audioAttached={candidate.kind === "audio"} onApply={onReviewApply} onPendingChange={onReviewPending} />
             ) : null}
             {candidate.warnings.length > 0 ? (
