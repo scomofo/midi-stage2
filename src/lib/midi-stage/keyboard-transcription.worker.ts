@@ -21,23 +21,30 @@ scope.onmessage = async ({ data }: MessageEvent<{ samples: Float32Array; modelUr
     // retaining every tensor for a whole song. This worker owns its TF engine.
     tf.engine().startScope();
     try {
-      const [input, length] = await pitch.prepareData(data.samples);
-      const total = Math.floor(length * 86 / 22050);
-      let calculated = 0;
-      for (let i = 0; i < input.shape[0] && calculated < total; i++) {
+      const [input] = await pitch.prepareData(data.samples);
+      // Keep the final window: the integer 86-fps cap can end before the audio.
+      // Convert using the model's own timestamps, then clip events to source time.
+      for (let i = 0; i < input.shape[0]; i++) {
         scope.postMessage({ type: "progress", phase: "analyzing", progress: i / input.shape[0] * 0.95 });
         tf.engine().startScope();
         try {
           const [f, o] = await pitch.evaluateSingleFrame(input, i);
           const frame = pitch.unwrapOutput(f), onset = pitch.unwrapOutput(o);
-          const count = Math.min(frame.shape[0], total - calculated);
-          frames.push(...await frame.slice([0, 0], [count, -1]).array());
-          onsets.push(...await onset.slice([0, 0], [count, -1]).array());
-          calculated += count;
+          frames.push(...await frame.array());
+          onsets.push(...await onset.array());
         } finally { tf.engine().endScope(); }
       }
       scope.postMessage({ type: "progress", phase: "analyzing", progress: 0.95 });
-      const events = noteFramesToTime(outputToNotesPoly(frames, onsets, 0.5, 0.3, 5));
+      // The public no-Melodia pass identifies onset-backed notes. The full pass
+      // also recovers sustained energy; those fragments may need guitar deglitching.
+      const attacks = new Set(outputToNotesPoly(frames, onsets, 0.5, 0.3, 5, true, null, null, false)
+        .map((note) => `${note.startFrame}:${note.pitchMidi}`));
+      const notes = outputToNotesPoly(frames, onsets, 0.5, 0.3, 5);
+      const duration = data.samples.length / 22050;
+      const events = noteFramesToTime(notes).map((event, index) => ({
+        ...event, hasOnset: attacks.has(`${notes[index]!.startFrame}:${notes[index]!.pitchMidi}`),
+        durationSeconds: Math.min(event.durationSeconds, duration - event.startTimeSeconds),
+      })).filter((event) => event.startTimeSeconds < duration && event.durationSeconds > 0);
       scope.postMessage({ type: "complete", events });
     } finally { tf.engine().endScope(); }
   } catch (error) {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "./test-compat.ts";
 import { solveGuitarFingering } from "./guitar-fingering-solver.ts";
+import { makeGuitarDraft } from "./guitar-draft.ts";
 
 const tuning = [40, 45, 50, 55, 59, 64];
 
@@ -38,5 +39,18 @@ describe("guitar fingering solver", () => {
     ], tuning);
     expect(result.assignments).toHaveLength(0);
     expect(result.dropped).toHaveLength(1);
+  });
+
+  it("ends an estimated release overlap at the next attack on the same string", () => {
+    const events = [
+      { startTimeSeconds: 0.5, durationSeconds: 0.3, pitchMidi: 40, amplitude: 0.9 },
+      { startTimeSeconds: 0.79, durationSeconds: 0.2, pitchMidi: 40, amplitude: 0.9 },
+    ];
+    const solved = solveGuitarFingering(events, tuning);
+    expect(solved.assignments).toHaveLength(2);
+    expect(solved.assignments[0]!.startTimeSeconds + solved.assignments[0]!.durationSeconds).toBe(0.79);
+    expect(events[0]!.durationSeconds).toBe(0.3);
+    const { chart } = makeGuitarDraft(events, 2, "reattack.wav", "test");
+    expect(chart.parts.find((part) => part.type === "guitar")!.notes).toHaveLength(2);
   });
 });

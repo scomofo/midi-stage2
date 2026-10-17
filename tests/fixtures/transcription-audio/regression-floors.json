@@ -1,0 +1,106 @@
+{
+  "version": 1,
+  "description": "Corpus-specific regression limits; explicit diagnostics remain known failures. Never update automatically from a run.",
+  "cases": {
+    "guitarset-comp": {
+      "minF1": 0.77,
+      "minPrecision": 0.67,
+      "minRecall": 0.89,
+      "maxFalseNegatives": 5,
+      "maxFalsePositives": 20,
+      "maxOnsetMs": 25,
+      "maxDurationMs": 150
+    },
+    "guitarset-solo": {
+      "minF1": 0.77,
+      "minPrecision": 0.74,
+      "minRecall": 0.78,
+      "maxFalseNegatives": 7,
+      "maxFalsePositives": 9,
+      "maxOnsetMs": 25,
+      "maxDurationMs": 210
+    },
+    "guitar-clean": {
+      "minF1": 1,
+      "maxFalseNegatives": 0,
+      "maxFalsePositives": 0,
+      "maxOnsetMs": 55,
+      "maxDurationMs": 40
+    },
+    "guitar-chords": {
+      "minF1": 0.85,
+      "maxFalseNegatives": 0,
+      "maxFalsePositives": 2,
+      "maxOnsetMs": 50,
+      "maxDurationMs": 70
+    },
+    "guitar-distorted": {
+      "minF1": 0.72,
+      "maxFalseNegatives": 2,
+      "maxFalsePositives": 1,
+      "maxOnsetMs": 55,
+      "maxDurationMs": 300
+    },
+    "guitar-short-attacks": {
+      "diagnosticOnly": true,
+      "reason": "The model/draft misses all six 100 ms guitar attacks in this recorded-sample render. Retained as an unresolved diagnostic; no quality pass."
+    },
+    "keys-harmonic": {
+      "minF1": 1,
+      "maxFalseNegatives": 0,
+      "maxFalsePositives": 0,
+      "maxOnsetMs": 30,
+      "maxDurationMs": 60
+    },
+    "keys-sampled": {
+      "minF1": 0.9,
+      "maxFalseNegatives": 0,
+      "maxFalsePositives": 1,
+      "maxOnsetMs": 30,
+      "maxDurationMs": 60
+    },
+    "bass-harmonic": {
+      "minF1": 0.85,
+      "maxFalseNegatives": 0,
+      "maxFalsePositives": 1,
+      "maxOnsetMs": 30,
+      "maxDurationMs": 210
+    },
+    "bass-sampled": {
+      "minF1": 1,
+      "maxFalseNegatives": 0,
+      "maxFalsePositives": 0,
+      "maxOnsetMs": 45,
+      "maxDurationMs": 40
+    },
+    "drums-overlap": {
+      "minF1": 0.9,
+      "maxFalseNegatives": 7,
+      "maxFalsePositives": 0,
+      "maxOnsetMs": 30
+    },
+    "drums-snare-only": {
+      "minF1": 1,
+      "maxFalseNegatives": 0,
+      "maxFalsePositives": 0,
+      "maxOnsetMs": 30
+    },
+    "keys-recording-tail": {
+      "minF1": 1,
+      "maxFalseNegatives": 0,
+      "maxFalsePositives": 0,
+      "maxOnsetMs": 45,
+      "maxDurationMs": 110
+    },
+    "keys-silence": {
+      "minF1": 1,
+      "maxFalseNegatives": 0,
+      "maxFalsePositives": 0
+    },
+    "drums-silence": {
+      "minF1": 1,
+      "maxFalseNegatives": 0,
+      "maxFalsePositives": 0
+    }
+  }
+}

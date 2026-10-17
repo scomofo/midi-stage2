@@ -1,0 +1,473 @@
+[
+  {
+    "id": "guitarset-comp",
+    "instrument": "guitar",
+    "kind": "recorded-performance",
+    "audio": "guitarset-comp.flac",
+    "reference": [
+      {
+        "time": 0.048816327,
+        "duration": 0.423764172,
+        "pitch": 51
+      },
+      {
+        "time": 0.049791383,
+        "duration": 0.452789116,
+        "pitch": 65
+      },
+      {
+        "time": 0.052716553,
+        "duration": 0.458594104,
+        "pitch": 62
+      },
+      {
+        "time": 0.519995465,
+        "duration": 0.417959184,
+        "pitch": 51
+      },
+      {
+        "time": 0.722036281,
+        "duration": 0.859138322,
+        "pitch": 58
+      },
+      {
+        "time": 0.942240363,
+        "duration": 0.870748299,
+        "pitch": 51
+      },
+      {
+        "time": 1.179179138,
+        "duration": 0.452789116,
+        "pitch": 67
+      },
+      {
+        "time": 1.181605442,
+        "duration": 0.568888889,
+        "pitch": 62
+      },
+      {
+        "time": 1.627795918,
+        "duration": 0.760453515,
+        "pitch": 58
+      },
+      {
+        "time": 1.887251701,
+        "duration": 0.452789116,
+        "pitch": 51
+      },
+      {
+        "time": 1.893555556,
+        "duration": 0.505034014,
+        "pitch": 65
+      },
+      {
+        "time": 1.898884354,
+        "duration": 0.150929705,
+        "pitch": 62
+      },
+      {
+        "time": 2.07768254,
+        "duration": 0.342494331,
+        "pitch": 62
+      },
+      {
+        "time": 2.343396825,
+        "duration": 0.226394558,
+        "pitch": 51
+      },
+      {
+        "time": 2.596571429,
+        "duration": 0.708208617,
+        "pitch": 67
+      },
+      {
+        "time": 2.598272109,
+        "duration": 0.423764172,
+        "pitch": 62
+      },
+      {
+        "time": 2.598498866,
+        "duration": 0.65015873,
+        "pitch": 51
+      },
+      {
+        "time": 3.026072562,
+        "duration": 0.319274376,
+        "pitch": 62
+      },
+      {
+        "time": 3.06555102,
+        "duration": 0.586303855,
+        "pitch": 58
+      },
+      {
+        "time": 3.297138322,
+        "duration": 0.870748299,
+        "pitch": 51
+      },
+      {
+        "time": 3.512013605,
+        "duration": 0.43537415,
+        "pitch": 62
+      },
+      {
+        "time": 3.732195011,
+        "duration": 0.870748299,
+        "pitch": 58
+      },
+      {
+        "time": 3.753306122,
+        "duration": 0.441179138,
+        "pitch": 72
+      },
+      {
+        "time": 3.75353288,
+        "duration": 0.162539683,
+        "pitch": 65
+      },
+      {
+        "time": 3.972535147,
+        "duration": 0.400544218,
+        "pitch": 62
+      },
+      {
+        "time": 4.199269841,
+        "duration": 0.928798186,
+        "pitch": 51
+      },
+      {
+        "time": 4.4441678,
+        "duration": 0.406349206,
+        "pitch": 62
+      },
+      {
+        "time": 4.663646259,
+        "duration": 1.166802721,
+        "pitch": 58
+      },
+      {
+        "time": 4.671673469,
+        "duration": 0.505034014,
+        "pitch": 70
+      },
+      {
+        "time": 4.675528345,
+        "duration": 0.423764172,
+        "pitch": 65
+      },
+      {
+        "time": 4.893306122,
+        "duration": 0.278639456,
+        "pitch": 62
+      },
+      {
+        "time": 5.350176871,
+        "duration": 0.493424036,
+        "pitch": 62
+      },
+      {
+        "time": 5.351900227,
+        "duration": 1.47446712,
+        "pitch": 70
+      },
+      {
+        "time": 5.354077098,
+        "duration": 0.493424036,
+        "pitch": 67
+      },
+      {
+        "time": 5.355256236,
+        "duration": 0.714013605,
+        "pitch": 51
+      },
+      {
+        "time": 5.830789116,
+        "duration": 0.876553288,
+        "pitch": 58
+      },
+      {
+        "time": 6.07400907,
+        "duration": 0.888163265,
+        "pitch": 51
+      },
+      {
+        "time": 6.302217687,
+        "duration": 0.423764172,
+        "pitch": 65
+      },
+      {
+        "time": 6.305619048,
+        "duration": 0.412154195,
+        "pitch": 62
+      },
+      {
+        "time": 6.822331066,
+        "duration": 0.249614512,
+        "pitch": 58
+      },
+      {
+        "time": 7.201446712,
+        "duration": 0.487619048,
+        "pitch": 56
+      },
+      {
+        "time": 7.457274376,
+        "duration": 0.464399093,
+        "pitch": 44
+      },
+      {
+        "time": 7.464054422,
+        "duration": 0.516643991,
+        "pitch": 65
+      },
+      {
+        "time": 7.471560091,
+        "duration": 0.528439909,
+        "pitch": 60
+      },
+      {
+        "time": 7.689564626,
+        "duration": 0.310435374,
+        "pitch": 56
+      },
+      {
+        "time": 7.923578231,
+        "duration": 0.076421769,
+        "pitch": 44
+      }
+    ],
+    "source": {
+      "dataset": "GuitarSet 1.1.0",
+      "url": "https://zenodo.org/records/3371780",
+      "license": "CC-BY-4.0",
+      "track": "00_BN1-129-Eb_comp",
+      "sourceAudioSha256": "59e1e3c9bebdabd48afe28050a2c031e6cf36e5697268301cdf2e74bc66b71f1",
+      "sourceAnnotationSha256": "cd79564c51d0dec7d04e010d31525e9f7d2b9d41cf6116118a66ac5a8c181007",
+      "transformation": "First 8 seconds; mono 22050 Hz lossless FLAC. MIDI-note observations rounded to nearest semitone; durations clipped at the excerpt end. No time shift."
+    },
+    "sha256": "ac00d4b16eb4e892c0bf2f2cc837596c54b21ea3c29b93281084571e7c1048a6"
+  },
+  {
+    "id": "guitarset-solo",
+    "instrument": "guitar",
+    "kind": "recorded-performance",
+    "audio": "guitarset-solo.flac",
+    "reference": [
+      {
+        "time": 0.008544218,
+        "duration": 0.17414966,
+        "pitch": 56
+      },
+      {
+        "time": 0.009972789,
+        "duration": 0.21478458,
+        "pitch": 46
+      },
+      {
+        "time": 0.015052154,
+        "duration": 0.168344671,
+        "pitch": 51
+      },
+      {
+        "time": 0.186956916,
+        "duration": 0.30185941,
+        "pitch": 53
+      },
+      {
+        "time": 0.187705215,
+        "duration": 0.290249433,
+        "pitch": 58
+      },
+      {
+        "time": 0.497365079,
+        "duration": 0.423764172,
+        "pitch": 52
+      },
+      {
+        "time": 0.498816327,
+        "duration": 0.34829932,
+        "pitch": 52
+      },
+      {
+        "time": 0.928090703,
+        "duration": 0.098684807,
+        "pitch": 52
+      },
+      {
+        "time": 1.027410431,
+        "duration": 0.406349206,
+        "pitch": 53
+      },
+      {
+        "time": 1.438022676,
+        "duration": 0.243809524,
+        "pitch": 57
+      },
+      {
+        "time": 1.438680272,
+        "duration": 0.365714286,
+        "pitch": 52
+      },
+      {
+        "time": 1.68246712,
+        "duration": 0.21478458,
+        "pitch": 58
+      },
+      {
+        "time": 1.90677551,
+        "duration": 0.847528345,
+        "pitch": 57
+      },
+      {
+        "time": 2.313510204,
+        "duration": 0.592108844,
+        "pitch": 53
+      },
+      {
+        "time": 2.789995465,
+        "duration": 1.404807256,
+        "pitch": 57
+      },
+      {
+        "time": 3.239632653,
+        "duration": 0.47600907,
+        "pitch": 62
+      },
+      {
+        "time": 3.716367347,
+        "duration": 0.487619048,
+        "pitch": 62
+      },
+      {
+        "time": 4.22629932,
+        "duration": 2.049160998,
+        "pitch": 58
+      },
+      {
+        "time": 4.460789116,
+        "duration": 0.551473923,
+        "pitch": 62
+      },
+      {
+        "time": 4.91645805,
+        "duration": 0.43537415,
+        "pitch": 65
+      },
+      {
+        "time": 5.388589569,
+        "duration": 1.1261678,
+        "pitch": 62
+      },
+      {
+        "time": 5.807705215,
+        "duration": 0.464399093,
+        "pitch": 70
+      },
+      {
+        "time": 5.822943311,
+        "duration": 0.208979592,
+        "pitch": 65
+      },
+      {
+        "time": 6.072217687,
+        "duration": 0.452789116,
+        "pitch": 65
+      },
+      {
+        "time": 6.540743764,
+        "duration": 0.412154195,
+        "pitch": 67
+      },
+      {
+        "time": 6.545029478,
+        "duration": 0.336689342,
+        "pitch": 63
+      },
+      {
+        "time": 6.553079365,
+        "duration": 0.377324263,
+        "pitch": 72
+      },
+      {
+        "time": 6.901945578,
+        "duration": 0.104489796,
+        "pitch": 62
+      },
+      {
+        "time": 6.980154195,
+        "duration": 1.019845805,
+        "pitch": 65
+      },
+      {
+        "time": 7.456911565,
+        "duration": 0.208979592,
+        "pitch": 70
+      },
+      {
+        "time": 7.665981859,
+        "duration": 0.220589569,
+        "pitch": 72
+      },
+      {
+        "time": 7.887637188,
+        "duration": 0.112362812,
+        "pitch": 70
+      }
+    ],
+    "source": {
+      "dataset": "GuitarSet 1.1.0",
+      "url": "https://zenodo.org/records/3371780",
+      "license": "CC-BY-4.0",
+      "track": "00_BN1-129-Eb_solo",
+      "sourceAudioSha256": "2a6057d0485d8ee2f4a04175ee085d610c0f7a13194e083b13ce803bec091d43",
+      "sourceAnnotationSha256": "2258ef6f5dc58437f2807dfc0c05416ad8498cd345f95d6563b13d19283e6d54",
+      "transformation": "First 8 seconds; mono 22050 Hz lossless FLAC. MIDI-note observations rounded to nearest semitone; durations clipped at the excerpt end. No time shift."
+    },
+    "sha256": "173cad54f624dd132afe019ae32573b0a1d0bfb3c4aa24a7b64624a581c6f251"
+  },
+  {
+    "id": "sample-guitar-acoustic",
+    "sample": "guitar-acoustic-E2.wav",
+    "pitch": 40,
+    "kind": "recorded-sample",
+    "sha256": "90a017a7603c94e1ebdd318503def188c9b33ffeef9861e35e25962c0a5d3c74",
+    "source": {
+      "url": "https://raw.githubusercontent.com/nbrosowsky/tonejs-instruments/622c2f1c32c8cfce4158ddc3eb26e518ddef37e5/samples/guitar-acoustic/E2.mp3",
+      "repositoryCommit": "622c2f1c32c8cfce4158ddc3eb26e518ddef37e5",
+      "license": "CC-BY-3.0",
+      "author": "N. Brosowsky; upstream acoustic guitar: University of Iowa; piano: VSCO 2 Community Edition; bass: Karoryfer",
+      "sourceAudioSha256": "917820984d1bb0b7712b4f2c42a9694efbb2479ccede45aa78af73811fc6818d",
+      "transformation": "First 2 seconds, mono 22050 Hz, 16-bit PCM WAV after MP3 decoding. Used as a pitched sample in deterministic renders, not a continuous performance."
+    }
+  },
+  {
+    "id": "sample-piano",
+    "sample": "piano-C4.wav",
+    "pitch": 60,
+    "kind": "recorded-sample",
+    "sha256": "45a25f925d6ef207fb5b43d5f990942fb0a6f1b9d3fdf74b41b5826c197cc89e",
+    "source": {
+      "url": "https://raw.githubusercontent.com/nbrosowsky/tonejs-instruments/622c2f1c32c8cfce4158ddc3eb26e518ddef37e5/samples/piano/C4.mp3",
+      "repositoryCommit": "622c2f1c32c8cfce4158ddc3eb26e518ddef37e5",
+      "license": "CC-BY-3.0",
+      "author": "N. Brosowsky; upstream acoustic guitar: University of Iowa; piano: VSCO 2 Community Edition; bass: Karoryfer",
+      "sourceAudioSha256": "a265c8cfd4140cf27b55054b4953b6c691fce3523530ca8ae0faed5e4cd39063",
+      "transformation": "First 2 seconds, mono 22050 Hz, 16-bit PCM WAV after MP3 decoding. Used as a pitched sample in deterministic renders, not a continuous performance."
+    }
+  },
+  {
+    "id": "sample-bass-electric",
+    "sample": "bass-electric-E1.wav",
+    "pitch": 28,
+    "kind": "recorded-sample",
+    "sha256": "48857a170a6516599cb70c4173909d1111645b74e6e32a8ce1d45e6c7f4f5218",
+    "source": {
+      "url": "https://raw.githubusercontent.com/nbrosowsky/tonejs-instruments/622c2f1c32c8cfce4158ddc3eb26e518ddef37e5/samples/bass-electric/E1.mp3",
+      "repositoryCommit": "622c2f1c32c8cfce4158ddc3eb26e518ddef37e5",
+      "license": "CC-BY-3.0",
+      "author": "N. Brosowsky; upstream acoustic guitar: University of Iowa; piano: VSCO 2 Community Edition; bass: Karoryfer",
+      "sourceAudioSha256": "41fd91721398a47c6afa030feb324a1cd981ffac7da9bd313b775ad4f7b1a24c",
+      "transformation": "First 2 seconds, mono 22050 Hz, 16-bit PCM WAV after MP3 decoding. Used as a pitched sample in deterministic renders, not a continuous performance."
+    }
+  }
+]

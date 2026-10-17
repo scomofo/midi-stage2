@@ -93,7 +93,21 @@ export function solveGuitarFingering(
   const activeUntil = Array(7).fill(-Infinity) as number[];
   const assignments: FingeringAssignment[] = [];
   const dropped: FingeringEvent[] = [];
+  const lastOnString = new Map<number, FingeringAssignment>();
   let previousCenter = 5;
+
+  function retain(assignment: FingeringAssignment) {
+    const previous = lastOnString.get(assignment.string);
+    // The solver permits 15 ms of estimated release overlap when reusing a
+    // string. End that previous hold at the new attack so the chart is playable
+    // and satisfies the same no-overlap rule as authored string/fret charts.
+    if (previous && previous.startTimeSeconds + previous.durationSeconds > assignment.startTimeSeconds) {
+      previous.durationSeconds = assignment.startTimeSeconds - previous.startTimeSeconds;
+    }
+    assignments.push(assignment);
+    lastOnString.set(assignment.string, assignment);
+    activeUntil[assignment.string] = assignment.startTimeSeconds + assignment.durationSeconds;
+  }
 
   for (const group of groupOnsets(events)) {
     const solution = solveGroup(group, tuning, activeUntil, previousCenter);
@@ -106,15 +120,13 @@ export function solveGuitarFingering(
           continue;
         }
         const assignment = single.assignments[0]!;
-        assignments.push(assignment);
-        activeUntil[assignment.string] = assignment.startTimeSeconds + assignment.durationSeconds;
+        retain(assignment);
         previousCenter = single.center;
       }
       continue;
     }
     for (const assignment of solution.assignments) {
-      assignments.push(assignment);
-      activeUntil[assignment.string] = assignment.startTimeSeconds + assignment.durationSeconds;
+      retain(assignment);
     }
     previousCenter = solution.center;
   }

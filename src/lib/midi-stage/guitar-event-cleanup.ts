@@ -5,8 +5,8 @@ const GHOST_WINDOW = 0.035;
 
 /**
  * Conservative post-processing for guitar-oriented Basic Pitch output.
- * It only merges same-pitch flicker and removes very short, much-weaker
- * octave ghosts near a stronger lower attack. Sustained chord tones survive.
+ * Join only recovered sustain fragments, never model-backed reattacks. Unknown
+ * onset provenance stays separate. Weak short octave ghosts can still be removed.
  */
 export function cleanGuitarEvents(events: KeyboardEvent[]): KeyboardEvent[] {
   const valid = events
@@ -18,7 +18,7 @@ export function cleanGuitarEvents(events: KeyboardEvent[]): KeyboardEvent[] {
     const previous = [...merged].reverse().find((candidate) => candidate.pitchMidi === event.pitchMidi);
     if (previous) {
       const previousEnd = previous.startTimeSeconds + previous.durationSeconds;
-      if (event.startTimeSeconds - previousEnd >= -0.015 && event.startTimeSeconds - previousEnd <= SAME_PITCH_JOIN_GAP) {
+      if (event.hasOnset === false && event.startTimeSeconds - previousEnd >= -0.015 && event.startTimeSeconds - previousEnd <= SAME_PITCH_JOIN_GAP) {
         const end = Math.max(previousEnd, event.startTimeSeconds + event.durationSeconds);
         previous.durationSeconds = end - previous.startTimeSeconds;
         previous.amplitude = Math.max(previous.amplitude, event.amplitude);

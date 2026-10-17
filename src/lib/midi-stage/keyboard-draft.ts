@@ -1,7 +1,7 @@
 import { CHART_SCHEMA, validateSharedChart, type SharedChart } from "./chart-format.ts";
 import { INSTRUMENTS } from "./types.ts";
 
-export type KeyboardEvent = { startTimeSeconds: number; durationSeconds: number; pitchMidi: number; amplitude: number };
+export type KeyboardEvent = { startTimeSeconds: number; durationSeconds: number; pitchMidi: number; amplitude: number; hasOnset?: boolean };
 export const MAX_KEYBOARD_NOTES = 6000;
 
 /** Model output is an estimate; preserve recording seconds and full MIDI octaves. */

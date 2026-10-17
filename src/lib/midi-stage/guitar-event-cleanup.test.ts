@@ -5,10 +5,24 @@ describe("guitar transcription cleanup", () => {
   it("joins same-pitch flicker common in distorted sustained notes", () => {
     const cleaned = cleanGuitarEvents([
       { startTimeSeconds: 0, durationSeconds: 0.2, pitchMidi: 52, amplitude: 0.8 },
-      { startTimeSeconds: 0.23, durationSeconds: 0.3, pitchMidi: 52, amplitude: 0.7 },
+      { startTimeSeconds: 0.23, durationSeconds: 0.3, pitchMidi: 52, amplitude: 0.7, hasOnset: false },
     ]);
     expect(cleaned).toHaveLength(1);
     expect(cleaned[0]!.durationSeconds).toBeCloseTo(0.53, 6);
+  });
+
+  it("preserves repeated attacks even when the preceding note almost touches them", () => {
+    for (const hasOnset of [true, undefined]) {
+      const events = [
+        { startTimeSeconds: 0, durationSeconds: 0.2, pitchMidi: 52, amplitude: 0.8, hasOnset: true },
+        { startTimeSeconds: 0.23, durationSeconds: 0.3, pitchMidi: 52, amplitude: 0.7, hasOnset },
+      ];
+      const before = JSON.stringify(events);
+      const cleaned = cleanGuitarEvents(events);
+      expect(cleaned).toHaveLength(2);
+      expect(cleaned[0]!.durationSeconds).toBeCloseTo(0.2, 6);
+      expect(JSON.stringify(events)).toBe(before);
+    }
   });
 
   it("removes a weak short octave ghost near a stronger attack", () => {
