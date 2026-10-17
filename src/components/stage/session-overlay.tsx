@@ -118,6 +118,8 @@ type SessionOverlayProps = {
   rhythm?: boolean;
   guitarMode?: boolean;
   realGuitar?: boolean;
+  /** A scored guitar part can also be one member of a mixed-instrument lineup. */
+  scoredGuitar?: boolean;
   guitarTuning?: readonly number[];
   guitarMidiReady?: boolean;
   guitarConnecting?: boolean;
@@ -264,6 +266,7 @@ export function SessionOverlay({
   rhythm = false,
   guitarMode = false,
   realGuitar = false,
+  scoredGuitar = false,
   guitarTuning = [40, 45, 50, 55, 59, 64],
   guitarMidiReady = false,
   guitarConnecting = false,
@@ -282,7 +285,7 @@ export function SessionOverlay({
 }: SessionOverlayProps) {
   const isResults = mode === "results" && results;
   const isPaused = mode === "paused";
-  const needsGuitarMidi = realGuitar && !guitarMidiReady;
+  const needsGuitarMidi = (realGuitar || scoredGuitar) && !guitarMidiReady;
   const resultsVisible = Boolean(isResults);
   const runContext = results
     ? `${DIFFICULTY_LABELS[results.difficulty]} · ${Math.round(results.speed * 100)}% tempo · ${results.parts.map((part) => part.label).join(" + ")}`
@@ -488,6 +491,7 @@ export function SessionOverlay({
                 : "Your place is saved. Pick up the groove when you’re ready."}
             </p>
             <KeyGuide controls={controls} rhythm={rhythm} guitarMode={guitarMode} realGuitar={realGuitar} />
+            {scoredGuitar && !realGuitar ? <p className="session-footnote">Guitar uses the shown strings and frets and needs guitar MIDI for scoring. Assign each instrument's MIDI input in Soundcheck, or turn guitar off to play the other parts with keys.</p> : null}
             <div className="session-actions">
               <Button type="button" onClick={needsGuitarMidi && !demo ? onConnectGuitar : onStart} disabled={busy || guitarConnecting} data-session-primary>
                 <Play size={16} aria-hidden="true" />
@@ -521,6 +525,7 @@ export function SessionOverlay({
                 : "Hit each gem as it crosses the strike line. Hold long notes to the end. You can use keys, MIDI, or tap the lanes."}
             </p>
             <KeyGuide controls={controls} rhythm={rhythm} guitarMode={guitarMode} realGuitar={realGuitar} />
+            {scoredGuitar && !realGuitar ? <p className="session-footnote">Guitar needs a separate MIDI assignment in Soundcheck for pitch scoring. Turn guitar off to play the other parts with keys, or watch the whole band without scoring.</p> : null}
             <div className="session-actions">
               <Button type="button" onClick={needsGuitarMidi ? onConnectGuitar : onStart} disabled={busy || guitarConnecting} data-session-primary>
                 {needsGuitarMidi ? <Cable size={16} aria-hidden="true" /> : <Play size={16} aria-hidden="true" />}

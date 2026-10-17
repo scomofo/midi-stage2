@@ -1,5 +1,7 @@
-import { importAudioFile, type AudioAnalysis, type AudioImportProgress } from "./audio-import.ts";
+import { importAudioFile, MAX_AUDIO_IMPORT_BYTES, type AudioAnalysis, type AudioImportProgress } from "./audio-import.ts";
 import { validateSharedChart, type SharedChart } from "./chart-format.ts";
+import { isSupportedAudioFile } from "./audio-file-types.ts";
+import { stemCompatibility } from "./stem-handoff.ts";
 import type { Instrument } from "./types.ts";
 
 export type FullBandStemFiles = Partial<Record<"drums" | "keys" | "guitar" | "bass", File>>;
@@ -26,6 +28,7 @@ function combineCharts(charts: Partial<Record<Instrument, SharedChart>>, filenam
     origin: "audio-full-band-draft",
     matching: undefined,
     duration,
+    firstBeat: Math.min(...parts.flatMap((part) => part.notes.map((note) => note.time))),
     parts,
     chordHighways: {
       keys: charts.keys?.chordHighways.keys ?? [],
@@ -41,6 +44,15 @@ export async function importFullBandStemSet(
 ): Promise<FullBandImportResult> {
   const order = (["drums", "keys", "guitar", "bass"] as const).filter((instrument) => stems[instrument]);
   if (!order.length) throw new Error("Choose at least one drum, keyboard, guitar or bass stem.");
+  // Reject a mismatched set before any decoding or model work begins.
+  for (const instrument of order) {
+    const stem = stems[instrument]!;
+    if (!isSupportedAudioFile(stem) || !stem.size || stem.size > MAX_AUDIO_IMPORT_BYTES) {
+      throw new Error(`Choose a nonempty browser-supported ${instrument} stem smaller than 50 MB.`);
+    }
+    const compatibility = stemCompatibility(stem.name, instrument);
+    if (!compatibility.compatible) throw new Error(compatibility.warning!);
+  }
   const charts: Partial<Record<Instrument, SharedChart>> = {};
   const warnings: string[] = [];
   let backing: AudioBuffer | null = null;
@@ -56,6 +68,7 @@ export async function importFullBandStemSet(
     warnings.push(...result.warnings.map((warning) => `${instrument}: ${warning}`));
     backing ??= result.buffer;
   }
+  if (options.signal?.aborted) throw new DOMException("Song import was cancelled.", "AbortError");
   return {
     chart: combineCharts(charts, original.name),
     warnings: [`Full-band draft combined ${order.join(", ")} on the original recording timeline.`, ...warnings],

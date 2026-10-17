@@ -165,7 +165,7 @@ try {
   phase = 'model loading failure';
   await page.route('**/models/basic-pitch/model.json', (route) => route.abort());
   await build.click();
-  await library.getByRole('alert').filter({ hasText: /Keyboard model could not load/ }).waitFor();
+  await library.getByRole('alert').filter({ hasText: /The local pitch model could not load/ }).waitFor();
   assert.equal(await page.evaluate(() => window.modelWorkers.every((w) => !w.active)), true);
   await library.getByRole('button', { name: 'Close song library', exact: true }).click();
   if (!uiOnly) assert.equal(await page.evaluate(() => window.keyboardProbe.live.song.id), savedId);

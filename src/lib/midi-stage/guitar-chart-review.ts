@@ -19,7 +19,8 @@ export function applyGuitarReview(source: SharedChart, rows: GuitarReviewRow[], 
   };
   const bpm = value(tempo, "Tempo");
   if (bpm < 20 || bpm > 400) throw new Error("Tempo must be between 20 and 400 BPM.");
-  const scale = source.bpm / bpm;
+  const fixedTimeline = source.origin.startsWith("audio-");
+  const scale = fixedTimeline ? 1 : source.bpm / bpm;
   const notes = rows.map((row, index) => {
     const string = value(row.string, `Note ${index + 1} string`);
     const fret = value(row.fret, `Note ${index + 1} fret`);
@@ -41,7 +42,10 @@ export function applyGuitarReview(source: SharedChart, rows: GuitarReviewRow[], 
     return Number(rows[index]!.time) === original.time && Number(rows[index]!.duration) === original.duration
       && note.guitarPosition.string === original.guitarPosition!.string && note.guitarPosition.fret === original.guitarPosition!.fret;
   });
-  const duration = Math.max(source.duration, ...notes.map((n) => n.time / scale + n.duration / scale)) * scale;
+  if (fixedTimeline && notes.some((note) => note.time < 0 || note.duration < 0.02 || note.time + note.duration > source.duration + 1e-6)) {
+    throw new Error("Guitar notes must fit inside the original recording and last at least 0.02 seconds.");
+  }
+  const duration = fixedTimeline ? source.duration : Math.max(source.duration, ...notes.map((n) => n.time / scale + n.duration / scale)) * scale;
   return validateSharedChart({
     ...source, bpm, duration,
     firstBeat: source.firstBeat * scale,

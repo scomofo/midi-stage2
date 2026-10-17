@@ -19,6 +19,8 @@ import type { FullBandStemFiles } from "@/lib/midi-stage/multi-stem-import";
 import type { SharedChart } from "@/lib/midi-stage/chart-format";
 import { isReviewableDrumDraft } from "@/lib/midi-stage/drum-chart-review";
 import { isReviewableKeyboardDraft } from "@/lib/midi-stage/keyboard-draft";
+import { isReviewableGuitarDraft } from "@/lib/midi-stage/guitar-draft";
+import { isReviewableBassDraft } from "@/lib/midi-stage/bass-draft";
 import type { AudioImportMode } from "@/lib/midi-stage/audio-file-types";
 import { importWorkflowState } from "@/lib/midi-stage/import-workflow";
 import { scoreChartQuality } from "@/lib/midi-stage/chart-quality";
@@ -105,6 +107,11 @@ export function SongLibraryPanel({
   const drumDraft = isReviewableDrumDraft(candidate?.chart);
   const keysDraft = isReviewableKeyboardDraft(candidate?.chart);
   const audioDraft = drumDraft || keysDraft;
+  const fullBandDraft = candidate?.chart?.origin === "audio-full-band-draft";
+  const guitarDraft = isReviewableGuitarDraft(candidate?.chart);
+  const bassDraft = isReviewableBassDraft(candidate?.chart);
+  const vocalDraft = candidate?.chart?.origin === "audio-vocals-rhythm";
+  const estimatedDraft = audioDraft || fullBandDraft || guitarDraft || bassDraft;
   const quality = candidate?.chart ? scoreChartQuality(candidate.chart) : null;
   const reviewRequired = Boolean(candidate?.chart?.guitarMode === "strings" || audioDraft);
   const workflow = importWorkflowState({
@@ -297,7 +304,7 @@ export function SongLibraryPanel({
               </div>
               <progress
                 className="song-import-progress mt-3 block h-1.5 w-full"
-                aria-label={readingProgress === undefined ? readingLabel : "Rhythm analysis progress"}
+                aria-label={readingProgress === undefined ? readingLabel : "Song analysis progress"}
                 max={1}
                 value={readingProgress}
               />
@@ -337,7 +344,7 @@ export function SongLibraryPanel({
           >
             <div className="mb-3 flex items-center gap-2 text-xs font-medium tracking-widest text-accent">
               {audioDraft ? <FileMusic className="size-4" aria-hidden="true" /> : <Check className="size-4" aria-hidden="true" />}
-              {keysDraft ? "KEYBOARD DRAFT · REVIEW NOTES" : drumDraft ? "DRUM DRAFT · REVIEW HITS" : "READY FOR THE SETLIST"}
+              {fullBandDraft ? "FULL-BAND DRAFT · REVIEW PARTS" : keysDraft ? "KEYBOARD DRAFT · REVIEW NOTES" : drumDraft ? "DRUM DRAFT · REVIEW HITS" : guitarDraft ? "GUITAR DRAFT · REVIEW FRETS" : bassDraft ? "BASS DRAFT · ESTIMATED NOTES" : "READY FOR THE SETLIST"}
             </div>
             <h3
               ref={previewTitleRef}
@@ -352,7 +359,7 @@ export function SongLibraryPanel({
             </p>
             {candidate.kind === "audio" ? (
               <p className="mt-2 text-xs leading-relaxed text-accent">
-                {keysDraft ? "Keyboard draft · estimated pitches, timing and holds" : drumDraft ? "Drum draft · estimated types and timing" : "Rhythm chart · detected hits"}
+                {fullBandDraft ? "Full-band draft · aligned instrument parts with the original recording" : keysDraft ? "Keyboard draft · estimated pitches, timing and holds" : drumDraft ? "Drum draft · estimated types and timing" : guitarDraft ? "Guitar draft · estimated pitches, strings and frets" : bassDraft ? "Bass draft · estimated pitches and holds" : vocalDraft ? "Vocal phrases · timing only" : "Rhythm chart · detected hits"}
               </p>
             ) : null}
             {audioDraft && candidate.stemName ? <p className="mt-2 break-all text-xs leading-relaxed text-muted">Analysis stem: {candidate.stemName}. The original song supplies backing audio.</p> : null}
@@ -360,7 +367,7 @@ export function SongLibraryPanel({
               <span>
                 {Number(candidate.bpm.toFixed(2))}{" "}
                 <span className="text-xs text-muted">
-                  {audioDraft ? "COUNT-IN BPM" : candidate.kind === "audio" ? "EST. BPM" : "BPM"}
+                  {estimatedDraft ? "COUNT-IN BPM" : candidate.kind === "audio" ? "EST. BPM" : "BPM"}
                 </span>
               </span>
               <span>
@@ -378,7 +385,7 @@ export function SongLibraryPanel({
                     <dt className="text-muted">{LABELS[instrument]}</dt>
                     <dd className="font-mono text-xs tabular-nums">
                       {candidate.counts[instrument].toLocaleString()}{" "}
-                      {candidate.kind === "audio" && !keysDraft ? "hit" : "note"}
+                      {candidate.chart?.matching === "rhythm" || instrument === "drums" ? "hit" : "note"}
                       {candidate.counts[instrument] === 1 ? "" : "s"}
                     </dd>
                   </div>
@@ -389,7 +396,7 @@ export function SongLibraryPanel({
               <AudioSourcePreview file={candidate.audioFile} disabled={busy} />
             ) : null}
             {candidate.chart?.guitarMode === "strings" && onReviewApply && onReviewPending ? (
-              <GuitarImportReview key={reviewKey} chart={candidate.chart} disabled={busy}
+              <GuitarImportReview key={reviewKey} chart={candidate.chart} disabled={busy} audioAttached={candidate.kind === "audio"}
                 onApply={onReviewApply} onPendingChange={onReviewPending} />
             ) : null}
             {audioDraft && candidate.chart && onReviewApply && onReviewPending ? (

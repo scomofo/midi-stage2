@@ -1,7 +1,8 @@
 // Original controlled chord/melody. Acceptance results do not measure real-song accuracy.
-export function keyboardFixture(sampleRate = 44100, channels = 1) {
+/** @param {number} sampleRate @param {number} channels @param {Array<{pitch: number, time: number, duration: number}>} [notes] */
+export function keyboardFixture(sampleRate = 44100, channels = 1, notes) {
   const duration = 4;
-  const events = [
+  const events = notes ?? [
     { pitch: 60, time: 0.6, duration: 0.8 }, { pitch: 64, time: 0.6, duration: 0.8 },
     { pitch: 67, time: 0.6, duration: 0.8 }, { pitch: 67, time: 2, duration: 0.5 }, { pitch: 72, time: 3, duration: 0.6 },
   ];
