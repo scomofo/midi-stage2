@@ -188,7 +188,8 @@ original audio in IndexedDB. Files are processed locally and are never uploaded.
 See [audio drum drafts and the stem handoff](docs/audio-drum-drafts.md) for the
 current drum limits, or [keyboard audio drafts](docs/keyboard-audio-drafts.md)
 for the piano/keyboard workflow. See [full-band stem imports](docs/full-band-stem-import.md)
-for combined drum, keyboard, guitar and bass parts, count-in review and MIDI setup.
+for combined drum, keyboard, guitar and bass parts, independent review tabs,
+corrected-part audition with the original recording, count-in review and MIDI setup.
 If storage is unavailable, the current visit remains playable and a warning
 explains what was not saved. Reimporting the same file does not duplicate it.
 Remove imports from **Your songs**; the original files are unchanged. Parts with

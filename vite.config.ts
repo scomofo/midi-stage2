@@ -157,9 +157,9 @@ export default defineConfig(({ command, isPreview }) => ({
     strictPort: true,
   },
   resolve: { tsconfigPaths: true },
-  // Discover worker-only dependencies before the first keyboard import, so
+  // Discover worker and review dependencies before the first import, so
   // dependency optimization cannot reload the page and discard its preview.
-  optimizeDeps: { include: ["@spotify/basic-pitch", "@tensorflow/tfjs"] },
+  optimizeDeps: { include: ["@spotify/basic-pitch", "@tensorflow/tfjs", "@radix-ui/react-tabs"] },
   plugins: [
     pgliteBootstrapPlugin(),
     // Before tanstackStart so /auth/popup never falls through to the SPA.

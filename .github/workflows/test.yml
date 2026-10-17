@@ -16,7 +16,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chromium
-      - name: Verify full-band import and mixed-instrument playback
+      - name: Verify full-band review, audio audition and mixed-instrument playback
         run: |
           npm run dev > /tmp/full-band-import-dev.log 2>&1 &
           ready=false

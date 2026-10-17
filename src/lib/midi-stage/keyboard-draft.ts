@@ -33,7 +33,8 @@ export function makeKeyboardDraft(events: KeyboardEvent[], duration: number, fil
 }
 
 export function isReviewableKeyboardDraft(chart: SharedChart | null | undefined): boolean {
-  if (!chart || chart.origin !== "audio-keys-draft" || chart.matching === "rhythm" || chart.guitarMode) return false;
+  if (!chart || !["audio-keys-draft", "audio-full-band-draft"].includes(chart.origin) || chart.matching === "rhythm"
+    || (chart.guitarMode && chart.origin !== "audio-full-band-draft")) return false;
   const notes = chart.parts.find((part) => part.type === "keys")?.notes;
   return Boolean(notes?.length && notes.every((n) => Number.isInteger(n.pitch) && n.pitch >= 21 && n.pitch <= 108));
 }
