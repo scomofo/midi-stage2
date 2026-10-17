@@ -45,6 +45,7 @@ npm run dev   # serves the app on http://0.0.0.0:8082
 | `npm run test:audio` | Real WAV/MP3/FLAC import, backing playback, storage and rhythm-input regression |
 | `npm run test:audio-drums` | Desktop drum drafts, correction/export, original backing, MIDI lanes and reload |
 | `npm run test:full-band-import` | Desktop four-stem import, shared timing, mixed lineup, MIDI routing, original backing and reload |
+| `npm run test:transcription-benchmark` | Real desktop audio imports vs pinned independent references; [method and limits](docs/transcription-benchmark.md) |
 | `npm run test:guitar` | Authored strings/frets, exact-pitch MIDI, arcade strums, holds and touch |
 | `npm run test:guitar-import` | Desktop MusicXML/string-fret imports, correction/export, reload and exact-pitch playback |
 | `npm run test:graphics` | Concert rendering, lane targets, reduced motion and saved/live strum arrows |

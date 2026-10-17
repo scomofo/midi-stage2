@@ -1,11 +1,12 @@
 // Original deterministic percussion with known event times, shared by unit and browser QA.
-export function drumFixture(sampleRate = 44100, channels = 1) {
+/** @param {number} sampleRate @param {number} channels @param {Array<{time:number,pitch:number}>} [sourceEvents] */
+export function drumFixture(sampleRate = 44100, channels = 1, sourceEvents) {
   const duration = 8;
-  const events = [
+  const events = (sourceEvents ?? [
     ...Array.from({ length: 7 }, (_, i) => ({ time: 0.3 + i, pitch: 36 })),
     ...Array.from({ length: 7 }, (_, i) => ({ time: 0.8 + i, pitch: 38 })),
     ...Array.from({ length: 28 }, (_, i) => ({ time: 0.3 + i * 0.25, pitch: 42 })),
-  ].sort((a, b) => a.time - b.time || a.pitch - b.pitch);
+  ]).map((event) => ({ ...event })).sort((a, b) => a.time - b.time || a.pitch - b.pitch);
   const data = new Float32Array(Math.round(duration * sampleRate));
   let seed = 7529;
   for (const event of events) {
