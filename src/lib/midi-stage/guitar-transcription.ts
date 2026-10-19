@@ -4,6 +4,7 @@ import { makeGuitarDraft } from "./guitar-draft.ts";
 import { cleanGuitarEvents } from "./guitar-event-cleanup.ts";
 import { verifyGuitarAttacks } from "./guitar-attack-verification.ts";
 import { recoverGuitarShortNotes } from "./guitar-short-note-recovery.ts";
+import { auditShortChordCandidates } from "./guitar-short-chord-audit.ts";
 import { transcribePitchedEvents } from "./pitched-transcription.ts";
 
 function cancelled(signal?: AbortSignal) {
@@ -25,7 +26,11 @@ export async function transcribeGuitarAudio(
   cancelled(signal);
   const verified = await verifyGuitarAttacks(cleanGuitarEvents(events), buffer, signal);
   const recovered = await recoverGuitarShortNotes(verified, buffer, signal);
+  const chordCandidates = auditShortChordCandidates(events, recovered, buffer);
   const result = makeGuitarDraft(recovered, buffer.duration, filename, fingerprint);
+  if (chordCandidates.length) {
+    result.warnings.push(`${chordCandidates.length} possible short chord ${chordCandidates.length === 1 ? "tone" : "tones"} found in source audio but not added automatically. Review the chord against the recording; these are unverified diagnostic candidates.`);
+  }
   const noteKeys = new Set(result.chart.parts.find((part) => part.type === "guitar")!.notes.map((note) => `${note.pitch}:${Math.round(note.time * 1e6)}`));
   const brief = recovered.filter((event) => event.shortAttackVerified && noteKeys.has(`${event.pitchMidi}:${Math.round(event.startTimeSeconds * 1e6)}`)).length;
   if (brief) result.warnings.push(`${brief} brief guitar ${brief === 1 ? "note was" : "notes were"} recovered from audio attacks. Check their estimated pitches and lengths in the review studio.`);
