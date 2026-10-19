@@ -4,10 +4,7 @@ import { Button } from "@/components/ui/button";
 import type { SharedChart } from "@/lib/midi-stage/chart-format";
 import type { AudioReviewInstrument } from "@/lib/midi-stage/audio-part-review";
 import { LABELS } from "@/lib/midi-stage/songs";
-import { AudioSourcePreview } from "./audio-source-preview";
-import { AudioPartAudition } from "./audio-part-audition";
-import { AudioDraftReview } from "./audio-draft-review";
-import { GuitarImportReview } from "./guitar-import-review";
+import { AudioDraftStudio } from "./audio-draft-studio";
 import { isReviewableDrumDraft } from "@/lib/midi-stage/drum-chart-review";
 import { isReviewableKeyboardDraft } from "@/lib/midi-stage/keyboard-draft";
 import { isReviewableBassDraft } from "@/lib/midi-stage/bass-draft";
@@ -45,11 +42,8 @@ export function FullBandDraftReview({ chart, audioFile, buffer, disabled, onAppl
       </Tabs.List>
       {pending ? <p role="status" className="mt-3 text-xs text-tungsten">Apply or restore corrections before switching instruments.</p> : null}
       <Tabs.Content key={instrument} value={instrument} className="mt-4 space-y-4">
-        {audioFile ? <AudioSourcePreview file={audioFile} disabled={disabled} review={{ chart, instrument, buffer, pending }} />
-          : <AudioPartAudition chart={chart} instrument={instrument} disabled={disabled || pending} />}
-        {instrument === "guitar"
-          ? <GuitarImportReview chart={chart} originalChart={original.current} disabled={disabled} audioAttached={Boolean(audioFile)} onApply={onApply} onPendingChange={changePending} />
-          : <AudioDraftReview chart={chart} originalChart={original.current} instrument={instrument} disabled={disabled} audioAttached={Boolean(audioFile)} onApply={onApply} onPendingChange={changePending} />}
+        <AudioDraftStudio chart={chart} instrument={instrument} originalChart={original.current}
+          audioFile={audioFile} buffer={buffer} disabled={disabled} onApply={onApply} onPendingChange={changePending} />
       </Tabs.Content>
     </Tabs.Root>
   </section>;

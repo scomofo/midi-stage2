@@ -2452,7 +2452,7 @@ export function StageApp() {
       {libraryOpen ? (
         <>
           <button type="button" className="fixed inset-0 z-40 bg-bg/55" aria-label="Dismiss song library" onClick={closeSongLibrary} />
-          <div ref={libraryRef} role="dialog" aria-modal="true" aria-labelledby="song-library-title" className={cn("feel-sheet fixed inset-y-0 right-0 z-50 flex w-[min(480px,96vw)] flex-col overflow-hidden bg-bg shadow-[0_0_0_1px_rgba(239,232,220,0.1)]", (importCandidate?.entry.chart.guitarMode === "strings" || isReviewableDrumDraft(importCandidate?.entry.chart) || isReviewableKeyboardDraft(importCandidate?.entry.chart) || isReviewableBassDraft(importCandidate?.entry.chart)) && "guitar-library-sheet")}>
+          <div ref={libraryRef} role="dialog" aria-modal="true" aria-labelledby="song-library-title" className={cn("feel-sheet fixed inset-y-0 right-0 z-50 flex w-[min(480px,96vw)] flex-col overflow-hidden bg-bg shadow-[0_0_0_1px_rgba(239,232,220,0.1)]", (importCandidate?.entry.chart.guitarMode === "strings" || isReviewableDrumDraft(importCandidate?.entry.chart) || isReviewableKeyboardDraft(importCandidate?.entry.chart) || isReviewableBassDraft(importCandidate?.entry.chart)) && "guitar-library-sheet", importCandidate?.entry.chart.origin.startsWith("audio-") && (importCandidate.entry.chart.guitarMode === "strings" || isReviewableDrumDraft(importCandidate.entry.chart) || isReviewableKeyboardDraft(importCandidate.entry.chart) || isReviewableBassDraft(importCandidate.entry.chart)) && "audio-review-library-sheet")}>
             <SongLibraryPanel
               candidate={importCandidate ? {
                 kind: importCandidate.kind,

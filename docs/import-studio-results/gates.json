@@ -1,0 +1,209 @@
+{
+  "kind": "reviewed-post-run-policy-evaluation",
+  "evaluatedAt": "2026-10-19T06:23:11.831Z",
+  "rawReportSha256": "ac88f0344e857237214dc4a5e046ef5922ae7ff8809eac6db92f696cd91aaaba",
+  "policySha256": "e3aefd2c5a39c9007d53ff6ced5eeba265c93f0407af82f3b4ce3b48ebaa094b",
+  "command": "npm run test:transcription-benchmark -- http://127.0.0.1:8082 --record-only",
+  "passed": true,
+  "gates": [
+    {
+      "id": "guitarset-comp",
+      "passed": true,
+      "regressionStatus": "pass",
+      "floor": {
+        "minF1": 0.8,
+        "minPrecision": 0.72,
+        "minRecall": 0.91,
+        "maxFalseNegatives": 4,
+        "maxFalsePositives": 16,
+        "maxOnsetMs": 25,
+        "maxDurationMs": 150
+      }
+    },
+    {
+      "id": "guitarset-solo",
+      "passed": true,
+      "regressionStatus": "pass",
+      "floor": {
+        "minF1": 0.82,
+        "minPrecision": 0.83,
+        "minRecall": 0.81,
+        "maxFalseNegatives": 6,
+        "maxFalsePositives": 5,
+        "maxOnsetMs": 25,
+        "maxDurationMs": 210
+      }
+    },
+    {
+      "id": "guitar-clean",
+      "passed": true,
+      "regressionStatus": "pass",
+      "floor": {
+        "minF1": 1,
+        "maxFalseNegatives": 0,
+        "maxFalsePositives": 0,
+        "maxOnsetMs": 55,
+        "maxDurationMs": 40
+      }
+    },
+    {
+      "id": "guitar-chords",
+      "passed": true,
+      "regressionStatus": "pass",
+      "floor": {
+        "minF1": 0.85,
+        "maxFalseNegatives": 0,
+        "maxFalsePositives": 2,
+        "maxOnsetMs": 50,
+        "maxDurationMs": 70
+      }
+    },
+    {
+      "id": "guitar-distorted",
+      "passed": true,
+      "regressionStatus": "pass",
+      "floor": {
+        "minF1": 0.72,
+        "maxFalseNegatives": 2,
+        "maxFalsePositives": 1,
+        "maxOnsetMs": 55,
+        "maxDurationMs": 300
+      }
+    },
+    {
+      "id": "guitar-short-attacks",
+      "passed": true,
+      "regressionStatus": "pass",
+      "floor": {
+        "minF1": 1,
+        "maxFalseNegatives": 0,
+        "maxFalsePositives": 0,
+        "maxOnsetMs": 45,
+        "maxDurationMs": 45
+      }
+    },
+    {
+      "id": "guitar-short-varied",
+      "passed": true,
+      "regressionStatus": "pass",
+      "floor": {
+        "minF1": 1,
+        "maxFalseNegatives": 0,
+        "maxFalsePositives": 0,
+        "maxOnsetMs": 45,
+        "maxDurationMs": 40
+      }
+    },
+    {
+      "id": "guitar-short-chords",
+      "passed": null,
+      "regressionStatus": "diagnostic",
+      "floor": {
+        "diagnosticOnly": true,
+        "reason": "Three of six simultaneous short chord tones remain missed. The isolated short-note recovery does not attempt polyphonic separation; this supplemental development control has no quality pass."
+      }
+    },
+    {
+      "id": "keys-harmonic",
+      "passed": true,
+      "regressionStatus": "pass",
+      "floor": {
+        "minF1": 1,
+        "maxFalseNegatives": 0,
+        "maxFalsePositives": 0,
+        "maxOnsetMs": 30,
+        "maxDurationMs": 60
+      }
+    },
+    {
+      "id": "keys-sampled",
+      "passed": true,
+      "regressionStatus": "pass",
+      "floor": {
+        "minF1": 0.9,
+        "maxFalseNegatives": 0,
+        "maxFalsePositives": 1,
+        "maxOnsetMs": 30,
+        "maxDurationMs": 60
+      }
+    },
+    {
+      "id": "bass-harmonic",
+      "passed": true,
+      "regressionStatus": "pass",
+      "floor": {
+        "minF1": 0.85,
+        "maxFalseNegatives": 0,
+        "maxFalsePositives": 1,
+        "maxOnsetMs": 30,
+        "maxDurationMs": 210
+      }
+    },
+    {
+      "id": "bass-sampled",
+      "passed": true,
+      "regressionStatus": "pass",
+      "floor": {
+        "minF1": 1,
+        "maxFalseNegatives": 0,
+        "maxFalsePositives": 0,
+        "maxOnsetMs": 45,
+        "maxDurationMs": 40
+      }
+    },
+    {
+      "id": "drums-overlap",
+      "passed": true,
+      "regressionStatus": "pass",
+      "floor": {
+        "minF1": 0.9,
+        "maxFalseNegatives": 7,
+        "maxFalsePositives": 0,
+        "maxOnsetMs": 30
+      }
+    },
+    {
+      "id": "drums-snare-only",
+      "passed": true,
+      "regressionStatus": "pass",
+      "floor": {
+        "minF1": 1,
+        "maxFalseNegatives": 0,
+        "maxFalsePositives": 0,
+        "maxOnsetMs": 30
+      }
+    },
+    {
+      "id": "keys-recording-tail",
+      "passed": true,
+      "regressionStatus": "pass",
+      "floor": {
+        "minF1": 1,
+        "maxFalseNegatives": 0,
+        "maxFalsePositives": 0,
+        "maxOnsetMs": 45,
+        "maxDurationMs": 110
+      }
+    },
+    {
+      "id": "keys-silence",
+      "passed": true,
+      "regressionStatus": "pass",
+      "floor": {
+        "minF1": 1,
+        "maxFalseNegatives": 0,
+        "maxFalsePositives": 0
+      }
+    },
+    {
+      "id": "drums-silence",
+      "passed": true,
+      "regressionStatus": "pass",
+      "floor": {
+        "minF1": 1,
+        "maxFalseNegatives": 0,
+        "maxFalsePositives": 0
+      }
+    }
+  ]
+}

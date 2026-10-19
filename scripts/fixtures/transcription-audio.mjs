@@ -81,6 +81,9 @@ export async function transcriptionAudioCases() {
   rendered('guitar-chords', 'guitar', 'sample-guitar-acoustic', chords);
   rendered('guitar-distorted', 'guitar', 'sample-guitar-acoustic', chords, 8);
   rendered('guitar-short-attacks', 'guitar', 'sample-guitar-acoustic', [40, 40, 43, 43, 45, 45].map((pitch, index) => ({ pitch, time: 0.6 + index * 0.2, duration: 0.1 })));
+  // Supplemental development controls: different gates/pitches and simultaneous short attacks.
+  rendered('guitar-short-varied', 'guitar', 'sample-guitar-acoustic', [42, 47, 50, 52].map((pitch, index) => ({ pitch, time: 0.6 + index * 0.6, duration: [0.12, 0.15, 0.16, 0.13][index] })));
+  rendered('guitar-short-chords', 'guitar', 'sample-guitar-acoustic', [40, 47, 52].map((pitch) => ({ pitch, time: 0.6, duration: 0.13 })).concat([43, 50, 55].map((pitch) => ({ pitch, time: 2.1, duration: 0.15 }))));
   const keys = keyboardFixture();
   append('keys-harmonic', 'keys', 'analytical-render', keys, keys.events);
   rendered('keys-sampled', 'keys', 'sample-piano', keys.events);

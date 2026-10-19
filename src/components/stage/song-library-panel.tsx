@@ -12,7 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { AudioSourcePreview } from "./audio-source-preview";
 import { GuitarImportReview } from "./guitar-import-review";
-import { AudioDraftReview } from "./audio-draft-review";
+import { AudioDraftStudio } from "./audio-draft-studio";
 import { AudioStemImport } from "./audio-stem-import";
 import { FullBandStemImport } from "./full-band-stem-import";
 import { FullBandDraftReview } from "./full-band-draft-review";
@@ -333,16 +333,16 @@ export function SongLibraryPanel({
           <>
           {quality ? <div className="rounded-xl border border-border bg-surface px-3 py-3" data-chart-quality={quality.grade}>
             <div className="flex items-center justify-between gap-3">
-              <strong className="text-sm">Chart quality · {quality.score}/100</strong>
-              <span className="text-xs capitalize text-muted">{quality.grade}</span>
+              <strong className="text-sm">Draft checks</strong>
+              <span className="text-xs text-muted">{quality.issues.length ? "Review suggested" : "Structure checked"}</span>
             </div>
-            <p className="mt-1 text-xs text-muted">{quality.issues[0]?.message}</p>
+            <p className="mt-1 text-xs text-muted">{quality.issues[0]?.message ?? "Timing and playability checks passed."} These checks do not verify detected pitches against the recording.</p>
             {quality.needsReview ? <p className="mt-1 text-xs text-muted">{quality.needsReview} detected notes are below high confidence.</p> : null}
           </div> : null}
           <section
             ref={previewRef}
             aria-labelledby="song-preview-title"
-            className="min-w-0 rounded-xl border border-accent/30 bg-surface p-4 text-fg"
+            className={cn("min-w-0 rounded-xl border border-accent/30 bg-surface p-4 text-fg", estimatedDraft && "song-preview-studio")}
           >
             <div className="mb-3 flex items-center gap-2 text-xs font-medium tracking-widest text-accent">
               {audioDraft ? <FileMusic className="size-4" aria-hidden="true" /> : <Check className="size-4" aria-hidden="true" />}
@@ -365,7 +365,7 @@ export function SongLibraryPanel({
               </p>
             ) : null}
             {audioDraft && candidate.stemName ? <p className="mt-2 break-all text-xs leading-relaxed text-muted">Analysis stem: {candidate.stemName}. The original song supplies backing audio.</p> : null}
-            <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 border-y border-border py-3 font-mono text-sm tabular-nums">
+            <div className="song-preview-metadata mt-4 flex flex-wrap gap-x-5 gap-y-2 border-y border-border py-3 font-mono text-sm tabular-nums">
               <span>
                 {Number(candidate.bpm.toFixed(2))}{" "}
                 <span className="text-xs text-muted">
@@ -377,7 +377,7 @@ export function SongLibraryPanel({
                 <span className="text-xs text-muted">DURATION</span>
               </span>
             </div>
-            <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+            <dl className="song-preview-parts mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
               {INSTRUMENTS.filter((instrument) => candidate.counts[instrument] > 0).map(
                 (instrument) => (
                   <div
@@ -394,20 +394,20 @@ export function SongLibraryPanel({
                 ),
               )}
             </dl>
-            {!fullBandDraft && candidate.kind === "audio" && candidate.audioFile ? (
+            {!fullBandDraft && !estimatedDraft && candidate.kind === "audio" && candidate.audioFile ? (
               <AudioSourcePreview file={candidate.audioFile} disabled={busy} />
             ) : null}
             {fullBandDraft && candidate.chart && onReviewApply && onReviewPending ? (
               <FullBandDraftReview key={reviewKey} chart={candidate.chart} audioFile={candidate.audioFile} buffer={candidate.buffer}
                 disabled={busy} onApply={onReviewApply} onPendingChange={onReviewPending} />
             ) : null}
-            {!fullBandDraft && candidate.chart?.guitarMode === "strings" && onReviewApply && onReviewPending ? (
+            {!fullBandDraft && !guitarDraft && candidate.chart?.guitarMode === "strings" && onReviewApply && onReviewPending ? (
               <GuitarImportReview key={reviewKey} chart={candidate.chart} disabled={busy} audioAttached={candidate.kind === "audio"}
                 onApply={onReviewApply} onPendingChange={onReviewPending} />
             ) : null}
-            {!fullBandDraft && audioDraft && candidate.chart && onReviewApply && onReviewPending ? (
-              <AudioDraftReview key={reviewKey} chart={candidate.chart} disabled={busy} instrument={bassDraft ? "bass" : keysDraft ? "keys" : "drums"}
-                audioAttached={candidate.kind === "audio"} onApply={onReviewApply} onPendingChange={onReviewPending} />
+            {!fullBandDraft && (audioDraft || guitarDraft) && candidate.chart && onReviewApply && onReviewPending ? (
+              <AudioDraftStudio key={reviewKey} chart={candidate.chart} disabled={busy} instrument={guitarDraft ? "guitar" : bassDraft ? "bass" : keysDraft ? "keys" : "drums"}
+                audioFile={candidate.audioFile} buffer={candidate.buffer} onApply={onReviewApply} onPendingChange={onReviewPending} />
             ) : null}
             {candidate.warnings.length > 0 ? (
               <ul

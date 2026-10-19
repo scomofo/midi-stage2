@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdir, readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { chromium } from 'playwright';
-import { keyboardPairFixture } from './fixtures/keyboard-draft.mjs';
+import { keyboardFixture, keyboardPairFixture } from './fixtures/keyboard-draft.mjs';
 import { drumWav } from './fixtures/drum-draft.mjs';
 
 const url = process.argv[2] || 'http://127.0.0.1:8082';
@@ -84,12 +84,12 @@ try {
   assert.ok(models.every((u) => new URL(u).origin === new URL(url).origin));
   assert.equal(await page.evaluate(() => window.modelWorkers.every((w) => !w.active)), true);
   await library.getByText('Analysis stem: piano.wav. The original song supplies backing audio.', { exact: true }).waitFor();
-  assert.equal(await library.locator('tbody tr').count(), 5, 'controlled five-note chord/melody fixture');
-  const detected = await library.locator('tbody tr').evaluateAll((rows) => rows.map((row) => ({
-    time: Number(row.querySelector('input[aria-label$="time"]').value),
-    duration: Number(row.querySelector('input[aria-label$="length"]').value),
-    pitch: Number(row.querySelector('select').value),
-  })));
+  assert.equal(await library.locator('.studio-queue > button').count(), 5, 'controlled five-note chord/melody fixture');
+  const detectionDownload = page.waitForEvent('download');
+  await library.getByRole('button', { name: 'Download chart', exact: true }).click();
+  const detectionPath = `${output}/keyboard-detected.midistage.json`;
+  await (await detectionDownload).saveAs(detectionPath);
+  const detected = JSON.parse(await readFile(detectionPath, 'utf8')).parts.find((part) => part.type === 'keys').notes;
   for (const expected of pair.stem.events) assert.ok(detected.some((note) => note.pitch === expected.pitch
     && Math.abs(note.time - expected.time) < 0.04 && Math.abs(note.duration - expected.duration) < 0.12),
   `missing/incorrect fixture note ${expected.pitch} at ${expected.time}s`);
@@ -153,9 +153,15 @@ try {
   await library.getByRole('button', { name: 'Add note', exact: true }).click(); await apply.click();
   assert.equal(await add.isEnabled(), true);
   await library.getByRole('button', { name: 'Restore original', exact: true }).click();
-  assert.equal(await library.locator('tbody tr').count(), 5);
+  assert.equal(await library.locator('.studio-queue > button').count(), 5);
   phase = 'cancel running inference and release model worker';
-  build = await choosePair(); await build.click();
+  build = await choosePair();
+  // A longer real source keeps accelerated inference running while the visible Cancel control is clicked.
+  const cancelling = keyboardFixture(44100, 1, [{ time: 0.6, duration: 0.5, pitch: 60 }, { time: 31.86, duration: 0.12, pitch: 64 }], 32);
+  const cancellingForm = library.locator('details').filter({ hasText: 'Use a separated keyboard stem' });
+  await cancellingForm.getByLabel('Original song for keyboard stem', { exact: true }).setInputFiles({ name: 'Long keyboard study.wav', mimeType: 'audio/wav', buffer: drumWav(cancelling) });
+  await cancellingForm.getByLabel('Keyboard stem for highway', { exact: true }).setInputFiles({ name: 'piano.wav', mimeType: 'audio/wav', buffer: drumWav(cancelling) });
+  await build.scrollIntoViewIfNeeded(); await build.click();
   await page.waitForFunction(() => window.modelWorkers.some((w) => w.active && w.phase === 'analyzing'));
   await library.getByRole('button', { name: 'Cancel import', exact: true }).click();
   assert.equal(await page.evaluate(() => window.modelWorkers.every((w) => !w.active)), true);
