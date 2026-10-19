@@ -5,9 +5,10 @@ import type { KeyboardEvent } from "./keyboard-draft.ts";
 
 export const STANDARD_GUITAR_TUNING = [40, 45, 50, 55, 59, 64] as const;
 export const MAX_GUITAR_DRAFT_NOTES = 6000;
+export type GuitarEvent = KeyboardEvent & { shortAttackVerified?: true };
 
 export function makeGuitarDraft(
-  events: KeyboardEvent[],
+  events: GuitarEvent[],
   duration: number,
   filename: string,
   fingerprint: string,
@@ -25,7 +26,7 @@ export function makeGuitarDraft(
       event.pitchMidi >= Math.min(...tuning) &&
       event.pitchMidi <= Math.max(...tuning) + 24 &&
       event.amplitude >= 0.42 &&
-      event.durationSeconds >= 0.07 &&
+      event.durationSeconds >= (event.shortAttackVerified ? 0.035 : 0.07) &&
       event.startTimeSeconds < duration - 0.02,
     )
     .sort((a, b) => a.startTimeSeconds - b.startTimeSeconds || b.amplitude - a.amplitude);

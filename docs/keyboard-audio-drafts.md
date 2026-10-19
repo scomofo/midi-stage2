@@ -9,8 +9,9 @@ before import.
 The draft estimates simultaneous notes, MIDI pitches and note lengths. Review
 start times, lengths and pitches (including octaves), add or remove notes, and
 apply corrections before adding or downloading. Chord notes can share a start
-time. Restore original returns to the detected draft. The review shares the
-existing drum workflow, with 16 rows per page and at most 6,000 notes.
+time. Restore original returns to the detected draft. The desktop [review studio](import-studio.md) shares a waveform, note timeline,
+focused inspector and edit history with the other audio instruments. Its queue
+shows at most 40 notes per page and supports at most 6,000 notes.
 
 Times and lengths remain recording seconds. Count-in defaults to 120 BPM and
 can be changed without moving notes or stretching audio. Original backing

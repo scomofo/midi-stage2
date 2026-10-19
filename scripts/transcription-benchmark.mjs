@@ -19,7 +19,7 @@ const { cases: allCases, sourceManifestHash } = await transcriptionAudioCases();
 if (only?.some((id) => !allCases.some((entry) => entry.id === id))) throw Error('Unknown benchmark case');
 const cases = allCases.filter((entry) => !only || only.includes(entry.id));
 const policy = JSON.parse(await readFile(new URL('regression-floors.json', fixtureRoot), 'utf8'));
-const sourceFiles = ['audio-import.ts', 'audio-drum-analysis.ts', 'keyboard-transcription.worker.ts', 'keyboard-transcription.ts', 'pitched-transcription.ts', 'guitar-transcription.ts', 'guitar-draft.ts', 'guitar-event-cleanup.ts', 'guitar-attack-verification.ts', 'guitar-fingering-solver.ts', 'bass-transcription.ts', 'bass-draft.ts', 'keyboard-draft.ts'];
+const sourceFiles = ['audio-import.ts', 'audio-drum-analysis.ts', 'keyboard-transcription.worker.ts', 'pitch-inference-backend.ts', 'keyboard-transcription.ts', 'pitched-transcription.ts', 'guitar-transcription.ts', 'guitar-draft.ts', 'guitar-event-cleanup.ts', 'guitar-attack-verification.ts', 'guitar-short-note-recovery.ts', 'guitar-fingering-solver.ts', 'bass-transcription.ts', 'bass-draft.ts', 'keyboard-draft.ts'];
 const sourceHashes = Object.fromEntries(await Promise.all(sourceFiles.map(async (path) => [path, sha256(await readFile(new URL(`../src/lib/midi-stage/${path}`, import.meta.url)))])));
 const model = JSON.parse(await readFile(new URL('../public/models/basic-pitch/model.json', import.meta.url), 'utf8'));
 const modelHashes = Object.fromEntries(await Promise.all(['model.json', ...model.weightsManifest.flatMap((group) => group.paths)].map(async (path) => [path, sha256(await readFile(new URL(`../public/models/basic-pitch/${path}`, import.meta.url)))])));
@@ -28,18 +28,19 @@ const report = { schema: 'midi-stage-transcription-benchmark', version: 1, revis
 const browser = await chromium.launch({ headless: true, args: ['--no-sandbox'] });
 report.browser = browser.version();
 const errors = [];
-const modelRequests = [];
+const modelRequests = [], wasmRequests = [];
 try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
   page.on('pageerror', (error) => errors.push(error.message));
-  page.on('request', (request) => { if (request.url().includes('/models/basic-pitch/')) modelRequests.push(request.url()); });
+  page.on('request', (request) => { if (request.url().includes('/models/basic-pitch/')) modelRequests.push(request.url()); if (/\.wasm(?:\?|$)/.test(request.url())) wasmRequests.push(request.url()); });
   await page.addInitScript(() => {
     const NativeWorker = Worker;
     window.benchmarkWorkers = [];
     window.Worker = class extends NativeWorker {
       constructor(...args) {
         super(...args); this.active = true; window.benchmarkWorkers.push(this);
-        this.addEventListener('message', ({ data }) => { if (data.type === 'complete') this.events = data.events; });
+        this.addEventListener('message', ({ data }) => { if (data.type === 'complete') { this.events = data.events; this.backend = data.backend; this.timings = data.timings; } });
+        this.addEventListener('message', ({ data }) => { if (data.type === 'error') this.failure = data; });
       }
       terminate() { this.active = false; super.terminate(); }
     };
@@ -59,12 +60,15 @@ try {
         const result = await importAudioFile(new File([bytes], fileName, { type: mime }), { mode, signal: controller.signal,
           onProgress: (progress) => { window.benchmarkProgress = { id, ...progress }; } });
         return { status: 'imported', notes: result.chart.parts.find((part) => part.type === mode).notes,
+          backends: window.benchmarkWorkers.slice(firstWorker).map((worker) => worker.backend ?? null),
+          inferenceTimings: window.benchmarkWorkers.slice(firstWorker).map((worker) => worker.timings ?? null),
           rawEvents: window.benchmarkWorkers.slice(firstWorker).flatMap((worker) => worker.events ?? []),
           chartDuration: result.chart.duration, audioOffset: result.chart.audioOffset, warnings: result.warnings };
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         const empty = /^(No clear keyboard notes|No clear bass notes|No playable guitar notes|Not enough distinct drum-like attacks|This (keyboard source|song) is silent or too quiet)/.test(message);
         return { status: empty ? 'no-detections' : 'error', notes: [],
+          workerErrors: window.benchmarkWorkers.slice(firstWorker).map((worker) => worker.failure ?? null),
           rawEvents: window.benchmarkWorkers.slice(firstWorker).flatMap((worker) => worker.events ?? []), error: message };
       } finally { clearTimeout(timer); }
     }, { id: entry.id, mode: entry.instrument, base64: entry.audio.toString('base64'), mime: entry.mime, fileName: entry.fileName });
@@ -88,6 +92,8 @@ try {
 } finally { await browser.close(); }
 
 assert.ok(modelRequests.every((request) => new URL(request).origin === new URL(url).origin), 'The model must load locally');
+assert.ok(wasmRequests.every((request) => new URL(request).origin === new URL(url).origin), 'WASM must load from this app');
+report.wasmRequests = wasmRequests.map((request) => new URL(request).pathname);
 report.modelRequests = modelRequests.map((request) => new URL(request).pathname);
 report.browserErrors = errors;
 report.passed = !errors.length && report.cases.every((entry) => entry.status !== 'error' && (recordOnly || entry.regressionFloor?.diagnosticOnly || entry.passed));
