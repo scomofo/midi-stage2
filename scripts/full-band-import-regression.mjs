@@ -124,7 +124,7 @@ try {
   phase = 'four real instrument analyses on one recording timeline';
   await build.click();
   await Promise.race([
-    library.getByRole('heading', { name: 'Review the guitar arrangement', exact: true }).waitFor(),
+    library.getByRole('heading', { name: 'Review the guitar draft', exact: true }).waitFor(),
     library.getByRole('alert').waitFor().then(async () => { throw new Error(await library.getByRole('alert').innerText()); }),
   ]);
   assert.equal(await page.evaluate(() => window.bandWorkers.length), 3);
@@ -160,14 +160,14 @@ try {
     assert.equal(next.firstBeat, Math.min(...next.parts.flatMap((part) => part.notes.map((note) => note.time))));
   };
   phase = 'guitar edits stop audition and protect pending changes';
-  await library.getByRole('button', { name: 'Play corrected part', exact: true }).click();
+  await library.getByRole('button', { name: 'Play preview', exact: true }).click();
   await page.waitForFunction(() => window.bandAudio.at(-1)?.context.state === 'running');
   const guitarFret = String(notes(detected, 'guitar')[0].guitarPosition.fret === 24 ? 23 : notes(detected, 'guitar')[0].guitarPosition.fret + 1);
   await library.getByLabel('Note 1 fret', { exact: true }).fill(guitarFret);
   await page.waitForFunction(() => window.bandAudio.at(-1)?.context.state === 'closed');
   assert.equal(await tab('keys').isDisabled(), true);
   assert.equal(await library.getByRole('button', { name: 'Download chart', exact: true }).isDisabled(), true);
-  assert.equal(await library.getByRole('button', { name: 'Play corrected part', exact: true }).isDisabled(), true);
+  assert.equal(await library.getByRole('button', { name: 'Play preview', exact: true }).isDisabled(), true);
   await apply();
   let next = await download('full-band-guitar-edit'); unchanged(next, reviewed, 'guitar'); reviewed = next;
   assert.equal(notes(reviewed, 'guitar')[0].guitarPosition.fret, Number(guitarFret));
@@ -200,7 +200,7 @@ try {
 
   phase = 'real corrected-pitch audition with synchronized backing, stop and restart';
   await library.getByLabel('Preview start time', { exact: true }).fill('0.17');
-  await library.getByRole('button', { name: 'Play corrected part', exact: true }).click();
+  await library.getByRole('button', { name: 'Play preview', exact: true }).click();
   await page.waitForFunction(() => window.bandAudio.at(-1)?.tones.length > 0);
   let preview = await page.evaluate(() => ({ starts: window.bandAudio.at(-1).starts, tones: window.bandAudio.at(-1).tones }));
   const backing = preview.starts.find((source) => source.bufferDuration === 10);
@@ -214,8 +214,8 @@ try {
   await page.screenshot({ path: `${output}/full-band-audition-desktop.png` });
   await library.getByRole('button', { name: 'Stop preview', exact: true }).click();
   await page.waitForFunction(() => window.bandAudio.at(-1)?.context.state === 'closed');
-  await library.getByRole('checkbox', { name: 'With original recording', exact: true }).uncheck();
-  await library.getByRole('button', { name: 'Play corrected part', exact: true }).click();
+  await library.getByRole('radio', { name: 'Corrected only', exact: true }).check();
+  await library.getByRole('button', { name: 'Play preview', exact: true }).click();
   await page.waitForFunction(() => window.bandAudio.at(-1)?.tones.length > 0);
   preview = await page.evaluate(() => ({ starts: window.bandAudio.at(-1).starts, tones: window.bandAudio.at(-1).tones }));
   assert.ok(preview.tones.length); assert.equal(preview.starts.some((source) => source.bufferDuration === 10), false);
@@ -237,11 +237,11 @@ try {
 
   phase = 'audition completion and original-player ownership';
   await library.getByLabel('Preview start time', { exact: true }).fill('9.8');
-  await library.getByRole('button', { name: 'Play corrected part', exact: true }).click();
+  await library.getByRole('button', { name: 'Play preview', exact: true }).click();
   await page.waitForFunction(() => window.bandAudio.at(-1)?.context.state === 'closed');
-  await library.getByRole('button', { name: 'Play corrected part', exact: true }).waitFor();
+  await library.getByRole('button', { name: 'Play preview', exact: true }).waitFor();
   await library.getByLabel('Preview start time', { exact: true }).fill('0');
-  await library.getByRole('button', { name: 'Play corrected part', exact: true }).click();
+  await library.getByRole('button', { name: 'Play preview', exact: true }).click();
   await page.waitForFunction(() => window.bandAudio.at(-1)?.tones.length > 0);
   await library.locator('audio').evaluate((audio) => audio.play());
   await page.waitForFunction(() => window.bandAudio.at(-1)?.context.state === 'closed');
@@ -255,7 +255,7 @@ try {
   await library.getByLabel('Note 1 fret', { exact: true }).fill(guitarFret); await apply();
   next = await download('full-band-reviewed'); unchanged(next, reviewed, 'guitar'); reviewed = next;
   assert.equal(await page.evaluate(() => window.bandWorkers.length), 3, 'edits and tabs must never rerun transcription');
-  await library.getByRole('heading', { name: 'Review the guitar arrangement', exact: true }).scrollIntoViewIfNeeded();
+  await library.getByRole('heading', { name: 'Review the guitar draft', exact: true }).scrollIntoViewIfNeeded();
   await page.screenshot({ path: `${output}/full-band-review-desktop.png` });
   await library.getByRole('button', { name: 'Add to setlist', exact: true }).click();
   await library.waitFor({ state: 'hidden' });
@@ -319,7 +319,7 @@ try {
   assert.equal(await page.evaluate(() => window.bandWorkers.every((worker) => !worker.active)), true);
   assert.equal(await library.getByRole('button', { name: 'Add to setlist', exact: true }).count(), 0);
   await page.waitForTimeout(200);
-  assert.equal(await library.getByRole('heading', { name: 'Review the guitar arrangement', exact: true }).count(), 0);
+  assert.equal(await library.getByRole('heading', { name: 'Review the guitar draft', exact: true }).count(), 0);
   phase = 'partial full-band JSON review without guitar or attached audio';
   const partial = { ...reviewed, version: 1, guitarMode: undefined, guitarTuning: undefined,
     parts: reviewed.parts.map((part) => ['drums', 'keys'].includes(part.type) ? part : { ...part, notes: [] }),
@@ -330,12 +330,12 @@ try {
   assert.equal(await tab('guitar').isDisabled(), true); assert.equal(await tab('bass').isDisabled(), true);
   await tab('keys').click();
   assert.equal(await library.locator('audio').count(), 0);
-  assert.equal(await library.getByRole('checkbox', { name: 'With original recording', exact: true }).isDisabled(), true);
+  assert.equal(await library.getByRole('radio', { name: 'Corrected + recording', exact: true }).isDisabled(), true);
   await library.getByLabel('Note 1 pitch', { exact: true }).selectOption('62'); await apply();
   const partialExport = await download('partial-band-reviewed');
   assert.deepEqual(notes(partialExport, 'drums'), notes(partial, 'drums'));
   assert.equal(notes(partialExport, 'keys')[0].pitch, 62);
-  await library.getByRole('button', { name: 'Play corrected part', exact: true }).click();
+  await library.getByRole('button', { name: 'Play preview', exact: true }).click();
   await page.waitForFunction(() => window.bandAudio.at(-1)?.tones.length > 0);
   assert.equal(await page.evaluate(() => window.bandAudio.at(-1).starts.some((source) => source.bufferDuration === 10)), false);
   await page.screenshot({ path: `${output}/partial-band-review-desktop.png` });
@@ -348,7 +348,7 @@ try {
   assert.equal(await toggle('guitar').getAttribute('aria-pressed'), 'true');
   assert.equal(await toggle('keys').getAttribute('aria-pressed'), 'false');
   assert.deepEqual(errors, []);
-  console.log('PASS: real four-stem transcription; independent drum/keys/guitar/bass edits and restore; pending-edit protection; native corrected-pitch/backing audition, stop/restart/completion and player ownership; canonical export and saved reload; mixed MIDI scoring; cancellation. Desktop only.');
+  console.log(`PASS: real four-stem transcription; independent drum/keys/guitar/bass edits and restore; pending-edit protection; native corrected-pitch/backing audition, stop/restart/completion and player ownership; canonical export and saved reload${uiOnly ? '' : '; mixed MIDI scoring'}; cancellation. Desktop only.`);
 } catch (error) {
   console.error(`Full-band import phase: ${phase}`);
   const page = browser.contexts()[0]?.pages()[0];

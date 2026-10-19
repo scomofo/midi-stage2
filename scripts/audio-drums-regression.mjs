@@ -161,7 +161,7 @@ try {
   await upload('Drum Study.wav', drumWav());
   await ready();
   await library.getByText(/kick, snare and hi-hat are estimated/).waitFor();
-  assert.equal(await library.locator('tbody tr').count(), 16);
+  assert.equal(await library.locator('.studio-queue > button').count(), 35);
   assert.equal(await library.getByLabel('Hit 1 drum', { exact: true }).inputValue(), '36');
   await library.getByLabel('Hit 1 drum', { exact: true }).selectOption('49');
   assert.equal(await add.isDisabled(), true);
@@ -244,9 +244,10 @@ try {
   await library.getByLabel('Hit 1 drum', { exact: true }).selectOption('38');
   await library.getByLabel('Hit 1 time', { exact: true }).fill('0.5');
   await library.getByRole('button', { name: 'Add hit', exact: true }).click();
-  assert.equal(await library.locator('tbody tr').count(), 2, 'pending edits must allow multiple replacement hits');
+  assert.equal(await library.locator('.studio-queue > button').count(), 2, 'pending edits must allow multiple replacement hits');
   await apply.click();
   assert.equal(await add.isEnabled(), true);
+  await library.getByRole('button', { name: 'Edit hit 1', exact: true }).click();
   assert.equal(await library.getByLabel('Hit 1 drum', { exact: true }).inputValue(), '38');
   await capture('drum-draft-replacements-desktop');
 

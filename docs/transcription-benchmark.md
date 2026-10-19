@@ -157,10 +157,50 @@ Reviewed limits now retain the observed missed/extra bounds for these two clips.
 These results are specific to these development excerpts, not a general song
 accuracy estimate.
 
+## Short attacks and the review studio: 2026-10-19
+
+The [new measured comparison](import-studio-results/comparison.md) retains the same
+15 original audio files, labels, model weights and exact-pitch/60 ms matching
+policy. All six formerly missed 100 ms single-note guitar attacks now match,
+with no extras, 35.8 ms onset MAE and 38.3 ms length MAE. The other 14 cases keep
+identical pitch, onset, duration, velocity, fingering and metric results. WASM
+arithmetic changes their confidence values slightly (maximum absolute difference
+0.0000072); the note lists are not byte-identical.
+
+Recovery uses a quiet lead-in, a clear brief release, independent periodicity and
+fundamental evidence in the decoded source, plus an onset-backed model witness.
+It only attempts isolated notes in E2–E4, retains accepted model attacks and does
+not extend existing holds. Recovered notes receive an explicit lower-confidence
+review value of 0.5, not a calibrated probability. This is a narrow recovery
+heuristic, not instrument separation or a polyphonic guitar transcriber.
+
+Two supplemental development controls use the existing recorded guitar sample:
+varied short single notes match 4/4 with no extras (one recovered note), while
+simultaneous short chords still miss 3/6 tones. The latter remains an explicit
+diagnostic with no quality pass. These are development renders, not held-out
+recordings. All 16 reviewed quality policies pass against the 17 saved actual
+imports; [gates.json](import-studio-results/gates.json) records the post-run policy
+evaluation without changing [the raw run](import-studio-results/after.json).
+
+Pitch workers now use the pinned TFJS 3.21 WASM backend with local bundled assets
+and a CPU fallback. Basic Pitch's public framing stays on CPU because that
+version's WASM Fill kernel rejects the dtype omitted by signal.frame; inference
+returns to WASM. Asset bytes are fetched and compiled before the legacy loader
+starts; a missing or invalid runtime binary chooses the CPU fallback. No model weights or extraction thresholds changed.
+
+The corpus run recorded roughly 2.4 s and 3.1 s of neural inference for the two
+8 s GuitarSet excerpts. Whole-import wall times include loading, decoding and
+post-processing; concurrent browser checks and cold caches make them unsuitable
+as a general speed guarantee. The source hashes and exact tested tree remain in
+the raw report. Subsequent changes affect review UI, browser checks and warning
+pluralization; the measured recovery and inference algorithms are unchanged.
+
+[Review studio behavior](import-studio.md) documents the desktop correction flow.
+
 ## Remaining limits
 
-- All six 100 ms guitar attacks in the short-note render are missed. That case
-  is explicitly diagnostic, with no quality pass or zero-score success gate.
+- Simultaneous short guitar chords still miss tones. The isolated single-note
+  recovery does not address dense or continuous polyphonic attacks.
 - The overlapping drum signal misses hats coincident with snares. The separate
   snare-only case guards against inventing hats while this remains unresolved.
 - Distortion, harmonic false positives and hold errors remain visible in reports.

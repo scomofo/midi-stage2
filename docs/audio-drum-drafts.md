@@ -9,8 +9,9 @@ other attacks can be mistaken for drums, and overlapping hits can be missed.
 
 Listen to the source in the preview, correct hit times and drum types, add or
 remove hits, and **Apply corrections** before adding or exporting. Toms, crash
-and ride can be entered manually. Review has 16 rows per page and supports at
-most 6,000 hits. Detection suppresses same-family repeats closer than 90 ms;
+and ride can be entered manually. The desktop [review studio](import-studio.md) uses a waveform and drum-family
+timeline, with a focused inspector and a queue of up to 40 hits per page. It
+supports at most 6,000 hits. Detection suppresses same-family repeats closer than 90 ms;
 manual corrections allow hits at least 20 ms apart. Restore original returns to the detected draft; closing the
 preview discards unsaved changes without changing a saved song.
 

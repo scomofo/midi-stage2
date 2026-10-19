@@ -1,13 +1,13 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
-import { AudioPartAudition } from "./audio-part-audition";
+import { AudioPartAudition, type AudioAuditionOptions } from "./audio-part-audition";
 import type { SharedChart } from "@/lib/midi-stage/chart-format";
 import type { AudioReviewInstrument } from "@/lib/midi-stage/audio-part-review";
 
 type AudioSourcePreviewProps = {
   file: File;
   disabled?: boolean;
-  review?: { chart: SharedChart; instrument: AudioReviewInstrument; buffer?: AudioBuffer; pending: boolean };
+  review?: { chart: SharedChart; instrument: AudioReviewInstrument; buffer?: AudioBuffer; pending: boolean } & AudioAuditionOptions;
 };
 
 export function AudioSourcePreview({ file, disabled = false, review }: AudioSourcePreviewProps) {
@@ -39,7 +39,9 @@ export function AudioSourcePreview({ file, disabled = false, review }: AudioSour
   }, [disabled]);
 
   return (
-    <div className="space-y-2 border-t border-border pt-4">
+    <div className="space-y-3 border-t border-border pt-4">
+      <details open={!review}>
+      <summary className="cursor-pointer text-xs text-muted">Full recording player</summary>
       <h4 id={titleId} className="text-sm font-medium text-fg">
         Listen to your track
       </h4>
@@ -66,8 +68,10 @@ export function AudioSourcePreview({ file, disabled = false, review }: AudioSour
           This browser couldn’t play the preview. You can still add the song to your setlist.
         </p>
       ) : null}
+      </details>
       {review ? <AudioPartAudition key={review.instrument} chart={review.chart} instrument={review.instrument}
-        buffer={review.buffer} disabled={disabled || review.pending} originalAudioRef={audioRef} /> : null}
+        buffer={review.buffer} disabled={disabled || review.pending} originalAudioRef={audioRef}
+        startRequest={review.startRequest} selectedTime={review.selectedTime} selectedPitch={review.selectedPitch} onPosition={review.onPosition} /> : null}
     </div>
   );
 }

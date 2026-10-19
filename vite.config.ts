@@ -159,7 +159,7 @@ export default defineConfig(({ command, isPreview }) => ({
   resolve: { tsconfigPaths: true },
   // Discover worker and review dependencies before the first import, so
   // dependency optimization cannot reload the page and discard its preview.
-  optimizeDeps: { include: ["@spotify/basic-pitch", "@tensorflow/tfjs", "@radix-ui/react-tabs"] },
+  optimizeDeps: { include: ["@spotify/basic-pitch", "@tensorflow/tfjs", "@tensorflow/tfjs-backend-wasm", "@radix-ui/react-tabs"] },
   plugins: [
     pgliteBootstrapPlugin(),
     // Before tanstackStart so /auth/popup never falls through to the SPA.
