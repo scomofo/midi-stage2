@@ -17,7 +17,7 @@ const labels = { drums: 'Drums', keys: 'Keys', guitar: 'Guitar', bass: 'Bass' };
 let phase = 'loading';
 try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 1000 }, acceptDownloads: true });
-  page.setDefaultTimeout(90000);
+  page.setDefaultTimeout(Number(process.env.FULL_BAND_IMPORT_TIMEOUT_MS || 90000));
   const errors = [], models = [];
   page.on('pageerror', (error) => errors.push(error.message));
   page.on('request', (request) => { if (request.url().includes('/models/basic-pitch/')) models.push(request.url()); });

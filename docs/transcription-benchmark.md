@@ -76,9 +76,10 @@ Guitar cleanup joined nearby same-pitch detections indiscriminately, turning
 repeated attacks into long holds and blocking later suggested string positions.
 The worker now identifies onset-backed detections with Basic Pitch's public
 onset-only extraction pass, without extra neural inference. Cleanup joins only
-explicitly recovered sustain fragments; real and unknown-provenance attacks stay
-separate. Reusing a string within the solver's existing 15 ms release tolerance
-now shortens the earlier estimated hold so the resulting chart validates.
+explicitly recovered sustain fragments; onset-backed and unknown-provenance
+attacks stay separate at that stage. Reusing a string within the solver's existing
+15 ms release tolerance now shortens the earlier estimated hold so the resulting
+chart validates.
 
 The worker also previously truncated output using an integer 86-frames-per-second
 estimate. It now retains all prepared windows and clips resulting notes to the
@@ -115,6 +116,46 @@ Comping F1 changes from 60.5% to 78.5%; solo from 76.9% to 78.8%. These are
 clip-specific exact-pitch/onset F1 scores. Added guitar detections remain a real
 precision cost. The other 12 cases retain their previous missed/extra counts;
 short guitar attacks and hats coincident with snares remain unresolved.
+
+## Guitar precision pass: 2026-10-19
+
+A ringing pitch can falsely retrigger when a different note starts. Guitar import
+now checks the decoded source audio after provenance-aware cleanup and before
+fingering. It discards an adjacent same-pitch attack only when its fundamental
+continues decaying and a different onset-backed pitch has a clear fundamental
+rise. Overlapping short-window rebounds retain possible softer reattacks, even
+when overall power falls. Unknown onsets, incomplete edge windows and ambiguous
+audio retain their attacks. Stereo channels are checked independently, analysis
+supports cancellation, and discarded events never extend the preceding hold.
+
+This is a conservative heuristic, not proof of an attack's absence. It does not
+resolve general harmonic/octave confusion or guarantee that every masked soft
+reattack survives. The thresholds are development-corpus choices: 80 ms Hann
+windows around the attack, at least 5% candidate fundamental power decay, a
+fourfold neighboring fundamental rise, and retention on a 1.5-fold local power
+rebound in overlapping 40 ms windows. The neighboring fundamental must carry at
+least 10% of the strongest first three harmonic powers; this guards against using
+a missing-fundamental octave guess as that evidence. Frequency checks allow
+modest detuning.
+
+The [full comparison](guitar-precision-results/comparison.md),
+[after report](guitar-precision-results/after.md) and
+[after JSON](guitar-precision-results/after.json) reuse the previous
+[after JSON as the baseline](transcription-benchmark-results/after.json).
+All 15 raw model-event lists are identical to that baseline. Only the two
+GuitarSet final note lists change; the other 13 note lists and metrics are
+identical.
+
+| Eight-second clip | Matched notes | Missed | Extra before → after | F1 before → after | Matched length MAE |
+|---|---:|---:|---:|---:|---:|
+| GuitarSet comping | 42, unchanged | 4, unchanged | 19 → 16 | 78.5% → 80.8% | 116.9 ms, unchanged |
+| GuitarSet solo | 26, unchanged | 6, unchanged | 8 → 5 | 78.8% → 82.5% | 182.3 ms, unchanged |
+
+Matched onset and note-off errors also remain unchanged. The actual importer run
+passes all 14 quality gates; the short-guitar case remains an explicit diagnostic.
+Reviewed limits now retain the observed missed/extra bounds for these two clips.
+These results are specific to these development excerpts, not a general song
+accuracy estimate.
 
 ## Remaining limits
 

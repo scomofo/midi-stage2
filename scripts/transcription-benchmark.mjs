@@ -19,7 +19,7 @@ const { cases: allCases, sourceManifestHash } = await transcriptionAudioCases();
 if (only?.some((id) => !allCases.some((entry) => entry.id === id))) throw Error('Unknown benchmark case');
 const cases = allCases.filter((entry) => !only || only.includes(entry.id));
 const policy = JSON.parse(await readFile(new URL('regression-floors.json', fixtureRoot), 'utf8'));
-const sourceFiles = ['audio-import.ts', 'audio-drum-analysis.ts', 'keyboard-transcription.worker.ts', 'keyboard-transcription.ts', 'pitched-transcription.ts', 'guitar-transcription.ts', 'guitar-draft.ts', 'guitar-event-cleanup.ts', 'guitar-fingering-solver.ts', 'bass-transcription.ts', 'bass-draft.ts', 'keyboard-draft.ts'];
+const sourceFiles = ['audio-import.ts', 'audio-drum-analysis.ts', 'keyboard-transcription.worker.ts', 'keyboard-transcription.ts', 'pitched-transcription.ts', 'guitar-transcription.ts', 'guitar-draft.ts', 'guitar-event-cleanup.ts', 'guitar-attack-verification.ts', 'guitar-fingering-solver.ts', 'bass-transcription.ts', 'bass-draft.ts', 'keyboard-draft.ts'];
 const sourceHashes = Object.fromEntries(await Promise.all(sourceFiles.map(async (path) => [path, sha256(await readFile(new URL(`../src/lib/midi-stage/${path}`, import.meta.url)))])));
 const model = JSON.parse(await readFile(new URL('../public/models/basic-pitch/model.json', import.meta.url), 'utf8'));
 const modelHashes = Object.fromEntries(await Promise.all(['model.json', ...model.weightsManifest.flatMap((group) => group.paths)].map(async (path) => [path, sha256(await readFile(new URL(`../public/models/basic-pitch/${path}`, import.meta.url)))])));
