@@ -49,6 +49,18 @@ describe("full-band stem import",()=>{
   assert.equal(combined.version, 4);
   for(const type of ["drums","keys","guitar","bass"] as const) assert.equal((combined.parts.find(p=>p.type===type)!.notes).length, 1);
  });
+ it("preserves a finite beat origin when all imported parts contain no detected notes",()=>{
+  const keys = chart("keys");
+  const silent = validateSharedChart({
+    ...keys,
+    firstBeat: 0.75,
+    parts: keys.parts.map((part) => ({ ...part, notes: [] })),
+  });
+  const combined = combineStemCharts({ keys: silent }, "quiet.wav");
+  assert.equal(combined.firstBeat, 0.75);
+  assert.ok(combined.parts.every((part) => part.notes.length === 0));
+  assert.equal(combined.duration, 10);
+ });
  it("rejects mismatched backing durations",()=>{
   const keys=chart("keys");
   const raw={...keys,duration:11,parts:keys.parts.map(p=>({...p,notes:p.notes.map(n=>({...n}))}))};
