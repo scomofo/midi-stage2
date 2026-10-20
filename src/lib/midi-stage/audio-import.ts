@@ -2,6 +2,7 @@ import { CHART_SCHEMA, validateSharedChart, type SharedChart } from "./chart-for
 import { INSTRUMENTS } from "./types.ts";
 import { detectDrumAttacks } from "./audio-drum-analysis.ts";
 import { isSupportedAudioFile, type AudioImportMode } from "./audio-file-types.ts";
+import type { ShortChordCandidate } from "./guitar-short-chord-audit.ts";
 export { AUDIO_IMPORT_ACCEPT, isSupportedAudioFile } from "./audio-file-types.ts";
 
 export const MAX_AUDIO_IMPORT_BYTES = 50 * 1024 * 1024;
@@ -12,7 +13,7 @@ const MAX_ONSETS = 3000;
 const ANALYSIS_CHUNK_SAMPLES = 131072;
 
 export type SongAudioSamples = Pick<AudioBuffer, "sampleRate" | "length" | "duration" | "numberOfChannels" | "getChannelData">;
-export type AudioAnalysis = { chart: SharedChart; warnings: string[] };
+export type AudioAnalysis = { chart: SharedChart; warnings: string[]; guitarCandidates?: ShortChordCandidate[] };
 export type AudioImportProgress = { phase: "checking" | "decoding" | "analyzing" | "model"; progress?: number; source?: "stem" };
 export type AudioImportOptions = {
   mode?: AudioImportMode;

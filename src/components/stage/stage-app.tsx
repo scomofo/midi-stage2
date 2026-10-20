@@ -1,3 +1,4 @@
+import type { GuitarCandidateDecisions, ShortChordCandidate } from "@/lib/midi-stage/guitar-short-chord-audit";
 import { hasScoredGuitar, isGuitarOnlySong, lineupForSong } from "@/lib/midi-stage/lineup";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent } from "react";
 import {
@@ -157,7 +158,7 @@ export function StageApp() {
   const audioBuffers = useRef(new Map<string, AudioBuffer>());
   const sessionAudioFiles = useRef(new Map<string, Blob>());
   const volatileAudioIds = useRef(new Set<string>());
-  const [importCandidate, setImportCandidate] = useState<{ entry: SavedChart; warnings: string[]; kind: "audio" | "midi" | "chart" | "musicxml"; buffer?: AudioBuffer; audioFile?: File; stemFile?: File; stemFiles?: FullBandStemFiles; stemMode?: "drums" | "keys" | "guitar" | "bass" | "vocals" } | null>(null);
+  const [importCandidate, setImportCandidate] = useState<{ entry: SavedChart; warnings: string[]; guitarCandidates?: ShortChordCandidate[]; guitarReviewDecisions?: GuitarCandidateDecisions; kind: "audio" | "midi" | "chart" | "musicxml"; buffer?: AudioBuffer; audioFile?: File; stemFile?: File; stemFiles?: FullBandStemFiles; stemMode?: "drums" | "keys" | "guitar" | "bass" | "vocals" } | null>(null);
   const [chartReviewPending, setChartReviewPending] = useState(false);
   const [audioImportMode, setAudioImportMode] = useState<AudioImportMode>("rhythm");
   const [savingImport, setSavingImport] = useState(false);
@@ -1630,7 +1631,7 @@ export function StageApp() {
       if (/\.(mp3|wav|wave|flac|ogg|oga|opus|m4a|aac|webm|aif|aiff)$/i.test(file.name)
         || (file.type.startsWith("audio/") && !/midi/i.test(file.type) && !/\.(midi?|json|musicxml|xml|mxl)$/i.test(file.name))) {
         const { importAudioFile } = await import("@/lib/midi-stage/audio-import");
-        const { chart, warnings, buffer } = await importAudioFile(file, {
+        const { chart, warnings, buffer, guitarCandidates } = await importAudioFile(file, {
           mode: audioMode,
           analysisFile: audioMode === stemMode ? stemFile : undefined,
           signal: controller.signal,
@@ -1638,7 +1639,7 @@ export function StageApp() {
             if (ticket === importTicket.current) setImportProgress(progress);
           },
         });
-        candidate = { entry: { id: chartIdentity(chart), chart, fileName: file.name, addedAt: Date.now(), audio: true }, warnings, buffer, audioFile: file, stemFile, stemMode, kind: "audio" };
+        candidate = { entry: { id: chartIdentity(chart), chart, fileName: file.name, addedAt: Date.now(), audio: true }, warnings, buffer, guitarCandidates, audioFile: file, stemFile, stemMode, kind: "audio" };
       } else if (/\.midi?$/i.test(file.name)) {
         if (file.size > MAX_CHART_IMPORT_BYTES) throw new Error("Choose a MIDI file smaller than 4 MB.");
         const { importMidiFile } = await import("@/lib/midi-stage/midi-file-import");
@@ -1682,7 +1683,7 @@ export function StageApp() {
     setChartReviewPending(false);
     try {
       const { importFullBandStemSet } = await import("@/lib/midi-stage/multi-stem-import");
-      const { chart, warnings, buffer } = await importFullBandStemSet(file, stems, {
+      const { chart, warnings, buffer, guitarCandidates } = await importFullBandStemSet(file, stems, {
         signal: controller.signal,
         onProgress: (instrument, progress) => {
           if (ticket === importTicket.current) setImportProgress({ ...progress, instrument });
@@ -1691,6 +1692,7 @@ export function StageApp() {
       if (ticket === importTicket.current) setImportCandidate({
         entry: { id: chartIdentity(chart), chart, fileName: file.name, addedAt: Date.now(), audio: true },
         warnings,
+        guitarCandidates,
         buffer,
         audioFile: file,
         stemFiles: stems,
@@ -2459,6 +2461,8 @@ export function StageApp() {
                 chart: importCandidate.entry.chart,
                 audioFile: importCandidate.audioFile,
                 buffer: importCandidate.buffer,
+                guitarCandidates: importCandidate.guitarCandidates,
+                guitarReviewDecisions: importCandidate.guitarReviewDecisions,
                 stemName: importCandidate.stemMode === audioImportMode ? importCandidate.stemFile?.name : undefined,
                 name: importCandidate.entry.chart.title,
                 fileName: importCandidate.entry.fileName,
@@ -2502,8 +2506,8 @@ export function StageApp() {
               reviewKey={importTicket.current}
               reviewPending={chartReviewPending}
               onReviewPending={setChartReviewPending}
-              onReviewApply={(chart: SharedChart) => setImportCandidate((candidate) => candidate ? {
-                ...candidate, entry: { ...candidate.entry, chart, id: chartIdentity(chart) },
+              onReviewApply={(chart: SharedChart, guitarReviewDecisions?: GuitarCandidateDecisions) => setImportCandidate((candidate) => candidate ? {
+                ...candidate, guitarReviewDecisions: guitarReviewDecisions ?? candidate.guitarReviewDecisions, entry: { ...candidate.entry, chart, id: chartIdentity(chart) },
               } : null)}
             />
           </div>

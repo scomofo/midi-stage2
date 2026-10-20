@@ -19,7 +19,7 @@ const { cases: allCases, sourceManifestHash } = await transcriptionAudioCases();
 if (only?.some((id) => !allCases.some((entry) => entry.id === id))) throw Error('Unknown benchmark case');
 const cases = allCases.filter((entry) => !only || only.includes(entry.id));
 const policy = JSON.parse(await readFile(new URL('regression-floors.json', fixtureRoot), 'utf8'));
-const sourceFiles = ['audio-import.ts', 'audio-drum-analysis.ts', 'keyboard-transcription.worker.ts', 'pitch-inference-backend.ts', 'keyboard-transcription.ts', 'pitched-transcription.ts', 'guitar-transcription.ts', 'guitar-draft.ts', 'guitar-event-cleanup.ts', 'guitar-attack-verification.ts', 'guitar-short-note-recovery.ts', 'guitar-fingering-solver.ts', 'bass-transcription.ts', 'bass-draft.ts', 'keyboard-draft.ts'];
+const sourceFiles = ['audio-import.ts', 'audio-drum-analysis.ts', 'keyboard-transcription.worker.ts', 'pitch-inference-backend.ts', 'keyboard-transcription.ts', 'pitched-transcription.ts', 'guitar-transcription.ts', 'guitar-draft.ts', 'guitar-event-cleanup.ts', 'guitar-attack-verification.ts', 'guitar-short-note-recovery.ts', 'guitar-short-chord-audit.ts', 'guitar-fingering-solver.ts', 'bass-transcription.ts', 'bass-draft.ts', 'keyboard-draft.ts'];
 const sourceHashes = Object.fromEntries(await Promise.all(sourceFiles.map(async (path) => [path, sha256(await readFile(new URL(`../src/lib/midi-stage/${path}`, import.meta.url)))])));
 const model = JSON.parse(await readFile(new URL('../public/models/basic-pitch/model.json', import.meta.url), 'utf8'));
 const modelHashes = Object.fromEntries(await Promise.all(['model.json', ...model.weightsManifest.flatMap((group) => group.paths)].map(async (path) => [path, sha256(await readFile(new URL(`../public/models/basic-pitch/${path}`, import.meta.url)))])));
@@ -63,7 +63,7 @@ try {
           backends: window.benchmarkWorkers.slice(firstWorker).map((worker) => worker.backend ?? null),
           inferenceTimings: window.benchmarkWorkers.slice(firstWorker).map((worker) => worker.timings ?? null),
           rawEvents: window.benchmarkWorkers.slice(firstWorker).flatMap((worker) => worker.events ?? []),
-          chartDuration: result.chart.duration, audioOffset: result.chart.audioOffset, warnings: result.warnings };
+          chartDuration: result.chart.duration, audioOffset: result.chart.audioOffset, warnings: result.warnings, guitarCandidates: result.guitarCandidates ?? [] };
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         const empty = /^(No clear keyboard notes|No clear bass notes|No playable guitar notes|Not enough distinct drum-like attacks|This (keyboard source|song) is silent or too quiet)/.test(message);
@@ -74,6 +74,8 @@ try {
     }, { id: entry.id, mode: entry.instrument, base64: entry.audio.toString('base64'), mime: entry.mime, fileName: entry.fileName });
     assert.equal(await page.evaluate(() => window.benchmarkWorkers.every((worker) => !worker.active)), true, 'Import must release its real worker');
     const metrics = scoreTranscription(entry.reference, result.notes, report.policy);
+    const candidateMetrics = result.guitarCandidates?.length ? scoreTranscription(metrics.missed.map((index) => entry.reference[index]),
+      result.guitarCandidates.map((candidate) => ({ time: candidate.time, pitch: candidate.pitchMidi, duration: candidate.estimatedDuration })), report.policy) : null;
     const rawMetrics = result.rawEvents.length ? scoreTranscription(entry.reference, result.rawEvents.map((event) => ({
       time: event.startTimeSeconds, duration: event.durationSeconds, pitch: event.pitchMidi,
     })), report.policy) : null;
@@ -84,7 +86,7 @@ try {
     const passed = result.status !== 'error' && (floor?.diagnosticOnly ? null : floor ? benchmarkPass(metrics, floor) : null);
     const regressionStatus = result.status === 'error' ? 'import error' : floor?.diagnosticOnly ? 'diagnostic' : passed === null ? 'recorded' : passed ? 'pass' : 'FAIL';
     report.cases.push({ id: entry.id, instrument: entry.instrument, kind: entry.kind, sourceId: entry.sourceId, audioSha256: sha256(entry.audio),
-      elapsedMs: Math.round(performance.now() - started), ...result, reference: entry.reference, metrics, rawMetrics, regressionFloor: floor ?? null, regressionStatus, passed });
+      elapsedMs: Math.round(performance.now() - started), ...result, reference: entry.reference, metrics, rawMetrics, candidateMetrics, regressionFloor: floor ?? null, regressionStatus, passed });
     console.log(`${result.status} ${entry.id}: F1=${metrics.f1.toFixed(3)}, missed=${metrics.falseNegatives}, extra=${metrics.falsePositives}, octave=${metrics.octaveErrors}, hold MAE=${metrics.meanDurationErrorMs?.toFixed(1) ?? 'unannotated'} ms`);
     await writeFile(`${output}/report.json`, JSON.stringify(report, null, 2) + '\n');
   }

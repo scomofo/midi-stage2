@@ -1,7 +1,8 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { CHART_SCHEMA, validateSharedChart } from "./chart-format.ts";
-import { applyAudioReviewDraft, audioReviewDraftKey, audioReviewPitch, createAudioReviewHistory, needsAudioReview, pushAudioReviewHistory, redoAudioReview, selectedAudioReviewRow, undoAudioReview } from "./audio-review-session.ts";
+import { acceptGuitarCandidate, guitarCandidateRow, applyAudioReviewDraft, audioReviewDraftKey, audioReviewPitch, createAudioReviewHistory, needsAudioReview, pushAudioReviewHistory, redoAudioReview, selectedAudioReviewRow, undoAudioReview } from "./audio-review-session.ts";
+import { serializeSharedChart } from "./chart-format.ts";
 
 function fixture() {
   return validateSharedChart({ schema: CHART_SCHEMA, version: 4, id: "review-studio", title: "Studio", origin: "audio-full-band-draft",
@@ -60,5 +61,37 @@ describe("audio review studio session", () => {
     assert.ok(Number.isNaN(audioReviewPitch({ ...row, string: "7" }, "guitar", [40, 45, 50, 55, 59, 64])));
     const session = createAudioReviewHistory(fixture(), "keys");
     assert.throws(() => applyAudioReviewDraft(fixture(), "keys", { ...session.present, rows: [{ ...session.present.rows[0]!, time: "3.9", duration: "0.5" }] }), /fit inside/);
+  });
+  it("accepts a suggestion on a free string and undoes its decision and note together", () => {
+    const source = fixture(), initial = createAudioReviewHistory(source, "guitar");
+    const candidate = { id: "candidate-a", time: 0.5, estimatedDuration: 0.08, pitchMidi: 45 };
+    const next = acceptGuitarCandidate(source, initial.present, candidate, 100);
+    const accepted = pushAudioReviewHistory(initial, next);
+    assert.equal(next.rows.length, 2); assert.equal(next.selectedId, 100);
+    assert.equal(next.rows[1]!.string, "5"); assert.equal(next.rows[1]!.fret, "0");
+    assert.deepEqual(next.rows[0], initial.present.rows[0]);
+    assert.equal(next.rows[1]!.confidence, undefined, "manual acceptance is not calibrated confidence");
+    assert.equal(next.candidateDecisions?.[candidate.id], "accepted");
+    assert.deepEqual(undoAudioReview(accepted).present, initial.present);
+    assert.deepEqual(redoAudioReview(undoAudioReview(accepted)).present, next);
+    const applied = applyAudioReviewDraft(source, "guitar", next);
+    assert.deepEqual(applied.parts.filter((part) => part.type !== "guitar"), source.parts.filter((part) => part.type !== "guitar"));
+    assert.deepEqual(applied.parts.find((part) => part.type === "guitar")!.notes[0], source.parts.find((part) => part.type === "guitar")!.notes[0]);
+    assert.ok(!serializeSharedChart(applied).includes("candidate-a"), "suggestions and decisions are not chart notes or export fields");
+    const remounted = createAudioReviewHistory(applied, "guitar", next.candidateDecisions);
+    assert.equal(remounted.present.candidateDecisions?.[candidate.id], "accepted");
+    assert.throws(() => acceptGuitarCandidate(applied, remounted.present, candidate, 101), /Reopen/);
+    assert.throws(() => guitarCandidateRow(applied, { ...remounted.present, candidateDecisions: {} }, candidate, 101), /already in the draft/);
+  });
+  it("keeps dismissal in edit history and refuses a tone that requires shortening or moving existing notes", () => {
+    const source = fixture(), initial = createAudioReviewHistory(source, "guitar");
+    const dismissed = pushAudioReviewHistory(initial, { ...initial.present, candidateDecisions: { suggestion: "dismissed" } });
+    assert.notEqual(audioReviewDraftKey(dismissed.present), audioReviewDraftKey(initial.present));
+    assert.deepEqual(dismissed.present.rows, initial.present.rows);
+    assert.deepEqual(undoAudioReview(dismissed).present, initial.present);
+    const occupied = { id: "unplayable", time: 0.5, estimatedDuration: 0.08, pitchMidi: 40 };
+    assert.throws(() => acceptGuitarCandidate(source, initial.present, occupied, 100), /No free string/);
+    assert.throws(() => acceptGuitarCandidate(source, initial.present, { ...occupied, time: 3.99 }, 100), /does not fit/);
+    assert.deepEqual(source, fixture());
   });
 });

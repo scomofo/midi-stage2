@@ -1,3 +1,4 @@
+import type { GuitarCandidateDecisions, ShortChordCandidate } from "@/lib/midi-stage/guitar-short-chord-audit";
 import { useRef, useState } from "react";
 import * as Tabs from "@radix-ui/react-tabs";
 import { Button } from "@/components/ui/button";
@@ -11,9 +12,10 @@ import { isReviewableBassDraft } from "@/lib/midi-stage/bass-draft";
 
 const INSTRUMENTS = ["drums", "keys", "guitar", "bass"] as const;
 
-export function FullBandDraftReview({ chart, audioFile, buffer, disabled, onApply, onPendingChange }: {
+export function FullBandDraftReview({ chart, audioFile, buffer, disabled, onApply, onPendingChange, guitarCandidates, guitarReviewDecisions }: {
   chart: SharedChart; audioFile?: File; buffer?: AudioBuffer; disabled: boolean;
-  onApply: (chart: SharedChart) => void; onPendingChange: (pending: boolean) => void;
+  guitarCandidates?: ShortChordCandidate[]; guitarReviewDecisions?: GuitarCandidateDecisions;
+  onApply: (chart: SharedChart, decisions?: GuitarCandidateDecisions) => void; onPendingChange: (pending: boolean) => void;
 }) {
   const original = useRef(chart);
   const count = (instrument: AudioReviewInstrument) => chart.parts.find((part) => part.type === instrument)!.notes.length;
@@ -42,7 +44,7 @@ export function FullBandDraftReview({ chart, audioFile, buffer, disabled, onAppl
       </Tabs.List>
       {pending ? <p role="status" className="mt-3 text-xs text-tungsten">Apply or restore corrections before switching instruments.</p> : null}
       <Tabs.Content key={instrument} value={instrument} className="mt-4 space-y-4">
-        <AudioDraftStudio chart={chart} instrument={instrument} originalChart={original.current}
+        <AudioDraftStudio chart={chart} guitarCandidates={guitarCandidates} guitarReviewDecisions={guitarReviewDecisions} instrument={instrument} originalChart={original.current}
           audioFile={audioFile} buffer={buffer} disabled={disabled} onApply={onApply} onPendingChange={changePending} />
       </Tabs.Content>
     </Tabs.Root>

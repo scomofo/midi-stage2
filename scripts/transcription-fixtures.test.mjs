@@ -7,7 +7,7 @@ test('audio benchmark covers each instrument with bounded independent labels and
   assert.match(sourceManifestHash, /^[a-f0-9]{64}$/);
   assert.equal(new Set(cases.map((entry) => entry.id)).size, cases.length);
   assert.deepEqual([...new Set(cases.filter((entry) => entry.reference.length).map((entry) => entry.instrument))].sort(), ['bass', 'drums', 'guitar', 'keys']);
-  assert.equal(cases.filter((entry) => entry.kind === 'recorded-performance').length, 2);
+  assert.equal(cases.filter((entry) => entry.kind === 'recorded-performance').length, 4);
   for (const entry of cases) {
     assert.equal(entry.duration, fixtureDuration(entry.audio));
     if (entry.kind === 'recorded-performance') assert.equal(entry.duration, 8);

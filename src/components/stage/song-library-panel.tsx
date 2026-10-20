@@ -1,3 +1,4 @@
+import type { GuitarCandidateDecisions, ShortChordCandidate } from "@/lib/midi-stage/guitar-short-chord-audit";
 import { useEffect, useRef, useState } from "react";
 import {
   ArrowRight,
@@ -36,6 +37,8 @@ type SongLibraryPanelProps = {
     chart?: SharedChart;
     audioFile?: File;
     buffer?: AudioBuffer;
+    guitarCandidates?: ShortChordCandidate[];
+    guitarReviewDecisions?: GuitarCandidateDecisions;
     stemName?: string;
     name: string;
     fileName: string;
@@ -60,7 +63,7 @@ type SongLibraryPanelProps = {
   reviewKey?: number;
   reviewPending?: boolean;
   onReviewPending?: (pending: boolean) => void;
-  onReviewApply?: (chart: SharedChart) => void;
+  onReviewApply?: (chart: SharedChart, decisions?: GuitarCandidateDecisions) => void;
   audioMode?: AudioImportMode;
   onAudioMode?: (mode: AudioImportMode) => void;
   onStemFiles?: (original: File, stem: File) => void;
@@ -398,7 +401,7 @@ export function SongLibraryPanel({
               <AudioSourcePreview file={candidate.audioFile} disabled={busy} />
             ) : null}
             {fullBandDraft && candidate.chart && onReviewApply && onReviewPending ? (
-              <FullBandDraftReview key={reviewKey} chart={candidate.chart} audioFile={candidate.audioFile} buffer={candidate.buffer}
+              <FullBandDraftReview key={reviewKey} chart={candidate.chart} guitarCandidates={candidate.guitarCandidates} guitarReviewDecisions={candidate.guitarReviewDecisions} audioFile={candidate.audioFile} buffer={candidate.buffer}
                 disabled={busy} onApply={onReviewApply} onPendingChange={onReviewPending} />
             ) : null}
             {!fullBandDraft && !guitarDraft && candidate.chart?.guitarMode === "strings" && onReviewApply && onReviewPending ? (
@@ -406,7 +409,7 @@ export function SongLibraryPanel({
                 onApply={onReviewApply} onPendingChange={onReviewPending} />
             ) : null}
             {!fullBandDraft && (audioDraft || guitarDraft) && candidate.chart && onReviewApply && onReviewPending ? (
-              <AudioDraftStudio key={reviewKey} chart={candidate.chart} disabled={busy} instrument={guitarDraft ? "guitar" : bassDraft ? "bass" : keysDraft ? "keys" : "drums"}
+              <AudioDraftStudio key={reviewKey} chart={candidate.chart} guitarCandidates={candidate.guitarCandidates} guitarReviewDecisions={candidate.guitarReviewDecisions} disabled={busy} instrument={guitarDraft ? "guitar" : bassDraft ? "bass" : keysDraft ? "keys" : "drums"}
                 audioFile={candidate.audioFile} buffer={candidate.buffer} onApply={onReviewApply} onPendingChange={onReviewPending} />
             ) : null}
             {candidate.warnings.length > 0 ? (

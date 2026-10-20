@@ -115,6 +115,14 @@
     "guitar-short-chords": {
       "diagnosticOnly": true,
       "reason": "Three of six simultaneous short chord tones remain missed. The isolated short-note recovery does not attempt polyphonic separation; this supplemental development control has no quality pass."
+    },
+    "guitarset-rock-chords": {
+      "diagnosticOnly": true,
+      "reason": "New independently annotated comping excerpt selected before inspecting suggestion output. Record chart and suggestion errors separately; no automatic recovery or quality claim."
+    },
+    "guitarset-funk-chords": {
+      "diagnosticOnly": true,
+      "reason": "New independently annotated comping excerpt selected before inspecting suggestion output. Record chart and suggestion errors separately; no automatic recovery or quality claim."
     }
   }
 }
