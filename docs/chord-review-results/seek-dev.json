@@ -1,0 +1,46 @@
+{
+  "browser": "153.0.8010.12",
+  "runs": [
+    {
+      "backend": "wasm",
+      "fallback": false,
+      "detectedNotes": 6,
+      "seekChecks": [
+        {
+          "key": "Enter",
+          "expected": 0,
+          "immediate": "0",
+          "settled": "0",
+          "detail": 0,
+          "valueAtActivation": "0.835"
+        },
+        {
+          "key": "Space",
+          "expected": 0,
+          "immediate": "0",
+          "settled": "0",
+          "detail": 0,
+          "valueAtActivation": "0.835"
+        },
+        {
+          "key": "Enter",
+          "expected": 3,
+          "immediate": "0.835",
+          "settled": "3",
+          "detail": 0,
+          "valueAtActivation": "0.835"
+        },
+        {
+          "key": "Space",
+          "expected": 3,
+          "immediate": "3",
+          "settled": "3",
+          "detail": 0,
+          "valueAtActivation": "0.835"
+        }
+      ],
+      "blockedWasmRequests": 0,
+      "browserErrors": []
+    }
+  ]
+}

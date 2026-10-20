@@ -66,6 +66,16 @@ export, independent restore and native audio/worker cleanup. CI runs it alongsid
 the existing full-band and import-studio regressions. It also runs against built
 output without using development-only application probes.
 
+The studio seek check waits for the rendered preview value after a seek request
+crosses the parent render and audition effect. Reading the existing field
+immediately can return the previous note's `0.835` seconds; the
+[native development trace](chord-review-results/seek-dev.json) records exactly
+that stale read before the correct panned-window start of `3` seconds appears.
+The original zero-window expectation remains zero. Regression coverage exercises
+Enter and Space with 4x CPU throttling, both keys at a nonzero window start, and
+pointer seeking within that window. These are state-based waits with a bounded
+timeout, without a fixed sleep or changes to the application's seek behavior.
+
 Focused domain tests cover five sample rates, rejected adjacent pitches,
 independent stereo channels, malformed/edge inputs, work limits, cancellation
 scheduled after audio analysis begins, lossless history, free-string acceptance
