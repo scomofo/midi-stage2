@@ -36,7 +36,8 @@
     "test:keyboard-import": "node scripts/keyboard-import-regression.mjs",
     "test:full-band-import": "node scripts/full-band-import-regression.mjs",
     "test:transcription-benchmark": "node --experimental-strip-types scripts/transcription-benchmark.mjs",
-    "test:import-studio": "node scripts/import-studio-regression.mjs"
+    "test:import-studio": "node scripts/import-studio-regression.mjs",
+    "test:chord-review": "node scripts/chord-review-regression.mjs"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.4",

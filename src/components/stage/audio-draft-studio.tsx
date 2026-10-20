@@ -1,23 +1,26 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, Download, Plus, Redo2, RotateCcw, Trash2, Undo2, ZoomIn, ZoomOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DRUMS, noteName } from "@/lib/midi-stage/engine";
 import { serializeSharedChart, type SharedChart } from "@/lib/midi-stage/chart-format";
 import { restoreAudioPart, type AudioReviewInstrument } from "@/lib/midi-stage/audio-part-review";
-import { audioReviewDraftKey, audioReviewPitch, audioReviewRows, applyAudioReviewDraft, createAudioReviewHistory, needsAudioReview, pushAudioReviewHistory, redoAudioReview, selectedAudioReviewRow, undoAudioReview, type AudioReviewHistory, type AudioReviewRow } from "@/lib/midi-stage/audio-review-session";
+import { acceptGuitarCandidate, guitarCandidateRow, audioReviewDraftKey, audioReviewPitch, audioReviewRows, applyAudioReviewDraft, createAudioReviewHistory, needsAudioReview, pushAudioReviewHistory, redoAudioReview, selectedAudioReviewRow, undoAudioReview, type AudioReviewHistory, type AudioReviewRow } from "@/lib/midi-stage/audio-review-session";
+import type { GuitarCandidateDecisions, ShortChordCandidate } from "@/lib/midi-stage/guitar-short-chord-audit";
 import { AudioSourcePreview } from "./audio-source-preview";
 import { AudioPartAudition } from "./audio-part-audition";
 import { AudioReviewWaveform } from "./audio-review-waveform";
+import { GuitarChordSuggestions } from "./guitar-chord-suggestions";
 import "./audio-draft-studio.css";
 
 const QUEUE_SIZE = 40;
-export function AudioDraftStudio({ chart, instrument, audioFile, buffer, disabled, onApply, onPendingChange, originalChart }: {
+export function AudioDraftStudio({ chart, instrument, audioFile, buffer, disabled, onApply, onPendingChange, originalChart, guitarCandidates, guitarReviewDecisions }: {
   chart: SharedChart; instrument: AudioReviewInstrument; audioFile?: File; buffer?: AudioBuffer; disabled: boolean;
-  onApply: (chart: SharedChart) => void; onPendingChange: (pending: boolean) => void; originalChart?: SharedChart;
+  onApply: (chart: SharedChart, decisions?: GuitarCandidateDecisions) => void; onPendingChange: (pending: boolean) => void; originalChart?: SharedChart;
+  guitarCandidates?: ShortChordCandidate[]; guitarReviewDecisions?: GuitarCandidateDecisions;
 }) {
   const original = useRef(originalChart ?? chart);
   const roll = useRef<HTMLDivElement>(null);
-  const [history, setHistory] = useState(() => createAudioReviewHistory(chart, instrument));
+  const [history, setHistory] = useState(() => createAudioReviewHistory(chart, instrument, instrument === "guitar" ? guitarReviewDecisions : undefined));
   const baseline = useRef(audioReviewDraftKey(history.present));
   const nextId = useRef(history.present.rows.length);
   const { rows, tempo, selectedId } = history.present;
@@ -31,6 +34,16 @@ export function AudioDraftStudio({ chart, instrument, audioFile, buffer, disable
   const [from, setFrom] = useState(() => Math.max(0, Number(rows[0]?.time ?? 0) - 0.5));
   const [startRequest, setStartRequest] = useState<{ time: number; key: number }>();
   const [playhead, setPlayhead] = useState<number | null>(null);
+  const [candidateId, setCandidateId] = useState<string | null>(() => instrument === "guitar"
+    ? guitarCandidates?.find((item) => !guitarReviewDecisions?.[item.id])?.id ?? guitarCandidates?.[0]?.id ?? null : null);
+  const candidates = instrument === "guitar" ? guitarCandidates ?? [] : [];
+  const candidate = candidates.find((item) => item.id === candidateId);
+  const decisions = history.present.candidateDecisions ?? {};
+  const { proposed, proposalError } = useMemo(() => {
+    if (!candidate || history.present.candidateDecisions?.[candidate.id]) return {};
+    try { return { proposed: guitarCandidateRow(chart, history.present, candidate, nextId.current) }; }
+    catch (reason) { return { proposalError: reason instanceof Error ? reason.message : "Review nearby notes first." }; }
+  }, [chart, history.present, candidate]);
   const span = Math.min(windowSize, chart.duration);
   const viewStart = Math.max(0, Math.min(from, chart.duration - span));
   useEffect(() => {
@@ -67,17 +80,36 @@ export function AudioDraftStudio({ chart, instrument, audioFile, buffer, disable
     if (!selected) return;
     commit(pushAudioReviewHistory(history, { ...history.present, rows: rows.map((row) => row.id === selectedId ? { ...row, [field]: value } : row) }));
   }
+  function selectCandidate(item: ShortChordCandidate) {
+    setCandidateId(item.id);
+    setFrom(Math.max(0, item.time - Math.min(windowSize, chart.duration) / 4));
+    setStartRequest((last) => ({ time: Math.max(0, item.time - 0.2), key: (last?.key ?? 0) + 1 }));
+  }
+  function acceptCandidate(item: ShortChordCandidate) {
+    try {
+      const draft = acceptGuitarCandidate(chart, history.present, item, nextId.current);
+      nextId.current++;
+      commit(pushAudioReviewHistory(history, draft));
+      setOnlyReview(false); setQueuePage(Math.floor(draft.rows.findIndex((row) => row.id === draft.selectedId) / QUEUE_SIZE));
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "This tone could not be accepted."); }
+  }
+  function decideCandidate(item: ShortChordCandidate, decision?: "dismissed") {
+    const next = { ...decisions };
+    if (decision) next[item.id] = decision; else delete next[item.id];
+    commit(pushAudioReviewHistory(history, { ...history.present, candidateDecisions: next }));
+  }
   function accept(result: SharedChart, message: string, resetSelection = false) {
     const nextRows = audioReviewRows(result, instrument);
     const closest = selectedAudioReviewRow(nextRows, selected, instrument);
-    const draft = { rows: nextRows, tempo: String(result.bpm), selectedId: (resetSelection ? nextRows[0]?.id : closest?.id) ?? nextRows[0]?.id ?? null };
+    const candidateDecisions = instrument === "guitar" ? resetSelection ? {} : history.present.candidateDecisions : undefined;
+    const draft = { rows: nextRows, tempo: String(result.bpm), selectedId: (resetSelection ? nextRows[0]?.id : closest?.id) ?? nextRows[0]?.id ?? null, candidateDecisions };
     baseline.current = audioReviewDraftKey(draft);
     setHistory({ past: [], present: draft, future: [] });
     nextId.current = nextRows.length;
     if (resetSelection) { setQueuePage(0); setOnlyReview(false); setFrom(Math.max(0, Number(nextRows[0]?.time ?? 0) - 0.5)); }
     // A fresh applied chart restores the audition's default first-note start.
     setStartRequest(undefined); setPlayhead(null);
-    setError(""); setNotice(message); onPendingChange(false); onApply(result);
+    setError(""); setNotice(message); onPendingChange(false); onApply(result, candidateDecisions);
   }
   function apply() {
     try { accept(applyAudioReviewDraft(chart, instrument, history.present), "Corrections applied. Ready to add or download."); }
@@ -106,7 +138,7 @@ export function AudioDraftStudio({ chart, instrument, audioFile, buffer, disable
     : [...new Set(rows.map(pitch).filter(Number.isFinite))].sort((a, b) => b - a);
   const laneOf = (row: AudioReviewRow) => instrument === "guitar" ? Number(row.string) : pitch(row);
   const visibleNotes = rows.filter((row) => Number(row.time) < viewStart + span && Number(row.time) + Number(row.duration) > viewStart);
-  const audition = { chart, instrument, buffer, pending: dirty, startRequest, selectedTime: Number(selected?.time), selectedPitch: selected ? pitch(selected) : undefined, onPosition: setPlayhead };
+  const audition = { chart, instrument, buffer, pending: dirty, startRequest, selectedTime: Number(selected?.time), selectedPitch: selected ? pitch(selected) : undefined, suggestion: candidate, onPosition: setPlayhead };
 
   return <section className="audio-draft-studio" aria-label={`${name} review studio`}>
     <header className="studio-heading">
@@ -114,6 +146,8 @@ export function AudioDraftStudio({ chart, instrument, audioFile, buffer, disable
         <p>Listen, select a note, make it yours. Amber notes are a good place to start.</p></div>
       <div className="studio-summary"><strong>{rows.length}</strong> {label.toLowerCase()}s <span>·</span> <strong>{needsReview.length}</strong> need review</div>
     </header>
+    <GuitarChordSuggestions candidates={candidates} decisions={decisions} selected={candidate} position={proposed} positionError={proposalError ?? ""}
+      disabled={disabled} onSelect={selectCandidate} onAccept={acceptCandidate} onDecision={decideCandidate} />
     <div className="studio-workspace">
       <div className="studio-arrangement">
         <div className="studio-timeline-tools">
@@ -147,6 +181,11 @@ export function AudioDraftStudio({ chart, instrument, audioFile, buffer, disable
                   {instrument === "guitar" ? row.fret : instrument === "drums" ? "●" : noteName(pitch(row))}
                 </button>;
               })}
+              {candidate && proposed && candidate.time < viewStart + span && candidate.time + candidate.estimatedDuration > viewStart ? <div
+                className="studio-gem studio-suggestion-gem" aria-hidden="true" title={`Unverified ${noteName(candidate.pitchMidi)} suggestion`}
+                style={{ left: `${Math.max(0, (candidate.time - viewStart) / span * 100)}%`,
+                  width: `${Math.max(0.5, (Math.min(viewStart + span, candidate.time + candidate.estimatedDuration) - Math.max(viewStart, candidate.time)) / span * 100)}%`,
+                  top: lanes.indexOf(Number(proposed.string)) * 30 + 4 }}>?</div> : null}
               {playhead !== null && playhead >= viewStart && playhead <= viewStart + span ? <div className="studio-playhead" style={{ left: `${(playhead - viewStart) / span * 100}%` }} /> : null}
             </div>
           </div>

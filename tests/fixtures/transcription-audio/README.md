@@ -23,6 +23,18 @@ track appears in the dataset's published timing/duplicate-note error notices.
 These two excerpts are a small diagnostic set; their training/held-out status
 for the shipped model has not been established.
 
+The chord-review pass also includes the first eight seconds of
+`01_Rock1-130-A_comp_mic.wav` and `03_Funk1-114-Ab_comp_mic.wav` as
+`guitarset-rock-chords.flac` and `guitarset-funk-chords.flac`. Same source,
+license, attribution, extraction and reference policy as above. These tracks use
+different players/styles from the existing excerpts. They were selected before
+inspecting transcription or suggestion results; the audit thresholds were fixed
+before that run. Neither appears in the published timing/duplicate notices.
+They are independently annotated recordings, not a model-held-out claim. Both
+remain diagnostic cases without quality gates. Suggestion matches are scored
+against reference notes missed by the chart and are kept separate from chart
+accuracy: unaccepted suggestions are never detected chart notes.
+
 To recreate the audio from the original archive entries:
 
 ```sh

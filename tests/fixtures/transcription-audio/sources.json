@@ -469,5 +469,613 @@
       "sourceAudioSha256": "41fd91721398a47c6afa030feb324a1cd981ffac7da9bd313b775ad4f7b1a24c",
       "transformation": "First 2 seconds, mono 22050 Hz, 16-bit PCM WAV after MP3 decoding. Used as a pitched sample in deterministic renders, not a continuous performance."
     }
+  },
+  {
+    "id": "guitarset-rock-chords",
+    "instrument": "guitar",
+    "kind": "recorded-performance",
+    "audio": "guitarset-rock-chords.flac",
+    "reference": [
+      {
+        "time": 0.006590476,
+        "duration": 0.394739229,
+        "pitch": 45
+      },
+      {
+        "time": 0.008041723,
+        "duration": 0.47600907,
+        "pitch": 57
+      },
+      {
+        "time": 0.008109751,
+        "duration": 0.203174603,
+        "pitch": 61
+      },
+      {
+        "time": 0.011102948,
+        "duration": 0.464399093,
+        "pitch": 52
+      },
+      {
+        "time": 0.479288889,
+        "duration": 0.208979592,
+        "pitch": 52
+      },
+      {
+        "time": 0.483415873,
+        "duration": 0.197369615,
+        "pitch": 45
+      },
+      {
+        "time": 0.487270748,
+        "duration": 0.226394558,
+        "pitch": 57
+      },
+      {
+        "time": 0.50178322,
+        "duration": 0.208979592,
+        "pitch": 61
+      },
+      {
+        "time": 0.680808163,
+        "duration": 0.208979592,
+        "pitch": 45
+      },
+      {
+        "time": 0.891987302,
+        "duration": 0.232199546,
+        "pitch": 45
+      },
+      {
+        "time": 1.143801361,
+        "duration": 0.232199546,
+        "pitch": 45
+      },
+      {
+        "time": 1.15178322,
+        "duration": 0.232199546,
+        "pitch": 52
+      },
+      {
+        "time": 1.179946485,
+        "duration": 0.249614512,
+        "pitch": 57
+      },
+      {
+        "time": 1.397066667,
+        "duration": 0.121904762,
+        "pitch": 45
+      },
+      {
+        "time": 1.620581406,
+        "duration": 0.493424036,
+        "pitch": 45
+      },
+      {
+        "time": 1.637112018,
+        "duration": 0.464399093,
+        "pitch": 52
+      },
+      {
+        "time": 1.658019048,
+        "duration": 0.458594104,
+        "pitch": 57
+      },
+      {
+        "time": 2.318903401,
+        "duration": 0.232199546,
+        "pitch": 45
+      },
+      {
+        "time": 2.321080272,
+        "duration": 0.232199546,
+        "pitch": 52
+      },
+      {
+        "time": 2.341239002,
+        "duration": 0.267029478,
+        "pitch": 57
+      },
+      {
+        "time": 2.349606349,
+        "duration": 0.220589569,
+        "pitch": 61
+      },
+      {
+        "time": 2.561805896,
+        "duration": 0.197369615,
+        "pitch": 45
+      },
+      {
+        "time": 2.759198186,
+        "duration": 0.232199546,
+        "pitch": 45
+      },
+      {
+        "time": 2.992871655,
+        "duration": 0.104489796,
+        "pitch": 45
+      },
+      {
+        "time": 3.002939683,
+        "duration": 0.249614512,
+        "pitch": 52
+      },
+      {
+        "time": 3.02470839,
+        "duration": 0.26122449,
+        "pitch": 57
+      },
+      {
+        "time": 3.033415873,
+        "duration": 0.226394558,
+        "pitch": 61
+      },
+      {
+        "time": 3.237406803,
+        "duration": 0.232199546,
+        "pitch": 45
+      },
+      {
+        "time": 3.472531519,
+        "duration": 0.47600907,
+        "pitch": 45
+      },
+      {
+        "time": 3.473892063,
+        "duration": 0.684988662,
+        "pitch": 52
+      },
+      {
+        "time": 3.495524717,
+        "duration": 0.481814059,
+        "pitch": 57
+      },
+      {
+        "time": 3.502780952,
+        "duration": 0.684988662,
+        "pitch": 61
+      },
+      {
+        "time": 4.159901134,
+        "duration": 0.272834467,
+        "pitch": 52
+      },
+      {
+        "time": 4.161216327,
+        "duration": 0.220589569,
+        "pitch": 45
+      },
+      {
+        "time": 4.182395465,
+        "duration": 0.290249433,
+        "pitch": 57
+      },
+      {
+        "time": 4.189742404,
+        "duration": 0.21478458,
+        "pitch": 61
+      },
+      {
+        "time": 4.382554195,
+        "duration": 0.232199546,
+        "pitch": 45
+      },
+      {
+        "time": 4.619130159,
+        "duration": 0.220589569,
+        "pitch": 45
+      },
+      {
+        "time": 4.860059864,
+        "duration": 0.162539683,
+        "pitch": 45
+      },
+      {
+        "time": 4.880218594,
+        "duration": 0.238004535,
+        "pitch": 52
+      },
+      {
+        "time": 4.886749206,
+        "duration": 0.30185941,
+        "pitch": 57
+      },
+      {
+        "time": 4.896182313,
+        "duration": 0.296054422,
+        "pitch": 61
+      },
+      {
+        "time": 4.907520181,
+        "duration": 0.238004535,
+        "pitch": 64
+      },
+      {
+        "time": 5.106794558,
+        "duration": 0.098684807,
+        "pitch": 45
+      },
+      {
+        "time": 5.3504,
+        "duration": 0.08707483,
+        "pitch": 45
+      },
+      {
+        "time": 5.361193651,
+        "duration": 0.493424036,
+        "pitch": 52
+      },
+      {
+        "time": 5.381375057,
+        "duration": 0.481814059,
+        "pitch": 57
+      },
+      {
+        "time": 6.050105215,
+        "duration": 0.203174603,
+        "pitch": 45
+      },
+      {
+        "time": 6.051397732,
+        "duration": 0.21478458,
+        "pitch": 52
+      },
+      {
+        "time": 6.066794558,
+        "duration": 0.255419501,
+        "pitch": 57
+      },
+      {
+        "time": 6.077678912,
+        "duration": 0.272834467,
+        "pitch": 61
+      },
+      {
+        "time": 6.264096145,
+        "duration": 0.208979592,
+        "pitch": 45
+      },
+      {
+        "time": 6.473257143,
+        "duration": 0.220589569,
+        "pitch": 45
+      },
+      {
+        "time": 6.695955556,
+        "duration": 0.21478458,
+        "pitch": 45
+      },
+      {
+        "time": 6.701760544,
+        "duration": 0.290249433,
+        "pitch": 52
+      },
+      {
+        "time": 6.717066667,
+        "duration": 0.255419501,
+        "pitch": 57
+      },
+      {
+        "time": 6.912304762,
+        "duration": 0.21478458,
+        "pitch": 45
+      },
+      {
+        "time": 7.125660771,
+        "duration": 0.26122449,
+        "pitch": 50
+      },
+      {
+        "time": 7.127112018,
+        "duration": 0.26122449,
+        "pitch": 45
+      },
+      {
+        "time": 7.39779229,
+        "duration": 0.52244898,
+        "pitch": 45
+      },
+      {
+        "time": 7.399379592,
+        "duration": 0.446984127,
+        "pitch": 50
+      },
+      {
+        "time": 7.411715193,
+        "duration": 0.441179138,
+        "pitch": 57
+      },
+      {
+        "time": 7.850014512,
+        "duration": 0.149985488,
+        "pitch": 50
+      },
+      {
+        "time": 7.855683447,
+        "duration": 0.144316553,
+        "pitch": 57
+      },
+      {
+        "time": 7.881805896,
+        "duration": 0.118194104,
+        "pitch": 62
+      }
+    ],
+    "source": {
+      "dataset": "GuitarSet 1.1.0",
+      "url": "https://zenodo.org/records/3371780",
+      "license": "CC-BY-4.0",
+      "track": "01_Rock1-130-A_comp",
+      "sourceAudioSha256": "1ead2a124768727b6ee3ddcfec2df7ad5f7087fa74ac0a49822d0028685f8731",
+      "sourceAnnotationSha256": "546bce99efd52256b4c6a03f0281292d5ba30761d7f799e3ada703d1617873d1",
+      "transformation": "First 8 seconds; mono 22050 Hz lossless FLAC. MIDI-note observations rounded to nearest semitone; durations clipped at the excerpt end. No time shift.",
+      "selection": "First 8 seconds of two previously unused comping tracks, different players and styles from the existing Bossa Nova excerpts. Selected before inspecting model or suggestion output. Model training/held-out relationship is unknown."
+    },
+    "sha256": "d0dea386600f63756a4520f186aff2230a43a6a954065603219401e981f3ef4b"
+  },
+  {
+    "id": "guitarset-funk-chords",
+    "instrument": "guitar",
+    "kind": "recorded-performance",
+    "audio": "guitarset-funk-chords.flac",
+    "reference": [
+      {
+        "time": 0.540246712,
+        "duration": 0.505034014,
+        "pitch": 56
+      },
+      {
+        "time": 0.550450794,
+        "duration": 0.505034014,
+        "pitch": 61
+      },
+      {
+        "time": 0.557797732,
+        "duration": 0.417959184,
+        "pitch": 66
+      },
+      {
+        "time": 0.569453061,
+        "duration": 0.34829932,
+        "pitch": 72
+      },
+      {
+        "time": 0.968954195,
+        "duration": 0.127709751,
+        "pitch": 72
+      },
+      {
+        "time": 0.980224036,
+        "duration": 0.168344671,
+        "pitch": 67
+      },
+      {
+        "time": 1.32818322,
+        "duration": 0.185759637,
+        "pitch": 56
+      },
+      {
+        "time": 1.364101587,
+        "duration": 0.081269841,
+        "pitch": 66
+      },
+      {
+        "time": 1.621448526,
+        "duration": 0.104489796,
+        "pitch": 66
+      },
+      {
+        "time": 1.850564172,
+        "duration": 0.133514739,
+        "pitch": 50
+      },
+      {
+        "time": 1.87142585,
+        "duration": 0.075464853,
+        "pitch": 66
+      },
+      {
+        "time": 2.120246712,
+        "duration": 0.516643991,
+        "pitch": 56
+      },
+      {
+        "time": 2.127956463,
+        "duration": 0.493424036,
+        "pitch": 61
+      },
+      {
+        "time": 2.131992744,
+        "duration": 0.516643991,
+        "pitch": 66
+      },
+      {
+        "time": 2.13924898,
+        "duration": 0.377324263,
+        "pitch": 73
+      },
+      {
+        "time": 2.562106122,
+        "duration": 0.110294785,
+        "pitch": 73
+      },
+      {
+        "time": 2.910450794,
+        "duration": 0.615328798,
+        "pitch": 56
+      },
+      {
+        "time": 2.921788662,
+        "duration": 0.644353741,
+        "pitch": 61
+      },
+      {
+        "time": 2.928387302,
+        "duration": 0.458594104,
+        "pitch": 66
+      },
+      {
+        "time": 2.940768254,
+        "duration": 0.429569161,
+        "pitch": 72
+      },
+      {
+        "time": 3.375348753,
+        "duration": 0.162539683,
+        "pitch": 72
+      },
+      {
+        "time": 3.390677551,
+        "duration": 0.168344671,
+        "pitch": 66
+      },
+      {
+        "time": 4.5037161,
+        "duration": 0.5630839,
+        "pitch": 56
+      },
+      {
+        "time": 4.767616327,
+        "duration": 0.481814059,
+        "pitch": 61
+      },
+      {
+        "time": 4.773103855,
+        "duration": 0.481814059,
+        "pitch": 66
+      },
+      {
+        "time": 4.782219501,
+        "duration": 0.34829932,
+        "pitch": 72
+      },
+      {
+        "time": 5.172922449,
+        "duration": 0.116099773,
+        "pitch": 72
+      },
+      {
+        "time": 5.519679819,
+        "duration": 0.185759637,
+        "pitch": 56
+      },
+      {
+        "time": 5.796097052,
+        "duration": 0.17414966,
+        "pitch": 56
+      },
+      {
+        "time": 5.805598186,
+        "duration": 0.185759637,
+        "pitch": 61
+      },
+      {
+        "time": 5.809679819,
+        "duration": 0.238004535,
+        "pitch": 66
+      },
+      {
+        "time": 5.829679819,
+        "duration": 0.226394558,
+        "pitch": 72
+      },
+      {
+        "time": 6.065847619,
+        "duration": 0.139319728,
+        "pitch": 50
+      },
+      {
+        "time": 6.343217234,
+        "duration": 0.510839002,
+        "pitch": 56
+      },
+      {
+        "time": 6.348750113,
+        "duration": 0.505034014,
+        "pitch": 61
+      },
+      {
+        "time": 6.352060771,
+        "duration": 0.377324263,
+        "pitch": 66
+      },
+      {
+        "time": 6.372060771,
+        "duration": 0.365714286,
+        "pitch": 73
+      },
+      {
+        "time": 6.732718367,
+        "duration": 0.139319728,
+        "pitch": 66
+      },
+      {
+        "time": 6.766119728,
+        "duration": 0.133514739,
+        "pitch": 73
+      },
+      {
+        "time": 7.111856689,
+        "duration": 0.592108844,
+        "pitch": 56
+      },
+      {
+        "time": 7.127208163,
+        "duration": 0.464399093,
+        "pitch": 61
+      },
+      {
+        "time": 7.135598186,
+        "duration": 0.43537415,
+        "pitch": 66
+      },
+      {
+        "time": 7.145484807,
+        "duration": 0.394739229,
+        "pitch": 72
+      },
+      {
+        "time": 7.551176417,
+        "duration": 0.168344671,
+        "pitch": 72
+      },
+      {
+        "time": 7.573081179,
+        "duration": 0.162539683,
+        "pitch": 66
+      },
+      {
+        "time": 7.592083447,
+        "duration": 0.127709751,
+        "pitch": 61
+      },
+      {
+        "time": 7.902763719,
+        "duration": 0.097236281,
+        "pitch": 61
+      },
+      {
+        "time": 7.914509751,
+        "duration": 0.085490249,
+        "pitch": 66
+      },
+      {
+        "time": 7.925394104,
+        "duration": 0.074605896,
+        "pitch": 72
+      }
+    ],
+    "source": {
+      "dataset": "GuitarSet 1.1.0",
+      "url": "https://zenodo.org/records/3371780",
+      "license": "CC-BY-4.0",
+      "track": "03_Funk1-114-Ab_comp",
+      "sourceAudioSha256": "796ccebfb5265044b6f8b33b84d2b2004f7dfa9b2b44b28dd0de65e45c257f0d",
+      "sourceAnnotationSha256": "194ddead88ec8d96bf7ae28bbaa17678287757d8b9eb1aa1e8f65e5584feebde",
+      "transformation": "First 8 seconds; mono 22050 Hz lossless FLAC. MIDI-note observations rounded to nearest semitone; durations clipped at the excerpt end. No time shift.",
+      "selection": "First 8 seconds of two previously unused comping tracks, different players and styles from the existing Bossa Nova excerpts. Selected before inspecting model or suggestion output. Model training/held-out relationship is unknown."
+    },
+    "sha256": "f10bc071fd80c79dcca55e6c7593a71ad8b187976ef9a2411d2e45d8df6118a1"
   }
 ]

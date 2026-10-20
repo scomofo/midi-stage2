@@ -71,7 +71,7 @@ export function AudioSourcePreview({ file, disabled = false, review }: AudioSour
       </details>
       {review ? <AudioPartAudition key={review.instrument} chart={review.chart} instrument={review.instrument}
         buffer={review.buffer} disabled={disabled || review.pending} originalAudioRef={audioRef}
-        startRequest={review.startRequest} selectedTime={review.selectedTime} selectedPitch={review.selectedPitch} onPosition={review.onPosition} /> : null}
+        startRequest={review.startRequest} selectedTime={review.selectedTime} selectedPitch={review.selectedPitch} suggestion={review.suggestion} onPosition={review.onPosition} /> : null}
     </div>
   );
 }

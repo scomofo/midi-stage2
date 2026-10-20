@@ -47,6 +47,31 @@ try {
     await page.goto(url, { waitUntil: 'domcontentloaded' }); await page.locator('.pad').first().waitFor();
     await page.getByRole('button', { name: 'Import songs', exact: true }).click();
     const library = page.getByRole('dialog', { name: 'Your songs', exact: true });
+    const previewStart = library.getByLabel('Preview start time', { exact: true });
+    const seekChecks = [];
+    const expectPreviewStart = async (expected, message, tolerance = 0) => {
+      // A seek request crosses a parent render and the audition's effect. The
+      // input already exists, so inputValue() alone can read the previous note.
+      await page.waitForFunction(({ input, expected, tolerance }) => input.isConnected && input.value.trim() !== ''
+        && Math.abs(Number(input.value) - expected) <= tolerance + 1e-9,
+      { input: await previewStart.elementHandle(), expected, tolerance }, { timeout: 5000 });
+      assert.ok(Math.abs(Number(await previewStart.inputValue()) - expected) <= tolerance + 1e-9, message);
+    };
+    const keyboardSeek = async (key, expected) => {
+      const waveform = library.getByRole('button', { name: 'Seek preview on recording waveform', exact: true });
+      await waveform.evaluate(() => {
+        window.studioLastSeek = null;
+        document.addEventListener('click', (event) => {
+          window.studioLastSeek = { detail: event.detail, valueAtActivation: document.querySelector('input[aria-label="Preview start time"]')?.value };
+        }, { once: true });
+      });
+      await waveform.focus(); await page.keyboard.press(key);
+      const immediate = await previewStart.inputValue();
+      await expectPreviewStart(expected, `${key} seeking starts at the visible recording window`);
+      const activation = await page.evaluate(() => window.studioLastSeek);
+      assert.equal(activation?.detail, 0, `${key} activates the waveform using a keyboard click`);
+      seekChecks.push({ key, expected, immediate, settled: await previewStart.inputValue(), ...activation });
+    };
     await library.getByRole('button', { name: 'Guitar (draft)', exact: true }).click();
     await library.getByLabel('Choose song file', { exact: true }).setInputFiles({ name: fixture.fileName, mimeType: fixture.mime, buffer: fixture.audio });
     await Promise.race([
@@ -88,8 +113,14 @@ try {
       await library.getByRole('button', { name: 'Edit note 3', exact: true }).click();
       assert.equal(await library.getByLabel('Note 3 fret', { exact: true }).inputValue(), String(notes[2].guitarPosition.fret));
       assert.equal(await library.getByRole('button', { name: 'Apply corrections', exact: true }).isDisabled(), true, 'selection is not an edit');
-      await library.getByRole('button', { name: 'Seek preview on recording waveform', exact: true }).focus(); await page.keyboard.press('Enter');
-      assert.equal(await library.getByLabel('Preview start time', { exact: true }).inputValue(), '0', 'keyboard seeking starts at the visible recording window');
+      const cdp = await context.newCDPSession(page);
+      await cdp.send('Emulation.setCPUThrottlingRate', { rate: 4 });
+      for (const key of ['Enter', 'Space']) {
+        await library.getByRole('button', { name: 'Edit note 3', exact: true }).click();
+        await expectPreviewStart(0.835, 'note selection seeks to its own preview time');
+        await keyboardSeek(key, 0);
+      }
+      await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 });
       await library.getByRole('group', { name: /Note timeline/ }).focus(); await page.keyboard.press('ArrowRight');
       await library.getByLabel('Note 4 fret', { exact: true }).waitFor();
       await library.getByRole('button', { name: 'Show needs review', exact: true }).click();
@@ -112,6 +143,17 @@ try {
       for (let i = 0; i < 3; i++) await library.getByRole('button', { name: 'Zoom in timeline', exact: true }).click();
       const focused = await library.locator('.studio-gem[aria-pressed="true"]').boundingBox(), timeline = await library.locator('.studio-gems').boundingBox();
       assert.ok(focused && timeline && focused.x >= timeline.x && focused.x + focused.width <= timeline.x + timeline.width + 1, 'zoom keeps the selected note visible');
+      const pan = library.getByLabel('Timeline position', { exact: true });
+      await pan.focus(); await page.keyboard.press('End');
+      await page.waitForFunction(() => document.querySelector('.studio-time-ruler > span')?.textContent === '3.00s');
+      for (const key of ['Enter', 'Space']) {
+        await previewStart.fill('0.835');
+        await keyboardSeek(key, 3);
+      }
+      const waveform = library.getByRole('button', { name: 'Seek preview on recording waveform', exact: true });
+      const waveformBounds = await waveform.boundingBox();
+      await waveform.click({ position: { x: waveformBounds.width / 2, y: waveformBounds.height / 2 } });
+      await expectPreviewStart(3.5, 'pointer seeking uses the clicked position inside the visible window', 0.002);
       for (let i = 0; i < 3; i++) await library.getByRole('button', { name: 'Zoom out timeline', exact: true }).click();
       await library.getByLabel('Preview start time', { exact: true }).fill('0.55');
       await library.getByLabel('Preview length', { exact: true }).fill('0.7');
@@ -150,7 +192,7 @@ try {
       await page.waitForFunction(() => window.studioAudio.every((capture) => capture.context.state === 'closed'));
     }
     assert.deepEqual(errors, []); if (fallback) assert.ok(blocked.length);
-    evidence.runs.push({ backend: workers[0].backend, fallback, detectedNotes: notes.length, blockedWasmRequests: blocked.length, browserErrors: errors });
+    evidence.runs.push({ backend: workers[0].backend, fallback, detectedNotes: notes.length, seekChecks, blockedWasmRequests: blocked.length, browserErrors: errors });
     await context.close();
   }
   await writeFile(`${output}/result.json`, JSON.stringify(evidence, null, 2) + '\n');

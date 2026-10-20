@@ -57,6 +57,7 @@ export async function importFullBandStemSet(
   const charts: Partial<Record<Instrument, SharedChart>> = {};
   const warnings: string[] = [];
   let backing: AudioBuffer | null = null;
+  let guitarCandidates: AudioAnalysis["guitarCandidates"];
   for (const instrument of order) {
     if (options.signal?.aborted) throw new DOMException("Song import was cancelled.", "AbortError");
     const result = await importAudioFile(original, {
@@ -66,6 +67,7 @@ export async function importFullBandStemSet(
       onProgress: (progress) => options.onProgress?.(instrument, progress),
     });
     charts[instrument] = result.chart;
+    if (instrument === "guitar") guitarCandidates = result.guitarCandidates;
     warnings.push(...result.warnings.map((warning) => `${instrument}: ${warning}`));
     backing ??= result.buffer;
   }
@@ -74,6 +76,7 @@ export async function importFullBandStemSet(
     chart: combineCharts(charts, original.name),
     warnings: [`Full-band draft combined ${order.join(", ")} on the original recording timeline.`, ...warnings],
     buffer: backing!,
+    guitarCandidates,
   };
 }
 

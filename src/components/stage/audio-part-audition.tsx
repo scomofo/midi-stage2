@@ -4,16 +4,19 @@ import { Button } from "@/components/ui/button";
 import { AudioEngine } from "@/lib/midi-stage/audio";
 import type { SharedChart } from "@/lib/midi-stage/chart-format";
 import type { AudioReviewInstrument } from "@/lib/midi-stage/audio-part-review";
+import type { ShortChordCandidate } from "@/lib/midi-stage/guitar-short-chord-audit";
+import { noteName } from "@/lib/midi-stage/engine";
 
 export type AudioAuditionOptions = {
   startRequest?: { time: number; key: number };
   selectedTime?: number;
   selectedPitch?: number;
+  suggestion?: ShortChordCandidate;
   onPosition?: (time: number | null) => void;
 };
 
 /** All voices and recording clips share one Web Audio clock, including loop boundaries. */
-export function AudioPartAudition({ chart, instrument, buffer, disabled, originalAudioRef, startRequest, selectedTime, selectedPitch, onPosition }: {
+export function AudioPartAudition({ chart, instrument, buffer, disabled, originalAudioRef, startRequest, selectedTime, selectedPitch, suggestion, onPosition }: {
   chart: SharedChart; instrument: AudioReviewInstrument; buffer?: AudioBuffer; disabled: boolean;
   originalAudioRef?: RefObject<HTMLAudioElement | null>;
 } & AudioAuditionOptions) {
@@ -24,6 +27,7 @@ export function AudioPartAudition({ chart, instrument, buffer, disabled, origina
   const [length, setLength] = useState("8");
   const [loop, setLoop] = useState(false);
   const [playing, setPlaying] = useState(false);
+  const [playingSuggestion, setPlayingSuggestion] = useState(false);
   const [error, setError] = useState("");
   const engineRef = useRef<AudioEngine | null>(null);
   const animationRef = useRef(0);
@@ -41,7 +45,7 @@ export function AudioPartAudition({ chart, instrument, buffer, disabled, origina
     audio?.addEventListener("play", stop);
     return () => audio?.removeEventListener("play", stop);
   }, [originalAudioRef, stop]);
-  useEffect(() => () => stop(), [chart, disabled, stop]);
+  useEffect(() => () => stop(), [chart, disabled, suggestion, stop]);
   useEffect(() => {
     const hidden = () => { if (document.hidden) stop(); };
     document.addEventListener("visibilitychange", hidden);
@@ -52,11 +56,15 @@ export function AudioPartAudition({ chart, instrument, buffer, disabled, origina
     setStart(startRequest ? String(Math.round(startRequest.time * 1000) / 1000) : null);
   }, [startRequest, stop]);
 
-  async function play(selected = false) {
+  async function play(selected = false, suggestionMix?: "together" | "corrected" | "recording") {
     stop();
-    const selectedNote = selected ? notes.find((note) => Math.abs(note.time - selectedTime!) < 1e-6 && note.pitch === selectedPitch) : undefined;
+    const auditionSuggestion = suggestionMix !== undefined && suggestion !== undefined;
+    if (suggestionMix !== undefined && !suggestion) return;
+    const selectedNote = auditionSuggestion ? { time: suggestion!.time, duration: suggestion!.estimatedDuration, pitch: suggestion!.pitchMidi, velocity: 90 }
+      : selected ? notes.find((note) => Math.abs(note.time - selectedTime!) < 1e-6 && note.pitch === selectedPitch) : undefined;
+    selected ||= auditionSuggestion;
     if (selected && !selectedNote) { setError("Select an applied note to hear it."); return; }
-    const from = selected && Number.isFinite(selectedTime) ? Math.max(0, selectedTime! - 0.15) : Number(start);
+    const from = selected && selectedNote ? Math.max(0, selectedNote.time - 0.15) : Number(start);
     const seconds = selected ? Math.max(0.7, Math.min(2, selectedNote!.duration + 0.3)) : Number(length);
     if ((!selected && !start.trim()) || !Number.isFinite(from) || from < 0 || from >= chart.duration || !Number.isFinite(seconds) || seconds < 0.25 || seconds > 16) {
       setError("Choose a start inside the recording and a preview length from 0.25 to 16 seconds."); return;
@@ -66,7 +74,9 @@ export function AudioPartAudition({ chart, instrument, buffer, disabled, origina
     }
     if (selected) setStart(String(Math.round(from * 1000) / 1000));
     setError(""); originalAudioRef?.current?.pause();
-    const engine = new AudioEngine(); engineRef.current = engine; setPlaying(true);
+    const engine = new AudioEngine(); engineRef.current = engine; setPlaying(true); setPlayingSuggestion(auditionSuggestion);
+    const previewMix = suggestionMix ?? mix;
+    const previewNotes = auditionSuggestion ? [selectedNote!] : notes;
     try {
       await engine.init();
       if (engineRef.current !== engine) return;
@@ -75,17 +85,17 @@ export function AudioPartAudition({ chart, instrument, buffer, disabled, origina
       const schedule = (cycle: number) => {
         if (engineRef.current !== engine) return;
         const cycleAt = at + cycle * span;
-        if (mix !== "corrected" && buffer) {
+        if (previewMix !== "corrected" && buffer) {
           const chartStart = Math.max(from, chart.audioOffset, 0), offset = chartStart - chart.audioOffset;
           const duration = Math.min(buffer.duration - offset, end - chartStart);
           if (duration > 0) {
             const source = ctx.createBufferSource(), gain = ctx.createGain(); source.buffer = buffer;
-            gain.gain.value = mix === "recording" ? 0.8 : 0.45;
+            gain.gain.value = previewMix === "recording" ? 0.8 : 0.45;
             source.connect(gain); gain.connect(engine.buses.backing!); engine.track(source, gain);
             source.start(cycleAt + chartStart - from, offset, duration);
           }
         }
-        if (mix !== "recording") for (const note of notes) {
+        if (previewMix !== "recording") for (const note of previewNotes) {
           if (selected && note !== selectedNote) continue;
           const time = Math.max(from, note.time), duration = Math.min(end, note.time + note.duration) - time;
           if (time >= end || duration <= 0 || (instrument === "drums" && note.time < from)) continue;
@@ -136,7 +146,14 @@ export function AudioPartAudition({ chart, instrument, buffer, disabled, origina
       <label className="flex items-center gap-2">From<input className="w-20 rounded-sm border border-border bg-bg p-2 font-mono text-fg" aria-label="Preview start time" type="number" min={0} max={chart.duration} step="any" value={start} disabled={disabled || playing} onChange={(event) => setStart(event.target.value)} />s</label>
       <label className="flex items-center gap-2">Length<input className="w-16 rounded-sm border border-border bg-bg p-2 font-mono text-fg" aria-label="Preview length" type="number" min={0.25} max={16} step="any" value={length} disabled={disabled || playing} onChange={(event) => setLength(event.target.value)} />s</label>
     </div>
-    <p role="status" className="text-[10px] leading-relaxed text-muted">{disabled ? "Apply or undo corrections before listening." : playing ? "Playing the applied part on the recording timeline." : "Stage sounds play the applied notes. Compare with the recording to check pitches and holds."}</p>
+    {suggestion ? <div className="studio-suggestion-listen" role="group" aria-label="Suggestion listening controls">
+      <p>Possible {noteName(suggestion.pitchMidi)} at {suggestion.time.toFixed(3)}s · unverified tone</p>
+      <div><Button size="sm" variant="secondary" disabled={disabled || playing || !buffer} onClick={() => void play(false, "recording")}>Recording phrase</Button>
+        <Button size="sm" variant="secondary" disabled={disabled || playing || !buffer} onClick={() => void play(false, "together")}>Suggestion + recording</Button>
+        <Button size="sm" variant="ghost" disabled={disabled || playing} onClick={() => void play(false, "corrected")}>Suggestion only</Button></div>
+      <p>The suggested tone is synthesized for comparison. Accepting it is a separate edit.</p>
+    </div> : null}
+    <p role="status" className="text-[10px] leading-relaxed text-muted">{disabled ? "Apply or undo corrections before listening." : playing ? playingSuggestion ? "Playing the selected suggestion phrase. The chart is unchanged by listening." : "Playing the applied part on the recording timeline." : "Stage sounds play the applied notes. Compare with the recording to check pitches and holds."}</p>
     {error ? <p role="alert" className="text-xs text-tungsten">{error}</p> : null}
   </section>;
 }
