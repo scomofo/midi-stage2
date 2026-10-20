@@ -28,7 +28,8 @@ function combineCharts(charts: Partial<Record<Instrument, SharedChart>>, filenam
     origin: "audio-full-band-draft",
     matching: undefined,
     duration,
-    firstBeat: Math.min(...parts.flatMap((part) => part.notes.map((note) => note.time))),
+    // A silent or undetected stem set has no note onset; retain the analyzed beat grid.
+    firstBeat: Math.min(base.firstBeat, ...parts.flatMap((part) => part.notes.map((note) => note.time))),
     parts,
     chordHighways: {
       keys: charts.keys?.chordHighways.keys ?? [],
