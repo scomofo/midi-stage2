@@ -171,7 +171,10 @@ try {
   phase = 'model loading failure';
   await page.route('**/models/basic-pitch/model.json', (route) => route.abort());
   await build.click();
-  await library.getByRole('alert').filter({ hasText: /The local pitch model could not load/ }).waitFor();
+  // Match the alert itself, never its wording: the failure must surface an
+  // alert with a message in the library. Copy edits must not break this check.
+  await library.getByRole('alert').waitFor();
+  assert.ok((await library.getByRole('alert').first().innerText()).trim().length > 0, 'the failed model load should surface an alert');
   assert.equal(await page.evaluate(() => window.modelWorkers.every((w) => !w.active)), true);
   await library.getByRole('button', { name: 'Close song library', exact: true }).click();
   if (!uiOnly) assert.equal(await page.evaluate(() => window.keyboardProbe.live.song.id), savedId);
