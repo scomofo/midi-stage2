@@ -313,6 +313,18 @@ try {
   }
   await page.getByRole('button', { name: 'Reset set', exact: true }).click();
   phase = 'cancel a partially analyzed set without publishing a partial band';
+  const mixer = page.getByRole('region', { name: 'BAND MIX', exact: true });
+  await mixer.getByRole('radio', { name: 'Stem mix', exact: true }).check();
+  const recordedStarts = () => page.evaluate(() => window.bandAudio.flatMap(capture => capture.starts).filter(source => source.bufferDuration > 3));
+  const beforeStems = (await recordedStarts()).length;
+  await transport.getByRole('button', { name: 'Start set', exact: true }).click();
+  await page.waitForFunction(count => window.bandAudio.flatMap(capture => capture.starts).filter(source => source.bufferDuration > 3).length >= count + 4, beforeStems);
+  const fourStems = (await recordedStarts()).slice(beforeStems);
+  assert.deepEqual(fourStems.map(source => source.bufferDuration), [8, 4, 4, 4]);
+  assert.equal(new Set(fourStems.map(source => source.at)).size, 1, 'all four stems share one audio start');
+  assert.ok(fourStems.every(source => source.offset === 0));
+  await page.getByRole('button', { name: 'Reset set', exact: true }).click();
+  await mixer.getByRole('radio', { name: 'Original recording', exact: true }).check();
   await open(); build = await choose(); await build.click();
   await page.waitForFunction(() => window.bandWorkers.some((worker) => worker.active && worker.phase === 'analyzing'));
   await library.getByRole('button', { name: 'Cancel import', exact: true }).click();
