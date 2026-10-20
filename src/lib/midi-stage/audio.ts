@@ -1,6 +1,7 @@
 import type { Instrument, Song, Player, Grade } from "./types";
 import { sourceForSafe } from "./audio-helpers";
 import type { MusicEnergy } from "./concert-cues";
+import { defaultStemMix, stemGain, type StemMix } from "./stem-mix";
 
 type Voice = { source: AudioScheduledSourceNode; gain: GainNode; stopped: boolean; stop: () => void };
 
@@ -34,6 +35,15 @@ export class AudioEngine {
   generation = 0;
   song: Song | null = null;
   backingSource: AudioBufferSourceNode | null = null;
+  private stemGains = new Map<Instrument, GainNode>();
+  private stemTracks: Instrument[] = [];
+
+  setStemMix(mix: StemMix) {
+    if (!this.ctx) return;
+    for (const [kind, node] of this.stemGains) {
+      node.gain.setTargetAtTime(stemGain(mix, kind, this.stemTracks), this.ctx.currentTime, 0.02);
+    }
+  }
   stageAnalyser: AnalyserNode | null = null;
   private stageWaveform = new Uint8Array(0);
   private stageSpectrum = new Uint8Array(0);
@@ -380,6 +390,8 @@ export class AudioEngine {
     demo?: boolean;
     metronome?: boolean;
     backingBuffer?: AudioBuffer;
+    stemBuffers?: Partial<Record<Instrument, AudioBuffer>>;
+    stemMix?: StemMix;
   }) {
     this.stop();
     const ticket = this.generation;
@@ -407,8 +419,11 @@ export class AudioEngine {
     if (opts.metronome) {
       for (const b of song.beats) if (b.time >= seek && b.time < end) this.events.push({ time: b.time, click: true, accent: b.bar });
     }
-    if (opts.backingBuffer) {
-      const buffer = opts.backingBuffer;
+    const stems = Object.entries(opts.stemBuffers ?? {}) as [Instrument, AudioBuffer][];
+    this.stemTracks = stems.map(([kind]) => kind);
+    // Stem and original modes are mutually exclusive, even for a partial set.
+    const recordings: [Instrument | null, AudioBuffer][] = stems.length ? stems : opts.backingBuffer ? [[null, opts.backingBuffer]] : [];
+    for (const [kind, buffer] of recordings) {
       // audioOffset is where buffer sample zero sits on the chart timeline.
       // Buffer offsets/durations stay in source seconds; playbackRate handles speed.
       const audioOffset = song.audioOffset ?? 0;
@@ -420,7 +435,8 @@ export class AudioEngine {
         const gain = this.ctx!.createGain();
         source.buffer = buffer;
         source.playbackRate.value = speed;
-        gain.gain.value = 1;
+        gain.gain.value = kind ? stemGain(opts.stemMix ?? defaultStemMix(), kind, stems.map(([track]) => track)) : 1;
+        if (kind) this.stemGains.set(kind, gain);
         source.connect(gain);
         gain.connect(this.buses.backing!);
         this.track(source, gain);
@@ -428,6 +444,7 @@ export class AudioEngine {
         const ended = source.onended;
         source.onended = (event) => {
           if (this.backingSource === source) this.backingSource = null;
+          if (kind && this.stemGains.get(kind) === gain) this.stemGains.delete(kind);
           ended?.call(source, event);
         };
         source.start(this.origin + chartStart / speed, offset, duration);
@@ -437,7 +454,7 @@ export class AudioEngine {
     const guideOnsets = new Set<number>();
     for (const part of song.parts) {
       const selected = enabled.has(part.id);
-      if (opts.backingBuffer || song.matching === "rhythm") {
+      if (recordings.length || song.matching === "rhythm") {
         // A recording already contains the full arrangement. Rhythm placeholder
         // pitches must never become a synthesized melody over that recording.
         if (selected && (opts.guide || opts.demo)) {
@@ -495,6 +512,8 @@ export class AudioEngine {
     this.timer = null;
     for (const n of [...this.nodes]) n.stop();
     this.backingSource = null;
+    this.stemGains.clear();
+    this.stemTracks = [];
     this.monitorVoices.clear();
   }
 

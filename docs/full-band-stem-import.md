@@ -11,6 +11,11 @@ length and supplies saved backing playback. Recognizable mismatched filenames,
 unsupported files and files over 50 MB are rejected before analysis begins.
 Each recording must be 1 second–6 minutes long; a stem cannot outlast its master.
 
+Supplied stems are also saved for the desktop [Band mix](stem-practice-mixer.md).
+Choose the original recording or the supplied stem mix for gameplay; individual
+stem levels, mute and solo stay live. A partial set plays only its supplied
+tracks, without the original layered underneath. Mix settings survive reloads.
+
 The preview lists each instrument's detected note count. **Review each instrument**
 has tabs for the supplied drum, keyboard, guitar and bass parts. Missing parts
 are disabled. Correct drum types and attack times, keyboard/bass pitches and

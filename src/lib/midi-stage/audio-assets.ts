@@ -1,3 +1,17 @@
+import { INSTRUMENTS, type Instrument } from "./types.ts";
+
+export type AudioAsset = { version: 1; original: Blob; stems: Partial<Record<Instrument, Blob>> };
+
+/** Legacy single-recording rows remain readable without a database migration. */
+export function parseAudioAsset(value: unknown): AudioAsset | null {
+  if (value instanceof Blob) return { version: 1, original: value, stems: {} };
+  if (!value || typeof value !== "object") return null;
+  const candidate = value as Partial<AudioAsset>;
+  if (candidate.version !== 1 || !(candidate.original instanceof Blob)) return null;
+  const stems = Object.fromEntries(INSTRUMENTS.filter(kind => candidate.stems?.[kind] instanceof Blob).map(kind => [kind, candidate.stems![kind]]));
+  return { version: 1, original: candidate.original, stems };
+}
+
 const DATABASE_NAME = "midi-stage-audio";
 const STORE_NAME = "tracks";
 
@@ -90,7 +104,7 @@ async function transact<T>(
   });
 }
 
-export function saveAudioAsset(id: string, file: Blob): Promise<boolean> {
+export function saveAudioAsset(id: string, file: Blob | AudioAsset): Promise<boolean> {
   return transact(
     "readwrite",
     (store) => store.put(file, id),
@@ -103,9 +117,13 @@ export function loadAudioAsset(id: string): Promise<Blob | null> {
   return transact(
     "readonly",
     (store) => store.get(id),
-    (value) => (value instanceof Blob ? value : null),
+    (value) => parseAudioAsset(value)?.original ?? null,
     null,
   );
+}
+
+export function loadAudioBundle(id: string): Promise<AudioAsset | null> {
+  return transact("readonly", store => store.get(id), parseAudioAsset, null);
 }
 
 export async function deleteAudioAsset(id: string): Promise<void> {

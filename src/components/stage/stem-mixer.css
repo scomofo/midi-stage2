@@ -1,0 +1,19 @@
+.stem-mixer { margin-top: 20px; padding: 20px; border: 1px solid var(--color-border); border-radius: 16px; background: var(--color-surface); }
+.stem-mixer-heading { display: flex; align-items: center; justify-content: space-between; gap: 24px; }
+.stem-mixer h3 { display: flex; align-items: center; gap: 8px; font: 600 12px var(--font-mono); letter-spacing: .12em; }
+.stem-mixer-heading p, .stem-mixer-help, .stem-mixer-footer > span { font-size: 12px; color: var(--color-muted); line-height: 1.5; }
+.stem-mixer-heading p { margin-top: 8px; }
+.stem-mixer-mode { display: flex; gap: 16px; font-size: 13px; }
+.stem-mixer-mode label { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+.stem-mixer input { accent-color: var(--color-accent); }
+.stem-mixer-help { margin: 16px 0; }
+.stem-mixer-tracks { display: grid; gap: 8px; }
+.stem-mixer-track { display: grid; grid-template-columns: 80px minmax(120px, 1fr) auto auto; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--color-border); }
+.stem-mixer-name { font-size: 14px; font-weight: 500; }
+.stem-mixer-track[data-muted="true"] .stem-mixer-name { color: var(--color-muted); }
+.stem-mixer-level { display: flex; align-items: center; gap: 12px; }
+.stem-mixer-level input { width: 100%; min-width: 0; height: 32px; }
+.stem-mixer-level output { min-width: 40px; text-align: right; font: 12px var(--font-mono); color: var(--color-muted); }
+.stem-mixer-track button[aria-pressed="true"] { border-color: var(--color-accent); color: var(--color-accent); background: var(--color-elevated); }
+.stem-mixer-footer { display: flex; align-items: center; gap: 12px; margin-top: 16px; flex-wrap: wrap; }
+.stem-mixer :focus-visible { outline: 2px solid var(--color-accent); outline-offset: 4px; }

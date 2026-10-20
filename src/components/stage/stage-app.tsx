@@ -34,7 +34,9 @@ import { getGuitarAttackCue, type GuitarAttackCue } from "@/lib/midi-stage/guita
 import { getGuitarPitchFeedback, type GuitarPitchFeedback } from "@/lib/midi-stage/guitar-pitch-feedback";
 import "./stage-launcher.css";
 import { PracticeControls } from "@/components/stage/practice-controls";
-import { loadAudioAsset, saveAudioAsset, deleteAudioAsset } from "@/lib/midi-stage/audio-assets";
+import { loadAudioBundle, saveAudioAsset, deleteAudioAsset, type AudioAsset } from "@/lib/midi-stage/audio-assets";
+import { defaultStemMix, loadStemMixes, saveStemMixes, type StemMix, type SongMixes } from "@/lib/midi-stage/stem-mix";
+import { StemMixer } from "@/components/stage/stem-mixer";
 import type { AudioImportProgress } from "@/lib/midi-stage/audio-import";
 import type { AudioImportMode } from "@/lib/midi-stage/audio-file-types";
 import type { FullBandStemFiles } from "@/lib/midi-stage/multi-stem-import";
@@ -156,7 +158,12 @@ export function StageApp() {
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [importedCharts, setImportedCharts] = useState<SavedChart[]>([]);
   const audioBuffers = useRef(new Map<string, AudioBuffer>());
-  const sessionAudioFiles = useRef(new Map<string, Blob>());
+  const sessionAudioFiles = useRef(new Map<string, AudioAsset>());
+  const decodedSongId = useRef("");
+  const decodedMixMode = useRef<StemMix["mode"]>("original");
+  const [stemTracks, setStemTracks] = useState<Record<string, Instrument[]>>({});
+  const [songMixes, setSongMixes] = useState<SongMixes>({});
+  const songMixesRef = useRef<SongMixes>({});
   const volatileAudioIds = useRef(new Set<string>());
   const [importCandidate, setImportCandidate] = useState<{ entry: SavedChart; warnings: string[]; guitarCandidates?: ShortChordCandidate[]; guitarReviewDecisions?: GuitarCandidateDecisions; kind: "audio" | "midi" | "chart" | "musicxml"; buffer?: AudioBuffer; audioFile?: File; stemFile?: File; stemFiles?: FullBandStemFiles; stemMode?: "drums" | "keys" | "guitar" | "bass" | "vocals" } | null>(null);
   const [chartReviewPending, setChartReviewPending] = useState(false);
@@ -613,17 +620,51 @@ export function StageApp() {
     previewFeelRef.current = previewFeel;
   });
 
-  async function backingForSong(selected: Song): Promise<AudioBuffer | undefined> {
-    if (!selected.audioAssetId) return undefined;
-    const cached = audioBuffers.current.get(selected.audioAssetId);
-    if (cached) return cached;
-    const audioFile = sessionAudioFiles.current.get(selected.audioAssetId) ?? await loadAudioAsset(selected.audioAssetId);
-    if (!audioFile) throw new Error(`Original audio is missing. Reimport ${selected.audioName || selected.name} to play this song.`);
+  async function playbackForSong(selected: Song, mix: StemMix, isCurrent: () => boolean) {
+    const id = selected.audioAssetId;
+    if (!id) return {};
+    const asset = sessionAudioFiles.current.get(id) ?? await loadAudioBundle(id);
+    if (!isCurrent()) throw new DOMException("Playback cancelled.", "AbortError");
+    if (!asset) throw new Error(`Original audio is missing. Reimport ${selected.audioName || selected.name} to play this song.`);
+    if (decodedSongId.current !== id || decodedMixMode.current !== mix.mode) {
+      audioBuffers.current.clear();
+      decodedSongId.current = id;
+      decodedMixMode.current = mix.mode;
+    }
     const { decodeSongAudio } = await import("@/lib/midi-stage/audio-import");
-    const decoded = await decodeSongAudio(await audioFile.arrayBuffer());
-    audioBuffers.current.clear();
-    audioBuffers.current.set(selected.audioAssetId, decoded);
-    return decoded;
+    const decode = async (key: string, file: Blob) => {
+      if (!isCurrent()) throw new DOMException("Playback cancelled.", "AbortError");
+      const decoded = audioBuffers.current.get(key) ?? await decodeSongAudio(await file.arrayBuffer());
+      if (!isCurrent()) throw new DOMException("Playback cancelled.", "AbortError");
+      audioBuffers.current.set(key, decoded);
+      return decoded;
+    };
+    if (mix.mode === "original") return { backingBuffer: await decode(id, asset.original) };
+    const tracks = Object.keys(asset.stems) as Instrument[];
+    if (!tracks.length) throw new Error("Saved stems are missing. Choose Original recording or reimport the stem set.");
+    const buffers: Partial<Record<Instrument, AudioBuffer>> = {};
+    // Decode sequentially, outside gameplay. Cache only the current song.
+    for (const kind of tracks) buffers[kind] = await decode(`${id}/${kind}`, asset.stems[kind]!);
+    return { stemBuffers: buffers };
+  }
+
+  useEffect(() => {
+    const id = song.audioAssetId;
+    if (!id) return;
+    let current = true;
+    void (async () => {
+      const asset = sessionAudioFiles.current.get(id) ?? await loadAudioBundle(id);
+      if (current) setStemTracks(previous => ({ ...previous, [id]: Object.keys(asset?.stems ?? {}) as Instrument[] }));
+    })();
+    return () => { current = false; };
+  }, [song.audioAssetId, importedCharts]);
+
+  function changeStemMix(mix: StemMix) {
+    const next = { ...songMixesRef.current, [song.id]: mix };
+    songMixesRef.current = next;
+    setSongMixes(next);
+    bag.current?.audio.setStemMix(mix);
+    if (!saveStemMixes(next)) setToast("Mix kept for this visit. Your browser couldn’t save these settings.");
   }
 
   function focusSoundcheck() {
@@ -678,15 +719,17 @@ export function StageApp() {
     b.status = "starting";
     setStatus("starting");
     try {
-      let backingBuffer: AudioBuffer | undefined;
+      let playback: { backingBuffer?: AudioBuffer; stemBuffers?: Partial<Record<Instrument, AudioBuffer>> } = {};
+      const stemMix = songMixesRef.current[b.song.id] ?? defaultStemMix();
       if (b.song.audioAssetId) {
         // Unlock in the Start gesture before reading a saved file asynchronously.
         await b.audio.init();
-        backingBuffer = await backingForSong(b.song);
+        playback = await playbackForSong(b.song, stemMix, () => ticket === startTicket.current && bag.current === b && b.status === "starting");
         if (ticket !== startTicket.current || bag.current !== b || b.status !== "starting") return;
       }
       await b.audio.begin({
-        backingBuffer,
+        ...playback,
+        stemMix,
         song: b.song,
         players: b.players,
         speed: b.speed,
@@ -906,6 +949,9 @@ export function StageApp() {
     const availableSongs = [...catalog("standard"), ...library.entries.map(songFromSavedChart)];
     const saved = loadSessionPreferences(availableSongs.map((entry) => entry.id));
     setImportedCharts(library.entries);
+    const mixes = loadStemMixes(library.entries.map(entry => entry.id));
+    songMixesRef.current = mixes;
+    setSongMixes(mixes);
     setLibraryWarning(library.warning);
     setSongId(saved.songId);
     const restoredPlayers = defaultPlayers().map((player) => ({ ...player, enabled: saved.enabledPlayers.includes(player.id) }));
@@ -1639,7 +1685,8 @@ export function StageApp() {
             if (ticket === importTicket.current) setImportProgress(progress);
           },
         });
-        candidate = { entry: { id: chartIdentity(chart), chart, fileName: file.name, addedAt: Date.now(), audio: true }, warnings, buffer, guitarCandidates, audioFile: file, stemFile, stemMode, kind: "audio" };
+        candidate = { entry: { id: chartIdentity(chart), chart, fileName: file.name, addedAt: Date.now(), audio: true }, warnings, buffer, guitarCandidates, audioFile: file, stemFile, stemMode,
+          stemFiles: stemFile && audioMode === stemMode && stemMode !== "vocals" ? { [stemMode!]: stemFile } : undefined, kind: "audio" };
       } else if (/\.midi?$/i.test(file.name)) {
         if (file.size > MAX_CHART_IMPORT_BYTES) throw new Error("Choose a MIDI file smaller than 4 MB.");
         const { importMidiFile } = await import("@/lib/midi-stage/midi-file-import");
@@ -1711,7 +1758,7 @@ export function StageApp() {
 
   function persistLibrary(entries: SavedChart[]) {
     const stored = saveSongLibrary(entries.filter((entry) => !volatileAudioIds.current.has(entry.id)));
-    return { ...stored, warning: stored.warning ?? (entries.some((entry) => volatileAudioIds.current.has(entry.id))
+    return { ...stored, warning: stored.warning ?? (entries.some((entry) => sessionAudioFiles.current.has(entry.id))
       ? "Some audio is available for this visit only. Browser storage could not save it; reimport those files next time." : null) };
   }
 
@@ -1724,18 +1771,22 @@ export function StageApp() {
       const next = addLibraryEntry(importedCharts, candidate.entry);
       const duplicate = importedCharts.some((entry) => entry.id === candidate.entry.id);
       if (candidate.audioFile && candidate.buffer) {
-        const written = await saveAudioAsset(candidate.entry.id, candidate.audioFile);
+        const asset: AudioAsset = { version: 1, original: candidate.audioFile, stems: candidate.stemFiles ?? {} };
+        // A single IndexedDB row commits the original and every supplied stem atomically.
+        const written = await saveAudioAsset(candidate.entry.id, asset);
         // A quota failure while reimporting must not discard a durable copy.
-        const savedAudio = written || (await loadAudioAsset(candidate.entry.id)) !== null;
+        const savedAudio = written || (await loadAudioBundle(candidate.entry.id)) !== null;
         if (ticket !== importTicket.current) return;
         if (savedAudio) {
           volatileAudioIds.current.delete(candidate.entry.id);
-          sessionAudioFiles.current.delete(candidate.entry.id);
         } else {
           volatileAudioIds.current.add(candidate.entry.id);
-          sessionAudioFiles.current.set(candidate.entry.id, candidate.audioFile);
         }
+        if (written) sessionAudioFiles.current.delete(candidate.entry.id);
+        else sessionAudioFiles.current.set(candidate.entry.id, asset);
         audioBuffers.current.clear();
+        decodedSongId.current = candidate.entry.id;
+        decodedMixMode.current = "original";
         audioBuffers.current.set(candidate.entry.id, candidate.buffer);
       }
       setImportedCharts(next);
@@ -1761,7 +1812,13 @@ export function StageApp() {
     if (stored.saved) void deleteAudioAsset(id).catch(() => {});
     volatileAudioIds.current.delete(id);
     audioBuffers.current.delete(id);
+    for (const kind of ["drums", "keys", "guitar", "bass"]) audioBuffers.current.delete(`${id}/${kind}`);
     sessionAudioFiles.current.delete(id);
+    const mixes = { ...songMixesRef.current };
+    delete mixes[id];
+    songMixesRef.current = mixes;
+    setSongMixes(mixes);
+    saveStemMixes(mixes);
     if (songId === id) { resetReady(); setPracticeSelection(null); setSongId("open-stage"); }
     setToast(stored.warning ?? "Song removed from your setlist.");
   }
@@ -2368,6 +2425,9 @@ export function StageApp() {
               </label>
             </div>
           </section>
+
+          {song.audioAssetId ? <StemMixer tracks={stemTracks[song.audioAssetId] ?? []} mix={songMixes[song.id] ?? defaultStemMix()}
+            lineup={enabled.map(player => player.source)} busy={busy} starting={status === "starting"} onChange={changeStemMix} /> : null}
 
           {(rhythm || enabled.some((p) => p.type === "guitar")) && (
             <p id="strum-guide-help" className="mt-3 text-xs text-muted">
