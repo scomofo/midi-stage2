@@ -2,6 +2,7 @@ import type { Instrument, Song, Player, Grade } from "./types";
 import { sourceForSafe } from "./audio-helpers";
 import type { MusicEnergy } from "./concert-cues";
 import { defaultStemMix, stemGain, type StemMix } from "./stem-mix";
+import { PitchStretch } from "./pitch-stretch";
 
 type Voice = { source: AudioScheduledSourceNode; gain: GainNode; stopped: boolean; stop: () => void };
 
@@ -37,6 +38,7 @@ export class AudioEngine {
   backingSource: AudioBufferSourceNode | null = null;
   private stemGains = new Map<Instrument, GainNode>();
   private stemTracks: Instrument[] = [];
+  private stretched: { processor: PitchStretch; start: number; gains: GainNode[] } | null = null;
 
   setStemMix(mix: StemMix) {
     if (!this.ctx) return;
@@ -398,6 +400,7 @@ export class AudioEngine {
     await this.init();
     if (ticket !== this.generation) return;
     const { song, players, speed } = opts;
+    if (!Number.isFinite(speed) || speed < 0.5 || speed > 1.25) throw new Error("Choose a tempo from 50% to 125%.");
     const seek = opts.seek ?? 0;
     const end = opts.end ?? song.duration;
     const countIn = opts.countIn !== false;
@@ -423,7 +426,24 @@ export class AudioEngine {
     this.stemTracks = stems.map(([kind]) => kind);
     // Stem and original modes are mutually exclusive, even for a partial set.
     const recordings: [Instrument | null, AudioBuffer][] = stems.length ? stems : opts.backingBuffer ? [[null, opts.backingBuffer]] : [];
-    for (const [kind, buffer] of recordings) {
+    if (recordings.length && speed !== 1) {
+      const audioOffset = song.audioOffset ?? 0;
+      const chartStart = Math.max(0, seek, audioOffset);
+      const rate = recordings[0]![1].sampleRate;
+      if (recordings.some(([, buffer]) => buffer.sampleRate !== rate)) throw new Error("Recording sample rates must match. Reimport the song to prepare aligned audio.");
+      const processor = new PitchStretch(recordings.map(([, buffer]) =>
+        Array.from({ length: buffer.numberOfChannels }, (_, channel) => buffer.getChannelData(channel))),
+      rate, speed, chartStart - audioOffset, Math.max(0, end - chartStart));
+      const gains = recordings.map(([kind]) => {
+        const gain = this.ctx!.createGain();
+        gain.gain.value = kind ? stemGain(opts.stemMix ?? defaultStemMix(), kind, this.stemTracks) : 1;
+        gain.connect(this.buses.backing!);
+        if (kind) this.stemGains.set(kind, gain);
+        return gain;
+      });
+      this.stretched = { processor, gains, start: this.origin + chartStart / speed };
+    }
+    for (const [kind, buffer] of speed === 1 ? recordings : []) {
       // audioOffset is where buffer sample zero sits on the chart timeline.
       // Buffer offsets/durations stay in source seconds; playbackRate handles speed.
       const audioOffset = song.audioOffset ?? 0;
@@ -493,6 +513,7 @@ export class AudioEngine {
 
   schedule() {
     if (!this.running || !this.ctx) return;
+    this.scheduleRecording();
     const until = (this.ctx.currentTime + 0.12 - this.origin) * this.speed;
     while (this.cursor < this.events.length && this.events[this.cursor]!.time <= until) {
       const e = this.events[this.cursor++]!;
@@ -505,12 +526,51 @@ export class AudioEngine {
     }
   }
 
+  private scheduleRecording() {
+    const playback = this.stretched, ctx = this.ctx;
+    if (!playback || !ctx) return;
+    const { processor, start, gains } = playback;
+    // A background/main-thread stall must not replay old audio late.
+    if (start + processor.cursor / processor.sampleRate < ctx.currentTime - 0.05) {
+      processor.skipTo((ctx.currentTime + 0.025 - start) * processor.sampleRate);
+    }
+    // Queue one block immediately, even during count-in, then keep a short
+    // lookahead. No song-sized stretched copy or per-song processing cache.
+    while (processor.cursor === 0 || start + processor.cursor / processor.sampleRate < ctx.currentTime + 0.35) {
+      const block = processor.render();
+      if (!block) break;
+      for (let t = 0; t < block.tracks.length; t++) {
+        const channels = block.tracks[t]!;
+        if (!channels[0]?.length) continue;
+        const buffer = ctx.createBuffer(channels.length, channels[0].length, processor.sampleRate);
+        channels.forEach((data, channel) => buffer.copyToChannel(data as Float32Array<ArrayBuffer>, channel));
+        const source = ctx.createBufferSource(), envelope = ctx.createGain();
+        source.buffer = buffer;
+        // Natural playback rate preserves the frequencies in each grain.
+        source.connect(envelope);
+        envelope.connect(gains[t]!);
+        this.track(source, envelope);
+        this.backingSource = source;
+        const ended = source.onended;
+        source.onended = event => {
+          if (this.backingSource === source) this.backingSource = null;
+          ended?.call(source, event);
+        };
+        source.start(start + block.start / processor.sampleRate);
+      }
+    }
+  }
+
   stop() {
     this.generation++;
     this.running = false;
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
     for (const n of [...this.nodes]) n.stop();
+    const oldGains = this.stretched?.gains;
+    this.stretched = null;
+    // Let the existing stop envelopes finish before disconnecting shared buses.
+    if (oldGains) setTimeout(() => oldGains.forEach(gain => gain.disconnect()), 70);
     this.backingSource = null;
     this.stemGains.clear();
     this.stemTracks = [];

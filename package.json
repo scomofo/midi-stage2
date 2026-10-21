@@ -38,7 +38,8 @@
     "test:transcription-benchmark": "node --experimental-strip-types scripts/transcription-benchmark.mjs",
     "test:import-studio": "node scripts/import-studio-regression.mjs",
     "test:chord-review": "node scripts/chord-review-regression.mjs",
-    "test:stem-mixer": "node scripts/stem-mixer-regression.mjs"
+    "test:stem-mixer": "node scripts/stem-mixer-regression.mjs",
+    "test:pitch-playback": "node scripts/pitch-playback-regression.mjs"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.4",

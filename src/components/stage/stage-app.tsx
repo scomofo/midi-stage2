@@ -2360,7 +2360,7 @@ export function StageApp() {
           <section className="stage-setup" aria-labelledby="stage-setup-heading">
             <div className="stage-setup-heading">
               <h3 id="stage-setup-heading">SESSION SETUP</h3>
-              <p id="stage-setup-help">{busy ? "Pause to adjust difficulty, tempo, guide or click." : "Volume can change while you play."}{song.audioAssetId ? " Tempo changes playback speed and pitch." : ""}</p>
+              <p id="stage-setup-help">{busy ? "Pause to adjust difficulty, tempo, guide or click." : "Volume can change while you play."}{song.audioAssetId ? " Recordings and stems keep their original pitch at every tempo." : ""}</p>
             </div>
             <div className="stage-setup-controls">
               <label className="stage-setup-field">

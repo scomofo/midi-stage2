@@ -447,6 +447,9 @@ try {
   await fullSong.click();
 
   phase = 'original audio offsets, resume and replay';
+  // Keep this exact original-buffer boundary check at natural tempo. Real-clock
+  // pitch-preserving chunks are covered by test:pitch-playback and stem-mixer.
+  await page.getByRole('combobox', { name: 'TEMPO', exact: true }).selectOption('1');
   await importFile(audioFile(), 'Practice Percussion');
   const audioOptions = await section.locator('option').evaluateAll((options) => options.filter((option) => option.value).map((option) => ({ value: option.value, label: option.textContent })));
   assert.ok(audioOptions.length >= 2, 'An unsectioned recording must offer successive eight-bar ranges');
@@ -468,7 +471,7 @@ try {
     const started = p.starts.at(-1);
     const offset = (p.originalAudioSong.audioOffset ?? 0) - options.song.audioOffset;
     if (!(offset > 0) || source.buffer !== options.backingBuffer || Math.abs(started.offset - offset) > 1e-6
-      || Math.abs(started.duration - options.song.duration) > 1e-6 || source.playbackRate.value !== 0.75
+      || Math.abs(started.duration - options.song.duration) > 1e-6 || source.playbackRate.value !== 1
       || started.when - started.now < 1) throw Error('Practice must play only its range from the original recording after the count-in');
     p.audioSectionOffset = offset;
     p.firstBacking = source;
@@ -501,37 +504,39 @@ try {
   });
   await noBestAccess();
 
-  phase = 'mobile practice controls and touch';
-  await pause.click();
-  await reset.click();
-  await page.setViewportSize({ width: 390, height: 844 });
-  for (const control of [previousSection, nextSection]) {
-    const box = await control.boundingBox();
-    assert.ok(box && box.width >= 44 && box.height >= 44, 'Passage arrows must have 44px touch targets');
+  if (!process.argv.includes('--desktop-only')) {
+    phase = 'mobile practice controls and touch';
+    await pause.click();
+    await reset.click();
+    await page.setViewportSize({ width: 390, height: 844 });
+    for (const control of [previousSection, nextSection]) {
+      const box = await control.boundingBox();
+      assert.ok(box && box.width >= 44 && box.height >= 44, 'Passage arrows must have 44px touch targets');
+    }
+    await previousSection.tap();
+    await ready();
+    assert.equal(await previousSection.isDisabled(), true);
+    await nextSection.tap();
+    await ready();
+    assert.equal(await previousSection.isEnabled(), true);
+    await screenshot('practice-ready-mobile.png');
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false);
+    await begin();
+    await page.evaluate(() => {
+      const p = window.practiceProbe;
+      const judge = [...p.live.judges.values()][0];
+      p.mobileJudge = judge;
+      p.time = judge.notes[0].time;
+    });
+    await page.locator('.pad').tap();
+    assert.ok(await page.evaluate(() => window.practiceProbe.mobileJudge.stats.score) > 0);
+    await screenshot('practice-playing-mobile.png');
   }
-  await previousSection.tap();
-  await ready();
-  assert.equal(await previousSection.isDisabled(), true);
-  await nextSection.tap();
-  await ready();
-  assert.equal(await previousSection.isEnabled(), true);
-  await screenshot('practice-ready-mobile.png');
-  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false);
-  await begin();
-  await page.evaluate(() => {
-    const p = window.practiceProbe;
-    const judge = [...p.live.judges.values()][0];
-    p.mobileJudge = judge;
-    p.time = judge.notes[0].time;
-  });
-  await page.locator('.pad').tap();
-  assert.ok(await page.evaluate(() => window.practiceProbe.mobileJudge.stats.score) > 0);
-  await screenshot('practice-playing-mobile.png');
   await fullSong.click();
   await ready();
   assert.equal(await page.evaluate(() => window.practiceProbe.audio.backingSource), null);
   assert.deepEqual(errors, []);
-  console.log('PASS: named and eight-bar sections; adjacent passage keyboard/touch navigation, boundaries, busy state and playing cleanup; rebased boundaries and clipped holds; two repeats with audible count-ins; fresh scoring, held-input and voice cleanup; paused count-in resume; repeat-off results; practice/autoplay personal-best isolation; pending repeat cancellation; original audio section offsets, bounded duration, tempo, seek/resume/replay cleanup; mobile touch and layout');
+  console.log('PASS: named and eight-bar sections; adjacent passage navigation, boundaries, busy state and playing cleanup; rebased boundaries and clipped holds; two repeats with audible count-ins; fresh scoring, held-input and voice cleanup; paused count-in resume; repeat-off results; practice/autoplay personal-best isolation; pending repeat cancellation; original audio section offsets, bounded duration, tempo, seek/resume/replay cleanup.', process.argv.includes('--desktop-only') ? 'Desktop only.' : 'Includes mobile touch and layout.');
 } catch (error) {
   console.error('Practice regression failed during:', phase, error);
   console.error('Practice regression page:', await page.locator('body').innerText().catch(() => 'Page unavailable'));

@@ -20,11 +20,12 @@ clearing solos. **Reset levels** restores all levels/mutes/solos without changin
 the backing source. Source changes require a pause; Resume keeps its position.
 
 Every file starts at sample zero of the original recording timeline. All stem
-sources use the same audio origin, source-time offset and playback rate as the
-highway. Short stems stop at their own end. Passage selection, repeated takes,
-pause/resume and tempo changes use the existing transport. As with original
-audio playback, tempo changes also change pitch; this is not pitch-preserving
-time stretching. Muted stems keep running so unmuting stays in time.
+sources use the same audio origin and source-time offset as the highway.
+At 100%, recordings play directly; other tempos use synchronized, natural-pitch
+audio chunks. Short stems stop at their own end. Passage selection, repeated
+takes, pause/resume and tempo changes use the existing transport. Muted stems
+keep running so unmuting stays in time. See [pitch-preserving practice](pitch-preserving-practice.md)
+for the processing and quality limits.
 
 The original and stems are one versioned IndexedDB row, committed atomically.
 Legacy Blob rows are read as original-only assets. Mix settings are a separate

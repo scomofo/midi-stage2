@@ -102,7 +102,7 @@ try {
     Judge.prototype.release = function (token, time) { probe.releases.push(token); return release.call(this, token, time); };
     const start = AudioBufferSourceNode.prototype.start;
     AudioBufferSourceNode.prototype.start = function (...args) {
-      if (this.buffer?.duration > 7) probe.backingStarts.push({ source: this, when: args[0], offset: args[1] ?? 0, calledAt: this.context.currentTime });
+      if (this.buffer && (this.buffer.duration > 7 || this.buffer.duration < 0.21)) probe.backingStarts.push({ source: this, when: args[0], offset: args[1] ?? 0, calledAt: this.context.currentTime });
       return start.apply(this, args);
     };
   });
@@ -134,9 +134,9 @@ try {
       const source = probe.audio.backingSource;
       const decoded = probe.lastOptions.backingBuffer;
       if (probe.lastOptions.song.name !== name) throw new Error('Wrong audio song reached playback');
-      if (!decoded || source.buffer !== decoded) throw new Error('Backing source must play the decoded original audio');
+      if (!decoded || (speed === 1 ? source.buffer !== decoded : source.buffer.duration > 0.21)) throw new Error('Backing must use the original directly at 100%, and bounded pitch-preserving chunks at other tempos');
       if (decoded.duration < 7.8 || decoded.duration > 8.4) throw new Error('Decoded audio duration was lost');
-      if (source.playbackRate.value !== speed) throw new Error('Backing speed must match chart tempo');
+      if (source.playbackRate.value !== 1) throw new Error('Recordings must keep their natural pitch at every tempo');
       const started = probe.backingStarts.at(-1);
       if (!started || started.source !== source || started.offset !== 0) throw new Error('Fresh backing must start from its beginning');
       if (started.when - started.calledAt < 1) throw new Error('Backing must wait for the audible count-in');
@@ -421,24 +421,26 @@ try {
   assert.equal(await page.evaluate(() => window.audioImportProbe.audio?.running ?? false), false,
     'missing audio must not silently start the scoring clock');
 
-  await page.setViewportSize({ width: 390, height: 844 });
-  await openLibrary();
-  await upload(fixtures.wav);
-  await dialog.getByRole('button', { name: 'Add to setlist', exact: true }).waitFor();
-  await dialog.getByRole('button', { name: 'Add to setlist', exact: true }).scrollIntoViewIfNeeded();
-  await screenshot('audio-import-preview-mobile.png');
-  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false);
-  await add('WAV Rehearsal');
-  await assertRhythmControls();
-  await beginBacking('WAV Rehearsal');
-  await page.waitForFunction(() => window.audioImportProbe.judge?.notes.length > 1);
-  await page.evaluate(() => { window.audioImportProbe.time = window.audioImportProbe.judge.notes[0].time; });
-  await page.locator('.pad').tap();
-  assert.equal(await page.evaluate(() => window.audioImportProbe.judge.stats.score > 0), true,
-    'the full-width mobile rhythm pad must score a real touch');
-  await reset();
+  if (!process.argv.includes('--desktop-only')) {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await openLibrary();
+    await upload(fixtures.wav);
+    await dialog.getByRole('button', { name: 'Add to setlist', exact: true }).waitFor();
+    await dialog.getByRole('button', { name: 'Add to setlist', exact: true }).scrollIntoViewIfNeeded();
+    await screenshot('audio-import-preview-mobile.png');
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false);
+    await add('WAV Rehearsal');
+    await assertRhythmControls();
+    await beginBacking('WAV Rehearsal');
+    await page.waitForFunction(() => window.audioImportProbe.judge?.notes.length > 1);
+    await page.evaluate(() => { window.audioImportProbe.time = window.audioImportProbe.judge.notes[0].time; });
+    await page.locator('.pad').tap();
+    assert.equal(await page.evaluate(() => window.audioImportProbe.judge.stats.score > 0), true,
+      'the full-width mobile rhythm pad must score a real touch');
+    await reset();
+  }
   assert.deepEqual(errors, []);
-  console.log('PASS: decode progress and cancellation without stale sample analysis; real WAV/MP3/FLAC decoding; onset preview; original backing/count-in; keyboard, Space and any-pitch MIDI scoring; Space repeat/release and native buttons; pause/seek/resume; backing tempo; duplicate reimport under quota; IndexedDB reload; missing audio recovery; silence/corruption errors; rhythm guidance and full-width touch pad on mobile');
+  console.log('PASS: decode progress and cancellation without stale sample analysis; real WAV/MP3/FLAC decoding; onset preview; original backing/count-in; keyboard, Space and any-pitch MIDI scoring; Space repeat/release and native buttons; pause/seek/resume; backing tempo; duplicate reimport under quota; IndexedDB reload; missing audio recovery; silence/corruption errors; rhythm guidance.', process.argv.includes('--desktop-only') ? 'Desktop only.' : 'Includes mobile touch.');
 } catch (error) {
   console.error('Audio import regression failed:', error);
   console.error('Audio import regression state:', await page.locator('body').innerText().catch(() => 'Page unavailable'), { errors, navigations });

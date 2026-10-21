@@ -24,6 +24,12 @@ try {
         super(...args);
         const capture = { context: this, starts: [], analyser: null };
         window.mixAudio.push(capture);
+        const createGain = this.createGain.bind(this);
+        this.createGain = () => {
+          const gain = createGain(), connect = gain.connect.bind(gain);
+          gain.connect = (...args) => { gain.mixDestination = args[0]; return connect(...args); };
+          return gain;
+        };
         const create = this.createBufferSource.bind(this);
         this.createBufferSource = () => {
           const source = create(), start = source.start.bind(source), connect = source.connect.bind(source);
@@ -38,7 +44,7 @@ try {
           };
           source.start = (...values) => {
             // Noise synth buffers are two seconds; only file recordings are captured.
-            if (source.buffer?.duration > 3) capture.starts.push({ source, gain, length: source.buffer.duration, at: values[0], offset: values[1], duration: values[2], rate: source.playbackRate.value });
+            if (source.buffer && (source.buffer.duration > 3 || source.buffer.duration < 0.21)) capture.starts.push({ source, gain: source.buffer.duration < 0.21 ? gain.mixDestination : gain, length: source.buffer.duration, at: values[0], offset: values[1] ?? 0, duration: values[2] ?? source.buffer.duration, rate: source.playbackRate.value });
             return start(...values);
           };
           return source;
@@ -172,6 +178,32 @@ try {
   assert.equal(await mixer.getByRole('button', { name: 'Mute Keys stem', exact: true }).getAttribute('aria-pressed'), 'true');
   await mixer.getByRole('button', { name: 'Reset levels', exact: true }).click();
   await page.getByRole('combobox', { name: /TEMPO/ }).selectOption('0.75');
+  phase = 'slower stems share native chunk timing and retain live mixer control';
+  await start();
+  evidence.slowMix = await mixer.evaluate(async region => {
+    const capture = window.mixAudio.find(c => c.starts.length);
+    const first = capture.starts.slice(0, 2);
+    if (first.length !== 2 || first[0].at !== first[1].at || first.some(s => s.rate !== 1 || s.length > 0.201)) throw Error('Both stems must share the same natural-rate chunk schedule');
+    const until = async test => {
+      const end = performance.now() + 4000;
+      while (!test()) { if (performance.now() > end) throw Error('Slow mixer output did not settle'); await new Promise(requestAnimationFrame); }
+    };
+    const click = label => region.querySelector(`button[aria-label="${label}"]`).click();
+    click('Solo Keys stem');
+    await until(() => first[0].gain.gain.value < 0.001 && first[1].gain.gain.value > 0.99);
+    click('Mute Keys stem');
+    await until(() => first.every(s => s.gain.gain.value < 0.001));
+    click('Mute Keys stem');
+    await until(() => first[1].gain.gain.value > 0.99);
+    click('Solo Keys stem');
+    await until(() => first.every(s => s.gain.gain.value > 0.99));
+    const pause = [...document.querySelectorAll('.stage-transport button')].find(b => b.textContent.trim() === 'Pause');
+    if (!pause || pause.disabled) throw Error('Live mixing must preserve playing state');
+    pause.click();
+    return { sharedStart: first[0].at, nativeRates: first.map(s => s.rate), liveSoloMute: true };
+  });
+  await reset();
+  await page.evaluate(() => window.mixAudio.forEach(c => { c.starts = []; }));
   const section = page.getByRole('combobox', { name: 'Practice section', exact: true });
   const options = await section.locator('option').evaluateAll(items => items.map(item => ({ value: item.value, text: item.textContent })));
   const second = options.filter(option => option.value)[1];
@@ -181,17 +213,15 @@ try {
   await section.selectOption(second.value);
   phase = 'nonzero passage, shorter stem, tempo and repeat synchronization';
   await start();
-  await page.waitForFunction(() => window.mixAudio.flatMap(c => c.starts).some(s => s.length === 12));
+  await page.waitForFunction(() => window.mixAudio.flatMap(c => c.starts).some(s => s.length < 0.21));
   captured = await starts();
-  assert.ok(captured.length > 0 && captured.every(track => track.length === 12), 'the shorter drum stem has already ended; original mix must stay off');
-  assert.equal(captured[0].length, 12);
-  assert.ok(Math.abs(captured[0].offset - from) < 0.00001);
-  assert.equal(captured[0].rate, 0.75);
-  assert.ok(Math.abs(captured[0].duration - (12 - from)) < 0.00001);
-  await page.waitForFunction(() => window.mixAudio.flatMap(c => c.starts).filter(s => s.length === 12).length >= 2);
-  const repeated = (await starts()).slice(-2);
-  assert.equal(repeated[0].offset, repeated[1].offset);
-  assert.equal(repeated[0].rate, repeated[1].rate);
+  assert.ok(captured.length > 0 && captured.every(track => track.length < 0.21 && track.rate === 1), 'slower recordings use bounded chunks at natural pitch');
+  assert.equal(new Set(captured.map(track => track.at)).size, captured.length, 'only keys remain; the shorter drum stem must not be scheduled');
+  await page.waitForFunction(() => window.mixAudio.flatMap(c => c.starts).some((s, i, all) => i > 0 && s.at - all[i - 1].at > 0.5));
+  await page.getByText('Take 2', { exact: true }).waitFor();
+  const repeated = await starts();
+  assert.ok(repeated.every(track => track.rate === 1 && track.length < 0.21));
+  assert.equal(new Set(repeated.map(track => track.at)).size, repeated.length);
   evidence.practice = repeated;
   await transport.getByRole('button', { name: 'Pause', exact: true }).click();
   await mixer.scrollIntoViewIfNeeded();
