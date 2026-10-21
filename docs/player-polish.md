@@ -161,8 +161,9 @@ are disabled while reading or saving; closing the library remains available.
 
 Audio imports analyze actual energy attacks into one any-note HIT lane and play
 the original recording against the same audio clock as scoring. Count-in,
-pause/resume, seek, volume and playback speed apply to the backing source. Speed
-also changes its pitch. Preview notes explain approximate detection and tempo;
+pause/resume, seek, volume and playback speed apply to the backing source.
+Recordings now retain pitch at every offered tempo; see
+[pitch-preserving practice](pitch-preserving-practice.md). Preview notes explain approximate detection and tempo;
 this does not claim note-for-note transcription or subjective musical fairness.
 Solo rhythm charts also accept Space, with a wide touch pad and tap-specific
 instructions. Holding Space cannot repeat-score notes or scroll the page;

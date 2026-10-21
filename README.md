@@ -160,7 +160,8 @@ library to cancel; long analysis yields so the controls remain responsive.
   and drum types, add/remove hits, correct count-in tempo without moving notes,
   and download the chart. Drum-only stems work best; this is an editable estimate,
   not source separation or a complete drum transcription. Audio is limited to
-  50 MB and six minutes. Tempo changes playback speed and pitch.
+  50 MB and six minutes. Recordings and stems keep their original pitch at
+  50%, 75%, 100% and 125% tempo. See [practice playback](docs/pitch-preserving-practice.md).
   To use SparkSuite Stem Lab files, choose **Drums (draft) → Use a separated drum
   stem**, select the original song and its `drums.wav`, then **Build from drum
   stem**. Detection uses the stem; saved playback uses the original song. Leading
