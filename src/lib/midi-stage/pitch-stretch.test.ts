@@ -21,7 +21,7 @@ function pitch(data: Float32Array) {
 }
 
 describe("pitch-preserving practice PCM", () => {
-  for (const speed of [0.5, 0.75, 1.25]) for (const hz of [55, 220, 440, 880]) {
+  for (const speed of [0.5, 0.75, 0.8, 1.25]) for (const hz of [55, 220, 440, 880]) {
     it(`preserves ${hz} Hz at ${speed * 100}% with the exact requested duration`, () => {
       const data = render([[tone(hz)]], speed)[0]![0]!;
       assert.equal(data.length, Math.round(2 * rate / speed));

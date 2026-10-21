@@ -376,7 +376,7 @@ export function SessionOverlay({
                 ))}
               </div>
               {results.demo ? (
-                <span className="session-save-note">AUTOPLAY · NOT SAVED</span>
+                <span className="session-save-note">{realGuitar ? "PLAY ALONG · UNSCORED" : "AUTOPLAY · NOT SAVED"}</span>
               ) : results.practice ? (
                 <span className="session-save-note">PRACTICE · NOT SAVED</span>
               ) : results.newBest && !results.bestSaved ? (

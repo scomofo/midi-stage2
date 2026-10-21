@@ -5,6 +5,35 @@ on:
 permissions:
   contents: read
 jobs:
+  progressive-practice:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Verify native MIDI tempo progression and unscored guitar confirmation
+        run: |
+          npm run dev > /tmp/progressive-practice-dev.log 2>&1 &
+          ready=false
+          for attempt in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:8082/ > /dev/null; then ready=true; break; fi
+            sleep 1
+          done
+          if [ "$ready" != true ]; then cat /tmp/progressive-practice-dev.log; exit 1; fi
+          sudo mkdir -p /workspace/screenshots/progressive-practice
+          sudo chown -R "$USER" /workspace/screenshots
+          SESSION_SCREENSHOT_DIR=/workspace/screenshots/progressive-practice npm run test:progressive-practice
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: progressive-practice-desktop
+          path: /workspace/screenshots/progressive-practice/
+          if-no-files-found: error
   stem-mixer:
     runs-on: ubuntu-latest
     timeout-minutes: 12

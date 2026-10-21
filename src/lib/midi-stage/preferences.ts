@@ -1,4 +1,5 @@
 import { INSTRUMENTS, type Difficulty, type Instrument } from "./types";
+import { isPracticeSpeed } from "./practice-tempo";
 
 export type SessionPreferences = {
   songId: string;
@@ -60,7 +61,7 @@ export function parseSessionPreferences(raw: string | null, songIds: readonly st
   if (saved.difficulty === "chill" || saved.difficulty === "standard" || saved.difficulty === "expert") {
     result.difficulty = saved.difficulty;
   }
-  if (typeof saved.speed === "number" && [0.5, 0.75, 1, 1.25].includes(saved.speed)) result.speed = saved.speed;
+  if (isPracticeSpeed(saved.speed)) result.speed = saved.speed;
   if (typeof saved.guide === "boolean") result.guide = saved.guide;
   if (typeof saved.strumGuide === "boolean") result.strumGuide = saved.strumGuide;
   if (typeof saved.metronome === "boolean") result.metronome = saved.metronome;

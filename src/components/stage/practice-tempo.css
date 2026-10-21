@@ -1,0 +1,31 @@
+.practice-tempo {
+  margin-top: 12px;
+  padding: 16px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  background: var(--color-surface);
+  color: var(--color-fg);
+  font-size: 0.8rem;
+}
+.practice-tempo-heading, .practice-tempo-summary, .practice-tempo-actions, .practice-tempo-config {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 24px;
+}
+.practice-tempo-heading { justify-content: space-between; }
+.practice-tempo h3 { font-size: 0.75rem; letter-spacing: 0.14em; font-weight: 600; }
+.practice-tempo-heading p, .practice-tempo-help, .practice-tempo-history p { color: var(--color-muted); line-height: 1.5; margin-top: 8px; }
+.practice-tempo-badge { color: var(--color-accent); }
+.practice-tempo-summary { margin: 16px 0; font-variant-numeric: tabular-nums; }
+.practice-tempo-summary span { display: flex; gap: 8px; }
+.practice-tempo-summary strong { color: var(--color-accent); }
+.practice-tempo-config { margin-top: 16px; align-items: flex-end; }
+.practice-tempo-config label { display: grid; gap: 4px; color: var(--color-muted); }
+.practice-tempo select { min-height: 44px; padding: 8px 12px; border-radius: var(--radius-sm); border: 1px solid var(--color-border-strong); background: var(--color-elevated); color: var(--color-fg); color-scheme: dark; }
+.practice-tempo select:focus-visible, .practice-tempo summary:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 3px; }
+.practice-tempo-history { margin: 12px 0; }
+.practice-tempo-history summary { cursor: pointer; padding: 8px 0; }
+.practice-tempo-history ol { display: grid; gap: 4px; padding: 0; list-style: none; }
+.practice-tempo-history li { display: flex; justify-content: space-between; gap: 16px; padding: 8px 0; border-bottom: 1px solid var(--color-border); font-variant-numeric: tabular-nums; }
+.practice-tempo-warning { color: var(--color-tungsten); margin-top: 8px; }
