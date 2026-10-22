@@ -23,7 +23,7 @@ describe("session preferences", () => {
     assert.deepEqual(parse({
       songId: "after-hours",
       difficulty: "impossible",
-      speed: 0.9,
+      speed: 0.91,
       enabledPlayers: "bass",
       guide: true,
       metronome: "false",
@@ -38,7 +38,7 @@ describe("session preferences", () => {
   });
 
   it("restores each supported tempo and difficulty without coercing values", () => {
-    for (const speed of [0.5, 0.75, 1, 1.25]) assert.equal(parse({ speed }).speed, speed);
+    for (const speed of [0.5, 0.55, 0.8, 0.9, 1, 1.25]) assert.equal(parse({ speed }).speed, speed);
     for (const difficulty of ["chill", "standard", "expert"]) assert.equal(parse({ difficulty }).difficulty, difficulty);
     assert.equal(parse({ speed: "0.75" }).speed, 1);
   });

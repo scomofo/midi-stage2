@@ -34,6 +34,8 @@ import { getGuitarAttackCue, type GuitarAttackCue } from "@/lib/midi-stage/guita
 import { getGuitarPitchFeedback, type GuitarPitchFeedback } from "@/lib/midi-stage/guitar-pitch-feedback";
 import "./stage-launcher.css";
 import { PracticeControls } from "@/components/stage/practice-controls";
+import { PracticeTempo } from "@/components/stage/practice-tempo";
+import { createTempoPlan, loadTempoPlans, saveTempoPlans, recordTempoTake, recordManualTempoTake, confirmManualTempo, tempoPlanKey, type TempoPlan, type TempoPlans } from "@/lib/midi-stage/practice-tempo";
 import { loadAudioBundle, saveAudioAsset, deleteAudioAsset, type AudioAsset } from "@/lib/midi-stage/audio-assets";
 import { defaultStemMix, loadStemMixes, saveStemMixes, type StemMix, type SongMixes } from "@/lib/midi-stage/stem-mix";
 import { StemMixer } from "@/components/stage/stem-mixer";
@@ -100,6 +102,7 @@ type Bag = {
   practice: PracticeSection | null;
   practicePass: number;
   repeatPractice: boolean;
+  tempoKey: string | null;
   volume: number;
   guide: boolean;
   strumGuide: boolean;
@@ -199,6 +202,13 @@ export function StageApp() {
   const [repeatPractice, setRepeatPractice] = useState(true);
   const [practicePass, setPracticePass] = useState(1);
   const [lastPracticeTake, setLastPracticeTake] = useState<{ accuracy: number; score: number } | null>(null);
+  const [tempoPlans, setTempoPlans] = useState<TempoPlans>({});
+  const tempoPlansRef = useRef<TempoPlans>({});
+  const [activeTempoKey, setActiveTempoKey] = useState<string | null>(null);
+  const activeTempoKeyRef = useRef<string | null>(null);
+  const [tempoWarning, setTempoWarning] = useState<string | null>(null);
+  const repeatPracticeRef = useRef(true);
+  const pendingTempoRestart = useRef<{ key: string; ticket: number; pass: number; lastTake: { accuracy: number; score: number } } | null>(null);
   const [rehearsalBookmark, setRehearsalBookmark] = useState<RehearsalBookmark | null>(null);
   const [rehearsalWarning, setRehearsalWarning] = useState<string | null>(null);
   const [guide, setGuide] = useState(false);
@@ -270,6 +280,7 @@ export function StageApp() {
     ? passages.find((section) => section.id === practiceSelection.sectionId) ?? null
     : null;
   const stageSong = useMemo(() => practice ? practiceSong(song, practice) : song, [song, practice]);
+  const tempoKey = useMemo(() => practice ? tempoPlanKey(song, practice, players, difficulty) : null, [song, practice, players, difficulty]);
   const savedRehearsal = useMemo(() => rehearsalBookmark
     ? resolveRehearsalBookmark(rehearsalBookmark, [...catalog(rehearsalBookmark.setup.difficulty), ...importedCharts.map(songFromSavedChart)])
     : null, [rehearsalBookmark, importedCharts]);
@@ -293,6 +304,7 @@ export function StageApp() {
       practice,
       practicePass: 1,
       repeatPractice: true,
+      tempoKey,
       volume: audio.volume,
       guide: bag.current?.guide ?? false,
       strumGuide: bag.current?.strumGuide ?? false,
@@ -322,7 +334,20 @@ export function StageApp() {
     bag.current = b;
     setSelectedFrets([]);
     rebuild(b);
-  }, [song, stageSong, practice, players, speed, difficulty]);
+  }, [song, stageSong, practice, players, speed, difficulty, tempoKey]);
+
+  function storeTempoPlan(key: string, plan: TempoPlan) {
+    const plans = Object.fromEntries(Object.entries({ ...tempoPlansRef.current, [key]: plan }).sort((a, b) => b[1].updated - a[1].updated).slice(0, 40));
+    tempoPlansRef.current = plans;
+    setTempoPlans(plans);
+    setTempoWarning(saveTempoPlans(plans) ? null : "Tempo progress is kept for this visit. Your browser couldn’t save it for next time.");
+  }
+
+  function deactivateTempo() {
+    pendingTempoRestart.current = null;
+    activeTempoKeyRef.current = null;
+    setActiveTempoKey(null);
+  }
 
   function rebuild(b: Bag) {
     b.judges.clear();
@@ -689,6 +714,9 @@ export function StageApp() {
     }
     const ticket = ++startTicket.current;
     const resuming = b.status === "paused" && !demo;
+    const training = b.tempoKey && activeTempoKeyRef.current === b.tempoKey ? tempoPlansRef.current[b.tempoKey] : null;
+    const manual = hasScoredGuitar(b.song, b.players) && b.players.filter(p => p.enabled).length === 1;
+    if (!resuming && demo && !manual && training?.streak) storeTempoPlan(b.tempoKey!, { ...training, streak: 0 });
     b.guitarFeedback = null;
     if (!resuming) {
       if (!repeating) {
@@ -742,9 +770,10 @@ export function StageApp() {
       if (ticket !== startTicket.current || bag.current !== b || b.status !== "starting") return;
       b.status = "playing";
       setStatus("playing");
-      // Only a successfully started human rehearsal replaces the bookmark.
-      // Browsing sections, autoplay and cancelled audio setup leave it alone.
-      if (b.practice && !b.demo && !repeating) {
+      // Save only after startup succeeds. Active tempo goals also retain the
+      // latest started step; explicit guitar play-along retains its setup while
+      // ordinary autoplay, browsing and cancelled startup leave it alone.
+      if (b.practice && (!b.demo || (training && manual)) && (!repeating || training)) {
         const bookmark: RehearsalBookmark = {
           version: 1,
           songId: b.fullSong.id,
@@ -812,6 +841,7 @@ export function StageApp() {
   }, []);
 
   const resetReady = useCallback(() => {
+    pendingTempoRestart.current = null;
     startTicket.current++;
     const b = bag.current;
     if (!b) return;
@@ -931,7 +961,31 @@ export function StageApp() {
         ? recommendPractice(practiceSections(b.fullSong), [...b.judges.values()].flatMap((judge) => judge.notes))
         : null,
     };
-    if (b.practice && b.repeatPractice && !b.demo) {
+    const training = b.tempoKey && activeTempoKeyRef.current === b.tempoKey ? tempoPlansRef.current[b.tempoKey] : null;
+    let goalComplete = false;
+    if (b.practice && training && training.current === b.speed) {
+      if (!b.demo) {
+        const next = recordTempoTake(training, b.speed, { accuracy, targets: perfect + great + good + miss, miss, extra, holdBreaks });
+        storeTempoPlan(b.tempoKey!, next);
+        setLastPracticeTake({ accuracy, score });
+        if (next.complete) {
+          goalComplete = true;
+          deactivateTempo();
+          setToast(`Target reached: two strong takes at ${Math.round(next.target * 100)}%.`);
+        } else if (next.current !== b.speed) {
+          if (b.repeatPractice) {
+            pendingTempoRestart.current = { key: b.tempoKey!, ticket: startTicket.current, pass: b.practicePass + 1, lastTake: { accuracy, score } };
+            setSpeed(next.current);
+            return;
+          }
+          // Repeat-off means stop after this take, even when it earns a step.
+          deactivateTempo();
+        }
+      } else if (hasScoredGuitar(b.song, b.players) && b.players.filter(p => p.enabled).length === 1) {
+        storeTempoPlan(b.tempoKey!, recordManualTempoTake(training, b.speed));
+      }
+    }
+    if (b.practice && b.repeatPractice && !b.demo && !goalComplete) {
       setLastPracticeTake({ accuracy, score });
       b.practicePass++;
       setPracticePass(b.practicePass);
@@ -946,6 +1000,9 @@ export function StageApp() {
   // Restore after hydration; never write the server-rendered defaults over a saved setup.
   useLayoutEffect(() => {
     const library = loadSongLibrary();
+    const plans = loadTempoPlans();
+    tempoPlansRef.current = plans;
+    setTempoPlans(plans);
     const availableSongs = [...catalog("standard"), ...library.entries.map(songFromSavedChart)];
     const saved = loadSessionPreferences(availableSongs.map((entry) => entry.id));
     setImportedCharts(library.entries);
@@ -992,6 +1049,10 @@ export function StageApp() {
 
   // Commit session readiness before the animation loop can publish HUD updates.
   useLayoutEffect(() => {
+    const pending = pendingTempoRestart.current;
+    pendingTempoRestart.current = null;
+    const restart = pending && pending.ticket === startTicket.current && pending.key === tempoKey
+      && activeTempoKeyRef.current === tempoKey && repeatPracticeRef.current;
     initBag();
     setStatus("ready");
     setResults(null);
@@ -1000,16 +1061,23 @@ export function StageApp() {
     setBest(practice ? 0 : loadBest(bestKey(song, difficulty, speed, players)));
     setPracticePass(1);
     setLastPracticeTake(null);
-    if (pendingRehearsal.current) {
+    if (activeTempoKeyRef.current !== tempoKey) deactivateTempo();
+    if (restart && bag.current) {
+      bag.current.practicePass = pending.pass;
+      setPracticePass(pending.pass);
+      setLastPracticeTake(pending.lastTake);
+      void startSession(false, true);
+    } else if (pendingRehearsal.current) {
       pendingRehearsal.current = false;
       // Configuration has just rebuilt the bag; apply the promised listening
       // options before begin snapshots them into its scheduled audio events.
       if (bag.current) { bag.current.guide = true; bag.current.metronome = true; }
       void startSession(false);
     }
-  }, [initBag, song, practice, difficulty, speed, players, startSession, preferencesHydrated]);
+  }, [initBag, song, practice, difficulty, speed, players, startSession, preferencesHydrated, tempoKey]);
 
   useLayoutEffect(() => {
+    repeatPracticeRef.current = repeatPractice;
     if (bag.current) bag.current.repeatPractice = repeatPractice;
   }, [repeatPractice, initBag]);
 
@@ -2172,9 +2240,31 @@ export function StageApp() {
               resetReady();
               setPracticeSelection(sectionId ? { songId: song.id, sectionId } : null);
             }}
-            onLoopChange={setRepeatPractice}
+            onLoopChange={value => { repeatPracticeRef.current = value; if (!value) pendingTempoRestart.current = null; setRepeatPractice(value); }}
             onExit={() => { resetReady(); setPracticeSelection(null); }}
           />
+          {practice && tempoKey ? <PracticeTempo key={tempoKey} plan={tempoPlans[tempoKey] ?? null} speed={speed}
+            active={activeTempoKey === tempoKey} busy={status === "playing" || status === "starting" || !ready}
+            warning={tempoWarning}
+            onBegin={(start, target) => {
+              resetReady();
+              storeTempoPlan(tempoKey, createTempoPlan(start, target));
+              activeTempoKeyRef.current = tempoKey; setActiveTempoKey(tempoKey);
+              setSpeed(start); setRepeatPractice(true); repeatPracticeRef.current = true;
+              setToast("Tempo goal ready. Start this passage when you’re ready.");
+            }}
+            onResume={() => {
+              const plan = tempoPlansRef.current[tempoKey]; if (!plan || plan.complete) return;
+              resetReady(); activeTempoKeyRef.current = tempoKey; setActiveTempoKey(tempoKey);
+              setSpeed(plan.current); setRepeatPractice(true); repeatPracticeRef.current = true;
+            }}
+            onStop={deactivateTempo}
+            onConfirm={() => {
+              const plan = tempoPlansRef.current[tempoKey]; if (!plan) return;
+              const next = confirmManualTempo(plan); if (next === plan) return;
+              resetReady(); storeTempoPlan(tempoKey, next); setSpeed(next.current);
+              if (next.complete) { deactivateTempo(); setToast("Target tempo confirmed by you. This was an unscored play-along take."); }
+            }} /> : null}
           </div>
 
           <div className="stage-hud grid gap-3 rounded-t-2xl bg-surface px-4 py-3 shadow-[0_0_0_1px_rgba(239,232,220,0.08)]">
@@ -2382,8 +2472,9 @@ export function StageApp() {
                   value={String(speed)}
                   disabled={busy}
                   aria-describedby="stage-setup-help"
-                  onChange={(e) => setSpeed(Number(e.target.value))}
+                  onChange={(e) => { deactivateTempo(); setSpeed(Number(e.target.value)); }}
                 >
+                  {![0.5, 0.75, 1, 1.25].includes(speed) ? <option value={String(speed)}>{Math.round(speed * 100)}%</option> : null}
                   <option value="0.5">50%</option>
                   <option value="0.75">75%</option>
                   <option value="1">100%</option>

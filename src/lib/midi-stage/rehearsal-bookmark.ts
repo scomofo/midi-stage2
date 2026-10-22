@@ -1,5 +1,6 @@
 import { practiceSections, type PracticeSection } from "./practice";
 import { INSTRUMENTS, type Difficulty, type Instrument, type Song } from "./types";
+import { isPracticeSpeed } from "./practice-tempo";
 
 export type RehearsalBookmark = {
   version: 1;
@@ -35,7 +36,7 @@ function validateBookmark(value: unknown): RehearsalBookmark | null {
     || typeof section.end !== "number" || !Number.isFinite(section.end) || section.end <= section.start) return null;
   if (!isRecord(setup)
     || (setup.difficulty !== "chill" && setup.difficulty !== "standard" && setup.difficulty !== "expert")
-    || typeof setup.speed !== "number" || ![0.5, 0.75, 1, 1.25].includes(setup.speed)
+    || !isPracticeSpeed(setup.speed)
     || !Array.isArray(setup.enabledPlayers) || !setup.enabledPlayers.length
     || ![...setup.enabledPlayers].every(isInstrument)
     || new Set(setup.enabledPlayers).size !== setup.enabledPlayers.length

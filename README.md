@@ -62,6 +62,12 @@ holds. **Practice this passage** opens it with your current setup. Section
 practice repeats a passage with a fresh count-in and keeps practice scores
 separate from full-song personal bests.
 
+In section practice, **Build up tempo** is an optional goal from 50%–125% in
+five-point steps. Two consecutive strong scored takes raise the tempo; difficult
+takes hold it. Guitar play-along advances only when you confirm readiness.
+Take history, the best clean tempo and the next step stay on this device.
+See [progressive practice](docs/progressive-practice.md) for the rules and limits.
+
 **Soundcheck** enables audio before a set so you can try mapped keys, pads, or MIDI
 without scoring. Choose a device and channel for each part; automatic routing
 sends channel 10 to drums and other channels to the first available melodic part.

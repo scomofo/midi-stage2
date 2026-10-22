@@ -57,7 +57,7 @@ describe("rehearsal bookmark validation", () => {
   });
 
   it("accepts every supported choice and requires exact setup types", () => {
-    for (const speed of [0.5, 0.75, 1, 1.25]) {
+    for (const speed of [0.5, 0.55, 0.8, 0.9, 1, 1.25]) {
       const value = bookmark();
       value.setup.speed = speed;
       assert.deepEqual(parse(value), value);
@@ -68,7 +68,7 @@ describe("rehearsal bookmark validation", () => {
       assert.deepEqual(parse(value), value);
     }
     for (const [key, values] of Object.entries({
-      difficulty: ["impossible", 1, null], speed: [0, 0.9, "0.75", null],
+      difficulty: ["impossible", 1, null], speed: [0, 0.91, "0.75", null],
       guide: ["true", 1, null], strumGuide: ["false", 0, null],
       metronome: ["true", 1, null], repeat: ["false", 0, null],
       enabledPlayers: [[], ["keys", "keys"], ["keys", "unknown"], [1], "keys", null],
