@@ -8,6 +8,7 @@ import { suggestedStrum } from "./strum-guide";
 import { concertCue, type ConcertCue, type MusicEnergy } from "./concert-cues";
 import { nextVisibleLaneTimes, rendererBeatStart, rendererNoteWindow } from "./renderer-window";
 import type { Venue } from "./career";
+import { paintBackline, paintVenueScenery } from "./stage-scenery";
 
 const GRADE_COLOR: Record<Grade, string> = {
   perfect: "#8fd4c4",
@@ -170,8 +171,8 @@ export class StageRenderer {
             ? Math.random() * 0.2
             : 0.8 + Math.random() * 0.2
           : 0.18 + Math.random() * 0.64,
-        y: side ? 0.78 + Math.random() * 0.2 : 0.88 + Math.random() * 0.1,
-        s: 0.55 + Math.random() * 1.5,
+        y: side ? 0.69 + Math.random() * 0.28 : 0.88 + Math.random() * 0.1,
+        s: 0.65 + Math.random() * 1.65,
         phase: Math.random() * Math.PI * 2,
       });
     }
@@ -233,6 +234,7 @@ export class StageRenderer {
     this.paintSpots(state);
     this.paintCrowd(state);
     this.paintTruss(state);
+    paintBackline(ctx, w, h, state);
     this.paintBand(state);
     if (state.overdriveActive) this.paintPyrotechnics(state);
     const geom = this.paintHighways(state);
@@ -263,10 +265,12 @@ export class StageRenderer {
     ctx.fillRect(0, 0, w, h);
 
     if (this.clubArt) {
-      ctx.globalAlpha = 0.38 + lights * 0.48;
+      ctx.globalAlpha = 0.46 + lights * 0.46;
       ctx.drawImage(this.clubArt, 0, 0, w, h);
       ctx.globalAlpha = 1;
     }
+
+    paintVenueScenery(ctx, w, h, state, this.cue);
 
     ctx.strokeStyle = "rgba(239,232,220,0.05)";
     ctx.lineWidth = 1;
@@ -303,24 +307,33 @@ export class StageRenderer {
 
     if (state.activeVenue) {
       ctx.save();
-      ctx.font = "800 12px 'IBM Plex Sans', system-ui, sans-serif";
+      const compact = w < 620;
+      const fontSize = compact ? 9 : 11;
+      ctx.font = `800 ${fontSize}px 'IBM Plex Sans', system-ui, sans-serif`;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      const venueText = `✦ ${state.activeVenue.name.toUpperCase()} · ${state.activeVenue.location.toUpperCase()} ✦`;
-      const vWidth = ctx.measureText(venueText).width + 24;
+      const venueText = compact
+        ? state.activeVenue.name.toUpperCase()
+        : `✦ ${state.activeVenue.name.toUpperCase()}  ·  ${state.activeVenue.location.toUpperCase()} ✦`;
+      const maxWidth = w * (compact ? 0.58 : 0.68);
+      const measured = Math.min(maxWidth, ctx.measureText(venueText).width);
+      const vWidth = measured + (compact ? 18 : 28);
       const vx = w * 0.5;
-      const vy = h * 0.075;
-
-      ctx.fillStyle = "rgba(8, 6, 12, 0.75)";
-      ctx.strokeStyle = hexA(state.activeVenue.primaryColor || "#8fd4c4", 0.45);
+      const vy = h * (compact ? 0.083 : 0.075);
+      const boxH = compact ? 18 : 22;
+      const plaque = ctx.createLinearGradient(vx - vWidth / 2, 0, vx + vWidth / 2, 0);
+      plaque.addColorStop(0, "rgba(8,6,12,0.5)");
+      plaque.addColorStop(0.5, "rgba(8,10,16,0.9)");
+      plaque.addColorStop(1, "rgba(8,6,12,0.5)");
+      ctx.fillStyle = plaque;
+      ctx.strokeStyle = hexA(state.activeVenue.primaryColor || "#8fd4c4", 0.5);
       ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.roundRect(vx - vWidth / 2, vy - 10, vWidth, 20, 10);
+      ctx.roundRect(vx - vWidth / 2, vy - boxH / 2, vWidth, boxH, boxH / 2);
       ctx.fill();
       ctx.stroke();
-
       ctx.fillStyle = state.activeVenue.primaryColor || "#8fd4c4";
-      ctx.fillText(venueText, vx, vy);
+      ctx.fillText(venueText, vx, vy, maxWidth);
       ctx.restore();
     }
 
@@ -519,6 +532,16 @@ export class StageRenderer {
       cone(originX, aimX, landY, half * 1.32, a * 0.28, tint);
       cone(originX, aimX, landY, half, a * 0.55, tint);
       cone(originX, aimX, landY, half * 0.32, a * 0.7, tint);
+      ctx.save();
+      ctx.translate(aimX, landY);
+      ctx.scale(1, 0.26);
+      const pool = ctx.createRadialGradient(0, 0, 1, 0, 0, half * 1.25);
+      pool.addColorStop(0, hexA(tint, a * 0.55));
+      pool.addColorStop(0.5, hexA(tint, a * 0.18));
+      pool.addColorStop(1, hexA(tint, 0));
+      ctx.fillStyle = pool;
+      ctx.fillRect(-half * 1.25, -half * 1.25, half * 2.5, half * 2.5);
+      ctx.restore();
 
       const gobo = state.feel.gobo ?? "breakup";
       const motion = state.feel.goboMotion ?? "drift";
@@ -740,9 +763,9 @@ export class StageRenderer {
         const x = c.x * w + sway;
         const y = c.y * h;
         const s = c.s * Math.min(1, w / 600);
-        ctx.globalAlpha = crowd * 0.8;
-        ctx.fillStyle = "#080c12";
-        ctx.strokeStyle = hexA(c.phase > 3 ? "#c4a882" : "#8fd4c4", 0.18 + e * 0.2);
+        ctx.globalAlpha = crowd * 0.94;
+        ctx.fillStyle = "#080d14";
+        ctx.strokeStyle = hexA(c.phase > 3 ? "#c4a882" : "#8fd4c4", 0.28 + e * 0.26);
         ctx.lineWidth = 0.8;
         ctx.beginPath();
         ctx.arc(x, y - s * 14, s * 3.8, 0, Math.PI * 2);
@@ -755,6 +778,17 @@ export class StageRenderer {
         ctx.closePath();
         ctx.fill();
         ctx.stroke();
+
+        // A few phones catch the stage wash above the silhouettes. Their
+        // positions are seeded and their brightness follows the song clock.
+        if (c.phase > 4.65) {
+          const phoneX = x + (c.phase > 5.45 ? 1 : -1) * s * 8;
+          const phoneY = y - s * 24;
+          ctx.globalAlpha = crowd * (0.3 + twinkle * 0.55);
+          ctx.fillStyle = c.phase > 5.45 ? "#efe8dc" : state.activeVenue?.accentColor || "#c4a882";
+          ctx.fillRect(phoneX - s * 0.8, phoneY - s * 1.6, s * 1.6, s * 3.2);
+          ctx.globalAlpha = crowd * 0.94;
+        }
 
         // High combo waving arms animation
         if (highCombo && !state.reduced) {
@@ -787,6 +821,43 @@ export class StageRenderer {
   private paintTruss(state: DrawState) {
     const { ctx, w, h } = this;
     const lights = state.feel.lights;
+    // Rear rail and triangulated bracing make the rig read as a physical
+    // truss rather than a single flat strip.
+    ctx.fillStyle = "rgba(77,86,88,0.72)";
+    ctx.fillRect(0, 7, w, 2);
+    ctx.strokeStyle = "rgba(157,166,161,0.24)";
+    ctx.lineWidth = 1;
+    const trussSegments = Math.max(12, Math.round(w / 72));
+    const trussStep = w / trussSegments;
+    ctx.beginPath();
+    for (let i = 0; i < trussSegments; i++) {
+      const x = i * trussStep;
+      ctx.moveTo(x, 8);
+      ctx.lineTo(x + trussStep, 15);
+      ctx.moveTo(x + trussStep, 8);
+      ctx.lineTo(x, 15);
+    }
+    ctx.stroke();
+    for (const side of [-1, 1]) {
+      const x = w * (side < 0 ? 0.055 : 0.945);
+      const support = ctx.createLinearGradient(x - 4, 0, x + 4, 0);
+      support.addColorStop(0, "rgba(15,20,24,0.9)");
+      support.addColorStop(0.5, "rgba(105,114,113,0.58)");
+      support.addColorStop(1, "rgba(12,17,21,0.9)");
+      ctx.fillStyle = support;
+      ctx.fillRect(x - 3, 16, 6, h * 0.25);
+      ctx.strokeStyle = "rgba(151,159,153,0.2)";
+      ctx.beginPath();
+      for (let i = 0; i < 5; i++) {
+        const y = 18 + i * h * 0.05;
+        ctx.moveTo(x - 3, y);
+        ctx.lineTo(x + 3, y + h * 0.05);
+        ctx.moveTo(x + 3, y);
+        ctx.lineTo(x - 3, y + h * 0.05);
+      }
+      ctx.stroke();
+    }
+
     const metal = ctx.createLinearGradient(0, 12, 0, 24);
     metal.addColorStop(0, "rgba(239,232,220,0.22)");
     metal.addColorStop(0.4, "rgba(70,64,72,0.95)");
@@ -890,7 +961,7 @@ export class StageRenderer {
 
   private paintBand(state: DrawState) {
     const { ctx, w, h } = this;
-    const size = Math.min(104, w * 0.18, h * 0.22);
+    const size = Math.min(120, w * 0.2, h * 0.24);
     const figures: { id: Instrument; x: number }[] = [
       { id: "keys", x: 0.35 },
       { id: "drums", x: 0.45 },
@@ -904,9 +975,9 @@ export class StageRenderer {
         on &&
         state.flashes.some((fl) => fl.player === f.id && fl.kind === "hit" && fl.until > state.now);
       const bob = animated && on ? Math.sin(((state.t * state.song.bpm) / 60) * Math.PI) * 1.2 : 0;
-      ctx.globalAlpha = on ? 0.95 : 0.68;
+      ctx.globalAlpha = on ? 1 : 0.58;
       const x = w * f.x - size / 2;
-      const y = h * 0.065 + bob - (animated && struck ? 2 : 0);
+      const y = h * 0.25 - size + bob - (animated && struck ? 2.5 : 0);
       const atlas = this.bandAtlas.image;
       if (atlas) {
         const cell = atlas.naturalWidth / 2;
@@ -1534,6 +1605,8 @@ export class StageRenderer {
   private paintParticles(state: DrawState, geom: Map<Instrument, Geom>) {
     const { ctx } = this;
     if (state.reduced) return;
+    ctx.save();
+    ctx.globalCompositeOperation = "screen";
     for (const p of state.particles) {
       const life = p.life / p.max;
       const fade = Math.max(0, 1 - life);
@@ -1547,37 +1620,62 @@ export class StageRenderer {
           ctx.globalAlpha = fade;
           this.text(p.text || "", hx, hy - 28 - life * 36, p.size, p.color, "800");
         } else if (p.kind === "burst") {
-          ctx.fillStyle = hexA(p.color, 0.2 * fade);
+          const glow = ctx.createRadialGradient(hx, hy, 1, hx, hy, 12 + life * 38);
+          glow.addColorStop(0, hexA("#f4fff5", 0.65 * fade));
+          glow.addColorStop(0.22, hexA(p.color, 0.38 * fade));
+          glow.addColorStop(1, hexA(p.color, 0));
+          ctx.fillStyle = glow;
           ctx.beginPath();
-          ctx.ellipse(hx, hy, 8 + life * 42, 5 + life * 16, 0, 0, Math.PI * 2);
+          ctx.ellipse(hx, hy, 10 + life * 44, 6 + life * 17, 0, 0, Math.PI * 2);
           ctx.fill();
-          // Compact white impact core disappears before the spreading ring.
-          if (life < 0.35) {
-            ctx.fillStyle = hexA("#f4fff5", (1 - life / 0.35) * 0.9);
-            ctx.fillRect(hx - 15, hy - 2, 30, 4);
+          // Short radial streaks give the attack a crisp star-shaped core;
+          // they disappear before the slower timing ring expands.
+          if (life < 0.42) {
+            const rayFade = 1 - life / 0.42;
+            ctx.strokeStyle = hexA("#f4fff5", rayFade * 0.85);
+            ctx.lineWidth = 1.4;
+            ctx.beginPath();
+            for (let ray = 0; ray < 8; ray++) {
+              const angle = ray * Math.PI / 4;
+              const inner = 5 + life * 12;
+              const outer = inner + (10 + ray % 3 * 3) * rayFade;
+              ctx.moveTo(hx + Math.cos(angle) * inner, hy + Math.sin(angle) * inner * 0.38);
+              ctx.lineTo(hx + Math.cos(angle) * outer, hy + Math.sin(angle) * outer * 0.38);
+            }
+            ctx.stroke();
           }
         } else {
+          const grow = p.kind === "shock" ? 18 + life * 54 : 10 + life * 28;
           ctx.strokeStyle = p.color;
           ctx.lineWidth = p.kind === "shock" ? 3.2 * (1 - life) : 2;
           ctx.beginPath();
-          const grow = p.kind === "shock" ? 18 + life * 54 : 10 + life * 28;
           ctx.ellipse(hx, hy, grow, grow * 0.38, 0, 0, Math.PI * 2);
           ctx.stroke();
-        }
-        } else if (p.kind === "pyro") {
-          ctx.fillStyle = p.color;
+          ctx.strokeStyle = hexA("#efe8dc", fade * 0.42);
+          ctx.lineWidth = 0.8;
           ctx.beginPath();
-          ctx.arc(p.x, p.y, p.size * Math.max(0.2, 1 - life), 0, Math.PI * 2);
-          ctx.fill();
+          ctx.ellipse(hx, hy - 1, grow * 0.82, grow * 0.28, 0, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+      } else if (p.kind === "pyro") {
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size * Math.max(0.2, 1 - life), 0, Math.PI * 2);
+        ctx.fill();
       } else {
         ctx.strokeStyle = p.color;
         ctx.lineWidth = Math.max(0.7, p.size * (1 - life) * 0.65);
         ctx.beginPath();
         ctx.moveTo(p.x, p.y);
-        ctx.lineTo(p.x - p.vx * 0.025, p.y - p.vy * 0.025);
+        ctx.lineTo(p.x - p.vx * 0.035, p.y - p.vy * 0.035);
         ctx.stroke();
+        if (life < 0.38) {
+          ctx.fillStyle = hexA("#efe8dc", fade * 0.65);
+          ctx.fillRect(p.x - 0.7, p.y - 0.7, 1.4, 1.4);
+        }
       }
     }
+    ctx.restore();
     ctx.globalAlpha = 1;
   }
 
