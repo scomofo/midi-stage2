@@ -264,77 +264,188 @@ export function createClubArt(w: number, h: number, dpr: number): HTMLCanvasElem
   const c = canvas.getContext("2d")!;
   c.scale(dpr, dpr);
 
-  // Acoustic slats, inset brass frames and a recessed stage wall.
-  const wall = c.createLinearGradient(0, h * 0.06, 0, h * 0.4);
-  wall.addColorStop(0, "#20282a");
-  wall.addColorStop(1, "#090d13");
-  c.fillStyle = wall;
-  c.fillRect(w * 0.19, h * 0.065, w * 0.62, h * 0.31);
-  for (let i = 0; i < 35; i++) {
-    const x = w * (0.2 + i * 0.0174);
-    c.fillStyle = i % 2 ? "#10171c" : "#293136";
-    c.fillRect(x, h * 0.075, Math.max(1, w * 0.003), h * 0.26);
-  }
-  c.strokeStyle = "#64776e";
-  c.lineWidth = 1;
-  c.strokeRect(w * 0.2, h * 0.067, w * 0.6, h * 0.285);
-  c.strokeStyle = "#ad8b58";
-  c.strokeRect(w * 0.218, h * 0.08, w * 0.564, h * 0.258);
-
-  // Repeating sconces have a baked glow, with no frame-time shadow blur.
-  for (const x of [0.235, 0.29, 0.71, 0.765]) {
-    const glow = c.createRadialGradient(w * x, h * 0.19, 1, w * x, h * 0.19, h * 0.12);
-    glow.addColorStop(0, "rgba(235,184,110,0.24)");
-    glow.addColorStop(1, "rgba(235,184,110,0)");
-    c.fillStyle = glow;
-    c.fillRect(w * x - h * 0.12, h * 0.07, h * 0.24, h * 0.24);
-    c.fillStyle = "#d9b784";
-    c.fillRect(w * x, h * 0.115, 2, h * 0.105);
-  }
-
-  // Wing stacks and monitor wedges establish scale beside the play surface.
-  for (const side of [-1, 1]) {
-    const x = w * (side < 0 ? 0.15 : 0.85);
-    const sw = Math.min(50, w * 0.055);
-    for (let row = 0; row < 3; row++) {
-      const y = h * (0.25 + row * 0.075);
-      const sh = h * 0.066;
-      const metal = c.createLinearGradient(x - sw / 2, y, x + sw / 2, y + sh);
-      metal.addColorStop(0, "#3b4143");
-      metal.addColorStop(0.1, "#11171d");
-      metal.addColorStop(1, "#07090e");
-      c.fillStyle = metal;
-      c.fillRect(x - sw / 2, y, sw, sh);
-      c.strokeStyle = "#586263";
-      c.strokeRect(x - sw / 2, y, sw, sh);
-      c.beginPath();
-      c.ellipse(x, y + sh / 2, sw * 0.3, sh * 0.34, 0, 0, Math.PI * 2);
-      c.strokeStyle = "#303e46";
-      c.stroke();
-      c.beginPath();
-      c.ellipse(x, y + sh / 2, sw * 0.12, sh * 0.14, 0, 0, Math.PI * 2);
-      c.fillStyle = "#1e292f";
-      c.fill();
-    }
+  const polygon = (points: number[][], fill: string | CanvasGradient, stroke?: string) => {
     c.beginPath();
-    c.moveTo(x - sw, h * 0.64);
-    c.lineTo(x - sw * 0.75, h * 0.6);
-    c.lineTo(x + sw * 0.55, h * 0.6);
-    c.lineTo(x + sw, h * 0.66);
+    points.forEach(([x, y], index) => index ? c.lineTo(x!, y!) : c.moveTo(x!, y!));
     c.closePath();
-    c.fillStyle = "#111920";
+    c.fillStyle = fill;
     c.fill();
-    c.strokeStyle = "#3c4c52";
+    if (stroke) {
+      c.strokeStyle = stroke;
+      c.stroke();
+    }
+  };
+
+  // The room is built as a shallow perspective set: ceiling, side walls and a
+  // recessed back wall all converge on the same central stage opening.
+  const backLeft = w * 0.185;
+  const backRight = w * 0.815;
+  const backTop = h * 0.058;
+  const backBottom = h * 0.37;
+  const ceiling = c.createLinearGradient(0, 0, 0, backTop);
+  ceiling.addColorStop(0, "#07090d");
+  ceiling.addColorStop(1, "#20262a");
+  polygon([[0, 0], [w, 0], [backRight, backTop], [backLeft, backTop]], ceiling);
+  for (let i = 0; i < 9; i++) {
+    const nearX = w * i / 8;
+    const farX = backLeft + (backRight - backLeft) * i / 8;
+    c.beginPath();
+    c.moveTo(nearX, 0);
+    c.lineTo(farX, backTop);
+    c.strokeStyle = i % 2 ? "rgba(118,131,132,0.16)" : "rgba(0,0,0,0.38)";
+    c.lineWidth = i % 2 ? 1 : 3;
     c.stroke();
   }
-  // Recessed stage lip and warm footlights, seen through the outer wings.
-  c.fillStyle = "#111820";
-  c.fillRect(w * 0.16, h * 0.37, w * 0.68, h * 0.025);
-  c.fillStyle = "#778174";
-  c.fillRect(w * 0.16, h * 0.37, w * 0.68, 1);
-  for (let i = 0; i < 15; i++) {
-    c.fillStyle = "#c3a57b";
-    c.fillRect(w * (0.18 + i * 0.045), h * 0.384, Math.max(2, w * 0.007), 2);
+
+  const leftWall = c.createLinearGradient(0, 0, backLeft, 0);
+  leftWall.addColorStop(0, "#07090d");
+  leftWall.addColorStop(1, "#1b2225");
+  polygon([[0, 0], [backLeft, backTop], [backLeft, backBottom], [0, h * 0.64]], leftWall);
+  const rightWall = c.createLinearGradient(w, 0, backRight, 0);
+  rightWall.addColorStop(0, "#07090d");
+  rightWall.addColorStop(1, "#1b2225");
+  polygon([[w, 0], [backRight, backTop], [backRight, backBottom], [w, h * 0.64]], rightWall);
+
+  const wall = c.createLinearGradient(0, backTop, 0, backBottom);
+  wall.addColorStop(0, "#283033");
+  wall.addColorStop(0.52, "#141c21");
+  wall.addColorStop(1, "#080d13");
+  c.fillStyle = wall;
+  c.fillRect(backLeft, backTop, backRight - backLeft, backBottom - backTop);
+
+  // Individually shaded acoustic panels create a readable backline instead of
+  // a single flat rectangle. The narrow brass reveals catch the stage wash.
+  const panels = 13;
+  const panelGap = w * 0.004;
+  const panelW = (backRight - backLeft - panelGap * (panels + 1)) / panels;
+  for (let i = 0; i < panels; i++) {
+    const x = backLeft + panelGap + i * (panelW + panelGap);
+    const panel = c.createLinearGradient(x, 0, x + panelW, 0);
+    panel.addColorStop(0, i % 2 ? "#11191e" : "#1b2529");
+    panel.addColorStop(0.42, i % 2 ? "#2a3335" : "#354043");
+    panel.addColorStop(1, "#0b1218");
+    c.fillStyle = panel;
+    c.fillRect(x, backTop + h * 0.018, panelW, backBottom - backTop - h * 0.036);
+    c.fillStyle = "rgba(188,157,105,0.2)";
+    c.fillRect(x, backTop + h * 0.018, 1, backBottom - backTop - h * 0.036);
+  }
+
+  // Recessed frame and concentric architectural reveals.
+  c.lineWidth = Math.max(1, w * 0.0012);
+  c.strokeStyle = "#65736e";
+  c.strokeRect(backLeft, backTop, backRight - backLeft, backBottom - backTop);
+  c.strokeStyle = "rgba(197,160,103,0.68)";
+  c.strokeRect(backLeft + w * 0.016, backTop + h * 0.015, backRight - backLeft - w * 0.032, backBottom - backTop - h * 0.03);
+  c.strokeStyle = "rgba(225,210,173,0.12)";
+  c.strokeRect(backLeft + w * 0.022, backTop + h * 0.022, backRight - backLeft - w * 0.044, backBottom - backTop - h * 0.044);
+
+  // Practical sconces are baked into the scenery cache, including their glow.
+  for (const x of [0.235, 0.29, 0.71, 0.765]) {
+    const glow = c.createRadialGradient(w * x, h * 0.18, 1, w * x, h * 0.18, h * 0.13);
+    glow.addColorStop(0, "rgba(244,194,119,0.34)");
+    glow.addColorStop(0.35, "rgba(219,157,88,0.1)");
+    glow.addColorStop(1, "rgba(235,184,110,0)");
+    c.fillStyle = glow;
+    c.fillRect(w * x - h * 0.13, h * 0.05, h * 0.26, h * 0.26);
+    c.fillStyle = "#332a22";
+    c.fillRect(w * x - 2, h * 0.108, 5, h * 0.12);
+    const tube = c.createLinearGradient(w * x, 0, w * x + 3, 0);
+    tube.addColorStop(0, "#8f6c42");
+    tube.addColorStop(0.45, "#f0d09b");
+    tube.addColorStop(1, "#80603d");
+    c.fillStyle = tube;
+    c.fillRect(w * x, h * 0.112, 2.5, h * 0.105);
+  }
+
+  // Wing stacks have cabinet depth, metal grilles, horns and dual cones.
+  for (const side of [-1, 1]) {
+    const x = w * (side < 0 ? 0.135 : 0.865);
+    const sw = Math.min(58, w * 0.06);
+    const depth = Math.max(3, sw * 0.12);
+    for (let row = 0; row < 3; row++) {
+      const y = h * (0.235 + row * 0.077);
+      const sh = h * 0.069;
+      const left = x - sw / 2;
+      polygon(
+        [[left, y], [left + depth * side, y - depth], [left + sw + depth * side, y - depth], [left + sw, y]],
+        "#30383b",
+        "#4f5b5c",
+      );
+      polygon(
+        side < 0
+          ? [[left, y], [left - depth, y - depth], [left - depth, y + sh - depth], [left, y + sh]]
+          : [[left + sw, y], [left + sw + depth, y - depth], [left + sw + depth, y + sh - depth], [left + sw, y + sh]],
+        "#080d12",
+        "#354247",
+      );
+      const cabinet = c.createLinearGradient(left, y, left + sw, y + sh);
+      cabinet.addColorStop(0, "#3b4548");
+      cabinet.addColorStop(0.08, "#151d22");
+      cabinet.addColorStop(0.6, "#090e14");
+      cabinet.addColorStop(1, "#1b252a");
+      c.fillStyle = cabinet;
+      c.fillRect(left, y, sw, sh);
+      c.strokeStyle = "#59676a";
+      c.lineWidth = 1;
+      c.strokeRect(left + 0.5, y + 0.5, sw - 1, sh - 1);
+      c.strokeStyle = "rgba(138,154,153,0.12)";
+      for (let gy = y + 4; gy < y + sh - 2; gy += 3) {
+        c.beginPath();
+        c.moveTo(left + 3, gy);
+        c.lineTo(left + sw - 3, gy);
+        c.stroke();
+      }
+      for (const coneY of [y + sh * 0.32, y + sh * 0.73]) {
+        const radius = sw * 0.25;
+        const cone = c.createRadialGradient(x - radius * 0.25, coneY - radius * 0.25, 1, x, coneY, radius);
+        cone.addColorStop(0, "#25343b");
+        cone.addColorStop(0.45, "#101a21");
+        cone.addColorStop(0.78, "#05090e");
+        cone.addColorStop(1, "#34434a");
+        c.fillStyle = cone;
+        c.beginPath();
+        c.ellipse(x, coneY, radius, sh * 0.22, 0, 0, Math.PI * 2);
+        c.fill();
+        c.strokeStyle = "#3e4c51";
+        c.stroke();
+        c.fillStyle = "#1d2a31";
+        c.beginPath();
+        c.ellipse(x, coneY, radius * 0.32, sh * 0.07, 0, 0, Math.PI * 2);
+        c.fill();
+      }
+    }
+
+    const monitorY = h * 0.635;
+    polygon(
+      [[x - sw, monitorY + h * 0.035], [x - sw * 0.72, monitorY - h * 0.015], [x + sw * 0.58, monitorY - h * 0.015], [x + sw, monitorY + h * 0.035]],
+      "#131d24",
+      "#536166",
+    );
+    polygon(
+      [[x - sw * 0.72, monitorY - h * 0.015], [x + sw * 0.58, monitorY - h * 0.015], [x + sw * 0.42, monitorY + h * 0.004], [x - sw * 0.58, monitorY + h * 0.004]],
+      "#263238",
+      "#657476",
+    );
+  }
+
+  // The raised backline and its illuminated lip give performers a solid floor.
+  const stageTop = c.createLinearGradient(0, h * 0.345, 0, h * 0.4);
+  stageTop.addColorStop(0, "#354043");
+  stageTop.addColorStop(0.12, "#1b252a");
+  stageTop.addColorStop(1, "#0b1117");
+  polygon(
+    [[backLeft, h * 0.345], [backRight, h * 0.345], [w * 0.87, h * 0.397], [w * 0.13, h * 0.397]],
+    stageTop,
+    "#5f6c6c",
+  );
+  c.fillStyle = "#0a1016";
+  c.fillRect(w * 0.13, h * 0.397, w * 0.74, h * 0.018);
+  c.fillStyle = "rgba(174,190,180,0.48)";
+  c.fillRect(w * 0.13, h * 0.397, w * 0.74, 1);
+  for (let i = 0; i < 17; i++) {
+    const x = w * (0.16 + i * 0.0425);
+    c.fillStyle = i % 2 ? "#9f8156" : "#d4b783";
+    c.fillRect(x, h * 0.405, Math.max(2, w * 0.006), 2);
   }
   return canvas;
 }
